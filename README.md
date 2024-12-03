@@ -1,2 +1,2 @@
-# cli
+# nuzur-cli
 nuzur cli tool 
