@@ -205,7 +205,7 @@ brews:
       # Repository name.
       #
       # Templates: allowed.
-      name: nuzur-cli-brew
+      name: homebrew-tap
 
       # Optionally a branch can be provided.
       #
