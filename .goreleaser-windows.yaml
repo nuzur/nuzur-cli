@@ -19,7 +19,10 @@ builds:
   - env:
       - CGO_ENABLED=0
     goos:      
-      - windows          
+      - windows    
+
+checksum:
+  name_template: 'windows_checksums.txt'      
 
 archives:
   - format: tar.gz
