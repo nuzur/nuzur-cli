@@ -1,0 +1,150 @@
+# This is an example .goreleaser.yml file with some sensible defaults.
+# Make sure to check the documentation at https://goreleaser.com
+
+# The lines below are called `modelines`. See `:help modeline`
+# Feel free to remove those if you don't want/need to use them.
+# yaml-language-server: $schema=https://goreleaser.com/static/schema.json
+# vim: set ts=2 sw=2 tw=0 fo=cnqoj
+
+version: 2
+
+before:
+  hooks:
+    # You may remove this if you don't use go modules.
+    - go mod tidy
+    # you may remove this if you don't need go generate
+    - go generate ./...
+
+builds:
+  - env:
+      - CGO_ENABLED=0
+    goos:
+      - linux
+      - windows
+      - darwin      
+
+archives:
+  - format: tar.gz
+    # this name template makes the OS and Arch compatible with the results of `uname`.
+    name_template: >-
+      {{ .ProjectName }}_
+      {{- title .Os }}_
+      {{- if eq .Arch "amd64" }}x86_64
+      {{- else if eq .Arch "386" }}i386
+      {{- else }}{{ .Arch }}{{ end }}
+      {{- if .Arm }}v{{ .Arm }}{{ end }}
+    # use zip for windows archives
+    format_overrides:
+      - goos: windows
+        format: zip
+
+changelog:
+  sort: asc
+  filters:
+    exclude:
+      - "^docs:"
+      - "^test:"
+
+chocolateys:
+  - # Your app's package name.
+    # The value may not contain spaces or character that are not valid for a URL.
+    # If you want a good separator for words, use '-', not  '.'.
+    #
+    # Default: the project name.
+    name: nuzur-cli
+
+    # Your chocolatey package's source URL.
+    # It point at the location of where someone can find the packaging files for the package.
+    package_source_url: https://github.com/nuzur/chocolatey-package
+
+    # Your app's owner.
+    # It basically means you.
+    owners: nuzur
+
+    # The app's title.
+    # A human-friendly title of the package.
+    #
+    # Default: the project name.
+    title: nuzur cli
+
+    # Your app's authors (probably you).
+    authors: nuzur
+
+    # Your app's project url.
+    # It is a required field.
+    project_url: https://nuzur.com/
+
+    # URL which is determined by the given Token (github,
+    # gitlab or gitea).
+    #
+    # Default: depends on the git remote.
+    # Templates: allowed.
+    url_template: "https://github.com/nuzur/nuzur-cli/releases/download/{{ .Tag }}/{{ .ArtifactName }}"
+
+    # App's icon.
+    # icon_url: "https://rawcdn.githack.com/foo/bar/efbdc760-395b-43f1-bf69-ba25c374d473/icon.png"
+
+    # Your app's copyright details.
+    #
+    # Templates: allowed.
+    copyright: 2024 nuzur
+
+    # App's license information url.
+    license_url: https://github.com/nuzur/nuzur-cli/main/LICENSE
+
+    # Your apps's require license acceptance:
+    # Specify whether the client must prompt the consumer to accept the package
+    # license before installing.
+    require_license_acceptance: false
+
+    # Your app's source url.
+    project_source_url: https://github.com/nuzur/nuzur-cli
+
+    # Your app's documentation url.
+    docs_url: https://github.com/nuzur/nuzur-cli/main/README.md
+
+    # App's bugtracker url.
+    bug_tracker_url: https://github.com/nuzur/nuzur-cli/issues
+
+    # Your app's tag list.
+    tags: "nuzur nuzur-cli"
+
+    # Your app's summary:
+    summary: nuzur cli tool
+
+    # This the description of your chocolatey package.
+    # Supports markdown.
+    description: |
+      {{ .ProjectName }} installer package.      
+
+    # Your app's release notes.
+    # A description of the changes made in this release of the package.
+    # Supports markdown. To prevent the need to continually update this field,
+    # providing a URL to an external list of Release Notes is perfectly
+    # acceptable.
+    release_notes: "https://github.com/nuzur/nuzur-cli/releases/tag/v{{ .Version }}"
+
+    # App's dependencies
+    # The version is not required.
+    # dependencies:
+    #   - id: nfpm
+    #     version: 2.20.0
+
+    # The api key that should be used to push to the chocolatey repository.
+    #
+    # WARNING: do not expose your api key in the configuration file!
+    api_key: "{{ .Env.CHOCOLATEY_API_KEY }}"
+
+    # The source repository that will push the package to.
+    source_repo: "https://push.chocolatey.org/"
+
+    # Setting this will prevent goreleaser to actually try to push the package
+    # to chocolatey repository, leaving the responsibility of publishing it to
+    # the user.
+    skip_publish: false
+
+    # GOAMD64 to specify which amd64 version to use if there are multiple
+    # versions from the build section.
+    #
+    # Default: 'v1'.
+    goamd64: v1
