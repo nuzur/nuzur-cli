@@ -1,0 +1,9 @@
+nuzur-cli:
+  keycloak-config:
+    url: https://auth.nuzur.com
+    realm: nuzur
+    client-id: nuzur-cli
+
+  auth-callback-server:
+    port: 1221
+    callback-path: auth-callback
