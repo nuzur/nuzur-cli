@@ -19,5 +19,20 @@ other = "Could not login"
 [logout_desc]
 other = "Closes any open sessions"
 
-[scaffold_extension_desc]
+[extension_scaffold_desc]
 other = "Scaffold the code for an extension"
+
+[extension_scaffold_select_extension]
+other = "Select extension"
+
+[extension_scaffold_select_extension_version]
+other = "Select extension version"
+
+[extension_scaffold_loading]
+other = "Extensions"
+
+[extension_scaffold_loading_versions]
+other = "Extension versions"
+
+[extension_scaffold_path]
+other = "Where would you like to scaffold the code? (Default: .)"

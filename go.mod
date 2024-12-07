@@ -3,11 +3,13 @@ module github.com/nuzur/nuzur-cli
 go 1.23.3
 
 require (
+	github.com/manifoldco/promptui v0.9.0
 	go.uber.org/config v1.4.0
 	google.golang.org/protobuf v1.34.2
 )
 
 require (
+	github.com/chzyer/readline v0.0.0-20180603132655-2972be24d48e // indirect
 	github.com/cpuguy83/go-md2man/v2 v2.0.5 // indirect
 	github.com/go-resty/resty/v2 v2.7.0 // indirect
 	github.com/golang-jwt/jwt/v5 v5.0.0 // indirect

@@ -19,5 +19,20 @@ other = "No fue possible iniciar sesión"
 [logout_desc]
 other = "Cierra la sesión abierta"
 
-[scaffold_extension_desc]
+[extension_scaffold_desc]
 other = "Genera el código para una extensión"
+
+[extension_scaffold_select_extension]
+other = "Selecciona una extensión"
+
+[extension_scaffold_select_extension_version]
+other = "Selecciona una versión de la extensión"
+
+[extension_scaffold_loading]
+other = "Extensiones"
+
+[extension_scaffold_loading_versions]
+other = "Versiones de la extensión"
+
+[extension_scaffold_path]
+other = "¿Donde quieres generar el código? (Default: .)"

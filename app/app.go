@@ -8,6 +8,7 @@ import (
 	"github.com/nicksnyder/go-i18n/v2/i18n"
 	"github.com/nuzur/nuzur-cli/auth"
 	nuzurconfig "github.com/nuzur/nuzur-cli/config"
+	"github.com/nuzur/nuzur-cli/productclient"
 	"github.com/urfave/cli"
 	"go.uber.org/config"
 )
@@ -17,6 +18,7 @@ type Implementation struct {
 	i18nBundle     *i18n.Bundle
 	configProvider config.Provider
 	auth           *auth.AuthClientImplementation
+	productClient  *productclient.Client
 }
 
 func New() (*Implementation, error) {
@@ -36,10 +38,16 @@ func New() (*Implementation, error) {
 
 	i18nBundle := initTranslations()
 
+	pc, err := productclient.New(productclient.Params{})
+	if err != nil {
+		return nil, err
+	}
+
 	imp := Implementation{
 		i18nBundle:     i18nBundle,
 		configProvider: configProvider,
 		auth:           &auth,
+		productClient:  pc,
 	}
 
 	imp.cliapp = initCliApp(imp)
