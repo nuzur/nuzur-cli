@@ -5,10 +5,16 @@ other = "Administra tus proyectos y extensiones en nuzur."
 other = "Nuzur CLI herramientas para adminstrar proyectos y extensione."
 
 [login_desc]
-other = "Redirige al navegador en caso de ser necesario para autenticarse."
+other = "Redirige al navegador en caso de ser necesario para iniciar sesión."
 
-[login_success]
-other = "Autenticado como"
+[logged_in]
+other = "Sesión iniciada como"
+
+[logged_out]
+other = "Sesión cerrada"
 
 [login_error]
-other = "No fue possible autenticarte"
+other = "No fue possible iniciar sesión"
+
+[logout_desc]
+other = "Cierra la sesión abierta"
