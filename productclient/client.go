@@ -8,8 +8,8 @@ import (
 	"time"
 
 	"github.com/nuzur/nuzur-cli/constants"
-	filetools "github.com/nuzur/nuzur-cli/file_tools"
-	pb "github.com/nuzur/nuzur-cli/proto_deps/gen"
+	"github.com/nuzur/nuzur-cli/files"
+	pb "github.com/nuzur/nuzur-cli/protodeps/gen"
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/credentials"
 	"google.golang.org/grpc/credentials/insecure"
@@ -59,7 +59,7 @@ func New(params Params) (*Client, error) {
 }
 
 func ClientContext() (context.Context, error) {
-	tokenBytes, err := os.ReadFile(filetools.TokenFilePath())
+	tokenBytes, err := os.ReadFile(files.TokenFilePath())
 	if err != nil {
 		return nil, err
 	}

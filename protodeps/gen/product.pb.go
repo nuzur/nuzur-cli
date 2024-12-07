@@ -10,7 +10,7 @@ import (
 	protoreflect "google.golang.org/protobuf/reflect/protoreflect"
 	protoimpl "google.golang.org/protobuf/runtime/protoimpl"
 	fieldmaskpb "google.golang.org/protobuf/types/known/fieldmaskpb"
-	gen "github.com/nuzur/nuzur-cli/proto_deps/nem/idl/gen"
+	gen "github.com/nuzur/nuzur-cli/protodeps/nem/idl/gen"
 	reflect "reflect"
 	sync "sync"
 )

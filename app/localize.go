@@ -5,8 +5,8 @@ import (
 
 	"github.com/BurntSushi/toml"
 	"github.com/nicksnyder/go-i18n/v2/i18n"
-	filetools "github.com/nuzur/nuzur-cli/file_tools"
-	outputtools "github.com/nuzur/nuzur-cli/output_tools"
+	"github.com/nuzur/filetools"
+	"github.com/nuzur/nuzur-cli/outputtools"
 	"golang.org/x/text/language"
 )
 

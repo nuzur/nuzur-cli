@@ -4,7 +4,7 @@ import (
 	"fmt"
 	"path"
 
-	filetools "github.com/nuzur/nuzur-cli/file_tools"
+	"github.com/nuzur/filetools"
 	"go.uber.org/config"
 )
 

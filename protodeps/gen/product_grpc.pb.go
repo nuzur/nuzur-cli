@@ -11,7 +11,7 @@ import (
 	grpc "google.golang.org/grpc"
 	codes "google.golang.org/grpc/codes"
 	status "google.golang.org/grpc/status"
-	gen "github.com/nuzur/nuzur-cli/proto_deps/nem/idl/gen"
+	gen "github.com/nuzur/nuzur-cli/protodeps/nem/idl/gen"
 )
 
 // This is a compile-time assertion to ensure that this generated file

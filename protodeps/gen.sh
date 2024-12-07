@@ -11,5 +11,5 @@ protoc --go_out=. --go-grpc_out=. --proto_path=./../../nuzur-go/nem/idl/proto ./
 protoc --go_out=. --go-grpc_out=. --proto_path=./../../nuzur-go/product/idl/proto --proto_path=./../../nuzur-go/nem/idl/proto ./../../nuzur-go/product/idl/proto/*.proto
 
 
-sed -i '' 's/nem\/idl\/gen/github.com\/nuzur\/nuzur-cli\/proto_deps\/nem\/idl\/gen/g' ./gen/product.pb.go
-sed -i '' 's/nem\/idl\/gen/github.com\/nuzur\/nuzur-cli\/proto_deps\/nem\/idl\/gen/g' ./gen/product_grpc.pb.go
+sed -i '' 's/nem\/idl\/gen/github.com\/nuzur\/nuzur-cli\/protodeps\/nem\/idl\/gen/g' ./gen/product.pb.go
+sed -i '' 's/nem\/idl\/gen/github.com\/nuzur\/nuzur-cli\/protodeps\/nem\/idl\/gen/g' ./gen/product_grpc.pb.go

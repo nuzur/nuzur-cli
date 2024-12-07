@@ -6,11 +6,12 @@ import (
 	"os"
 
 	"github.com/Nerzal/gocloak/v13"
+	"github.com/nuzur/filetools"
 	"github.com/nuzur/nuzur-cli/constants"
-	filetools "github.com/nuzur/nuzur-cli/file_tools"
-	productclient "github.com/nuzur/nuzur-cli/product_client"
-	"github.com/nuzur/nuzur-cli/proto_deps/gen"
-	nemgen "github.com/nuzur/nuzur-cli/proto_deps/nem/idl/gen"
+	"github.com/nuzur/nuzur-cli/files"
+	"github.com/nuzur/nuzur-cli/productclient"
+	"github.com/nuzur/nuzur-cli/protodeps/gen"
+	nemgen "github.com/nuzur/nuzur-cli/protodeps/nem/idl/gen"
 )
 
 func (c *AuthClientImplementation) GetTokenUser() (*nemgen.User, error) {
@@ -28,7 +29,7 @@ func (c *AuthClientImplementation) GetTokenUser() (*nemgen.User, error) {
 
 func (c *AuthClientImplementation) FetchToken(code string) error {
 
-	os.Remove(filetools.TokenFilePath())
+	os.Remove(files.TokenFilePath())
 
 	client := gocloak.NewClient(c.config.KeycloakConfig.URL)
 	grantType := "authorization_code"

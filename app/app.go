@@ -55,7 +55,7 @@ func initCliApp(imp Implementation) *cli.App {
 	cliapp := cli.NewApp()
 	cliapp.Name = "Nuzur CLI"
 	cliapp.Usage = imp.Localize("app_usage", "Manage your nuzur projects and extensions")
-	cliapp.Version = "0.0.1"
+	cliapp.Version = "0.0.11"
 	cliapp.Author = "nuzur"
 	cliapp.Description = imp.Localize("app_desc", "Nuzur CLI tools for developers to manage projects and extensions")
 

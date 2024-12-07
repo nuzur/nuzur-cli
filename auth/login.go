@@ -5,9 +5,10 @@ import (
 	"os"
 	"path"
 
+	"github.com/nuzur/filetools"
 	"github.com/nuzur/nuzur-cli/constants"
-	filetools "github.com/nuzur/nuzur-cli/file_tools"
-	outputtools "github.com/nuzur/nuzur-cli/output_tools"
+	"github.com/nuzur/nuzur-cli/files"
+	"github.com/nuzur/nuzur-cli/outputtools"
 )
 
 type LoginParams struct {
@@ -59,7 +60,7 @@ func (c *AuthClientImplementation) LoginStatus(params LoginParams) error {
 }
 
 func (c *AuthClientImplementation) Logout(loggedoutMsg string) error {
-	err := os.Remove(filetools.TokenFilePath())
+	err := os.Remove(files.TokenFilePath())
 	outputtools.PrintlnColored(loggedoutMsg, outputtools.Green)
 	return err
 }
