@@ -4,13 +4,13 @@ import (
 	"fmt"
 	"path"
 
-	"github.com/nuzur/nuzur-cli/filetools"
+	filetools "github.com/nuzur/nuzur-cli/file_tools"
 	"go.uber.org/config"
 )
 
 type Config struct {
-	KeycloakConfig     KeycloakConfig     `yaml:"keycloak-config"`
-	AuthCallbackServer AuthCallbackServer `yaml:"auth-callback-server"`
+	KeycloakConfig     *KeycloakConfig     `yaml:"keycloak-config"`
+	AuthCallbackServer *AuthCallbackServer `yaml:"auth-callback-server"`
 }
 
 type KeycloakConfig struct {

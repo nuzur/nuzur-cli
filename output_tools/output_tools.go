@@ -22,8 +22,3 @@ func PrintlnColored(text string, color OutputColor) {
 	colored := fmt.Sprintf("\x1b[%dm%s\x1b[0m", color, text)
 	fmt.Println(colored)
 }
-
-func PrintfColored(format string, color OutputColor, a ...any) {
-	colored := fmt.Sprintf("\x1b[%dm%s\x1b[0m", color, format)
-	fmt.Printf(colored, a)
-}

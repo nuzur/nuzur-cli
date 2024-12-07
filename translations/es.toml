@@ -6,3 +6,9 @@ other = "Nuzur CLI herramientas para adminstrar proyectos y extensione."
 
 [login_desc]
 other = "Redirige al navegador en caso de ser necesario para autenticarse."
+
+[login_success]
+other = "Autenticado como"
+
+[login_error]
+other = "No fue possible autenticarte"

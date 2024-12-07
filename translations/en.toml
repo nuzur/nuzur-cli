@@ -6,3 +6,9 @@ other = "Nuzur CLI tools for developers to manage projects and extensions."
 
 [login_desc]
 other = "Redirects to the browser if needed to login into nuzur."
+
+[login_success]
+other = "Logged in as"
+
+[login_error]
+other = "Could not login"
