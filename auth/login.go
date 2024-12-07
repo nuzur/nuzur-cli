@@ -1,6 +1,13 @@
 package auth
 
-import "fmt"
+import (
+	"errors"
+	"fmt"
+	"path"
+
+	"github.com/nuzur/nuzur-cli/constants"
+	"github.com/nuzur/nuzur-cli/filetools"
+)
 
 func (c *AuthClientImplementation) Login() error {
 	c.closeApp.Add(1)
@@ -11,7 +18,13 @@ func (c *AuthClientImplementation) Login() error {
 		c.config.AuthCallbackServer.GetCallbackURL())
 
 	c.startServer()
-	OpenBrowser(url)
+	err := OpenBrowser(url)
+	if err != nil {
+		return err
+	}
 	c.closeApp.Wait()
+	if !filetools.FileExists(path.Join(filetools.CurrentPath(), constants.TOKEN_FILE)) {
+		return errors.New("token file not found")
+	}
 	return nil
 }
