@@ -18,3 +18,6 @@ other = "No fue possible iniciar sesión"
 
 [logout_desc]
 other = "Cierra la sesión abierta"
+
+[scaffold_extension_desc]
+other = "Genera el código para una extensión"

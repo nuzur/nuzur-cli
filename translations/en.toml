@@ -18,3 +18,6 @@ other = "Could not login"
 
 [logout_desc]
 other = "Closes any open sessions"
+
+[scaffold_extension_desc]
+other = "Scaffold the code for an extension"
