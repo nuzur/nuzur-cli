@@ -11,10 +11,12 @@ require (
 )
 
 require (
+	github.com/BurntSushi/toml v1.4.0
+	github.com/nicksnyder/go-i18n/v2 v2.4.1
 	github.com/urfave/cli v1.22.16
 	go.uber.org/multierr v1.10.0 // indirect
 	golang.org/x/lint v0.0.0-20190930215403-16217165b5de // indirect
-	golang.org/x/text v0.3.2 // indirect
-	golang.org/x/tools v0.0.0-20191104232314-dc038396d1f0 // indirect
+	golang.org/x/text v0.19.0 // indirect
+	golang.org/x/tools v0.21.1-0.20240508182429-e35e4ccd0d2d // indirect
 	gopkg.in/yaml.v2 v2.4.0 // indirect
 )

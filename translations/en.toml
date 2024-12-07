@@ -1,0 +1,8 @@
+[app_usage]
+other = "Manage your nuzur projects and extensions."
+
+[app_desc]
+other = "Nuzur CLI tools for developers to manage projects and extensions."
+
+[login_desc]
+other = "Redirects to the browser if needed to login into nuzur."

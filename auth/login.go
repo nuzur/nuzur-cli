@@ -13,6 +13,5 @@ func (c *AuthClientImplementation) Login() error {
 	c.startServer()
 	OpenBrowser(url)
 	c.closeApp.Wait()
-
 	return nil
 }
