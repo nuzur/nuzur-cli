@@ -13,9 +13,6 @@ other = "Logged in as"
 [logged_out]
 other = "Logged out"
 
-[login_error]
-other = "Could not login"
-
 [logout_desc]
 other = "Closes any open sessions"
 

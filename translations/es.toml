@@ -13,9 +13,6 @@ other = "Sesión iniciada como"
 [logged_out]
 other = "Sesión cerrada"
 
-[login_error]
-other = "No fue possible iniciar sesión"
-
 [logout_desc]
 other = "Cierra la sesión abierta"
 

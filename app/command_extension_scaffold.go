@@ -1,8 +1,6 @@
 package app
 
 import (
-	"fmt"
-
 	"github.com/manifoldco/promptui"
 	"github.com/nuzur/nuzur-cli/extensionscaffold"
 	"github.com/nuzur/nuzur-cli/outputtools"
@@ -17,10 +15,14 @@ func (i *Implementation) ExtensionScaffoldCommand() cli.Command {
 		Name:  "scaffold-extension",
 		Usage: i.Localize("extension_scaffold_desc", "Scaffold the code for an extension"),
 		Action: func(c *cli.Context) error {
+			err := i.Login()
+			if err != nil {
+				return err
+			}
+
 			es, err := extensionscaffold.New(extensionscaffold.Params{
 				Auth: i.auth,
 			})
-
 			if err != nil {
 				return err
 			}
@@ -43,8 +45,6 @@ func (i *Implementation) ExtensionScaffoldCommand() cli.Command {
 			if err != nil {
 				return err
 			}
-
-			fmt.Printf("path: %v", path)
 
 			return es.Scaffold(extensionscaffold.ScaffoldParams{
 				ExtensionUUID:        selectedExtension.Uuid,

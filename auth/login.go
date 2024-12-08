@@ -14,7 +14,6 @@ import (
 type LoginParams struct {
 	LoggedIn  string
 	LoggedOut string
-	Error     string
 }
 
 func (c *AuthClientImplementation) Login(params LoginParams) error {
@@ -40,7 +39,6 @@ func (c *AuthClientImplementation) Login(params LoginParams) error {
 	c.closeApp.Wait()
 
 	return c.LoginStatus(params)
-
 }
 
 func (c *AuthClientImplementation) LoginStatus(params LoginParams) error {
@@ -50,7 +48,7 @@ func (c *AuthClientImplementation) LoginStatus(params LoginParams) error {
 	}
 	user, err := c.GetTokenUser()
 	if err != nil {
-		outputtools.PrintlnColored(params.Error, outputtools.Red)
+		outputtools.PrintlnColored(params.LoggedOut, outputtools.Red)
 		return err
 	}
 
