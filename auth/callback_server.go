@@ -19,7 +19,7 @@ func (c *AuthClientImplementation) startServer() {
 						</script>`)
 			} else {
 				w.Header().Set("Content-Type", "text/html; charset=utf-8")
-				fmt.Fprintf(w, `error... <br/> %v`, err)
+				fmt.Fprintf(w, `<b>error:</b> <br/> %v`, err)
 			}
 			c.closeApp.Done()
 		}

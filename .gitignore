@@ -27,3 +27,4 @@ go.work.sum
 dist/
 token.txt
 nuzur-cli
+.DS_Store
