@@ -1,4 +1,4 @@
-package app
+package localize
 
 import (
 	"path/filepath"
@@ -10,17 +10,23 @@ import (
 	"golang.org/x/text/language"
 )
 
-func initTranslations() *i18n.Bundle {
+type Implementation struct {
+	bundle *i18n.Bundle
+}
+
+func New() *Implementation {
 	bundle := i18n.NewBundle(language.English)
 	bundle.RegisterUnmarshalFunc("toml", toml.Unmarshal)
 	translationPath := filepath.Join(filetools.CurrentPath(), "translations")
 	bundle.LoadMessageFile(filepath.Join(translationPath, "en.toml"))
 	bundle.LoadMessageFile(filepath.Join(translationPath, "es.toml"))
-	return bundle
+	return &Implementation{
+		bundle: bundle,
+	}
 }
 
 func (i *Implementation) Localize(key string, defaultValue string) string {
-	localizer := i18n.NewLocalizer(i.i18nBundle, outputtools.GetLocale())
+	localizer := i18n.NewLocalizer(i.bundle, outputtools.GetLocale())
 	return localizer.MustLocalize(&i18n.LocalizeConfig{
 		MessageID: key,
 		DefaultMessage: &i18n.Message{
@@ -31,7 +37,7 @@ func (i *Implementation) Localize(key string, defaultValue string) string {
 }
 
 func (i *Implementation) LocalizeWithVariables(key string, variables map[string]string, defaultValue string) string {
-	localizer := i18n.NewLocalizer(i.i18nBundle, outputtools.GetLocale())
+	localizer := i18n.NewLocalizer(i.bundle, outputtools.GetLocale())
 	return localizer.MustLocalize(&i18n.LocalizeConfig{
 		MessageID:    key,
 		TemplateData: variables,

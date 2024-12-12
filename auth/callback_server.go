@@ -1,35 +1,95 @@
 package auth
 
 import (
+	"bytes"
 	"fmt"
 	"net/http"
+	"os"
+	"text/template"
+
+	"github.com/gorilla/mux"
 )
 
 func (c *AuthClientImplementation) startServer() {
+	rtr := mux.NewRouter()
 	serverAddress := fmt.Sprintf("localhost:%v", c.config.AuthCallbackServer.Port)
-	http.HandleFunc(fmt.Sprintf("/%s", c.config.AuthCallbackServer.CallbackPath), func(w http.ResponseWriter, r *http.Request) {
+	rtr.HandleFunc(fmt.Sprintf("/%s", c.config.AuthCallbackServer.CallbackPath), func(w http.ResponseWriter, r *http.Request) {
 		code := r.URL.Query().Get("code")
 		if code != "" {
 			err := c.FetchToken(code)
 			if err == nil {
 				w.Header().Set("Content-Type", "text/html; charset=utf-8")
-				fmt.Fprintf(w, `nuzur login...
-						<script>
-						setTimeout(()=>{window.close()}, 2000);
-						</script>`)
+				render, err := c.RenderResponseHTML(true, nil)
+				if err == nil && render != nil {
+					fmt.Fprintf(w, *render)
+				} else {
+					fmt.Printf("error: %v", err)
+				}
+
 			} else {
 				w.Header().Set("Content-Type", "text/html; charset=utf-8")
-				fmt.Fprintf(w, `<b>error:</b> <br/> %v`, err)
+				render, err := c.RenderResponseHTML(false, err)
+				if err == nil && render != nil {
+					fmt.Fprintf(w, *render)
+				} else {
+					fmt.Printf("error: %v", err)
+				}
 			}
 			c.closeApp.Done()
 		}
 	})
 
+	rtr.PathPrefix("/assets/css").Handler(http.StripPrefix("/assets/css", http.FileServer(http.Dir("html/assets/css"))))
+	rtr.PathPrefix("/assets/img").Handler(http.StripPrefix("/assets/img", http.FileServer(http.Dir("html/assets/img"))))
+
 	go func() {
-		err := http.ListenAndServe(serverAddress, nil)
+		err := http.ListenAndServe(serverAddress, rtr)
 		if err != nil {
 			fmt.Printf("Unable to start server: %v\n", err)
 			c.closeApp.Done()
 		}
 	}()
+}
+
+func (c *AuthClientImplementation) RenderResponseHTML(success bool, responseErr error) (*string, error) {
+
+	// read template file
+	templateFilePath := "./html/login.html"
+	templateData, err := os.ReadFile(templateFilePath)
+	if err != nil {
+		fmt.Println("reading error", err)
+		return nil, err
+	}
+
+	// instantiate the template
+	t, err := template.New("template").Parse(string(templateData))
+	if err != nil {
+		return nil, fmt.Errorf("error with provided template: %w", err)
+	}
+
+	templateVariables := struct {
+		Title    string
+		Subtitle string
+		Close    string
+	}{
+		Close: c.localize.Localize("login_close", "Close"),
+	}
+
+	if success {
+		templateVariables.Title = c.localize.Localize("login_title_success", "Successful Login")
+		templateVariables.Subtitle = c.localize.Localize("login_subtitle_success", "You can close this page and return to the terminal")
+	} else {
+		templateVariables.Title = c.localize.Localize("login_title_error", "Login Error")
+		templateVariables.Subtitle = responseErr.Error()
+	}
+
+	// execute with data
+	var buf bytes.Buffer
+	err = t.Execute(&buf, templateVariables)
+	if err != nil {
+		return nil, fmt.Errorf("error executing template")
+	}
+
+	output := buf.String()
+	return &output, nil
 }

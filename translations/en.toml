@@ -33,3 +33,15 @@ other = "Extension versions"
 
 [extension_scaffold_path]
 other = "Where would you like to scaffold the code? (Default: .)"
+
+[login_close]
+other = "Close"
+
+[login_title_success]
+other = "Successful Login"
+
+[login_subtitle_success]
+other = "You can close this page and return to the terminal"
+
+[login_title_error]
+other = "Login Error"

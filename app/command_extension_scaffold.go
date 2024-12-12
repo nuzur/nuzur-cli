@@ -13,7 +13,7 @@ import (
 func (i *Implementation) ExtensionScaffoldCommand() cli.Command {
 	return cli.Command{
 		Name:  "scaffold-extension",
-		Usage: i.Localize("extension_scaffold_desc", "Scaffold the code for an extension"),
+		Usage: i.localize.Localize("extension_scaffold_desc", "Scaffold the code for an extension"),
 		Action: func(c *cli.Context) error {
 			err := i.Login()
 			if err != nil {
@@ -38,7 +38,7 @@ func (i *Implementation) ExtensionScaffoldCommand() cli.Command {
 			}
 
 			prompt := promptui.Prompt{
-				Label:   i.Localize("extension_scaffold_path", ""),
+				Label:   i.localize.Localize("extension_scaffold_path", ""),
 				Default: ".",
 			}
 			path, err := prompt.Run()
@@ -56,7 +56,7 @@ func (i *Implementation) ExtensionScaffoldCommand() cli.Command {
 }
 
 func (i *Implementation) SelectExtension(es *extensionscaffold.Implementation) (*nemgen.Extension, error) {
-	outputtools.PrintlnColored(i.Localize("extension_scaffold_loading", ""), outputtools.Blue)
+	outputtools.PrintlnColored(i.localize.Localize("extension_scaffold_loading", ""), outputtools.Blue)
 	extensions, err := es.ListUserExtensions()
 	if err != nil {
 		return nil, err
@@ -70,7 +70,7 @@ func (i *Implementation) SelectExtension(es *extensionscaffold.Implementation) (
 	}
 
 	prompt := promptui.Select{
-		Label:     i.Localize("extension_scaffold_select_extension", "Select extension"),
+		Label:     i.localize.Localize("extension_scaffold_select_extension", "Select extension"),
 		Items:     extensions,
 		Templates: templates,
 	}
@@ -83,7 +83,7 @@ func (i *Implementation) SelectExtension(es *extensionscaffold.Implementation) (
 }
 
 func (i *Implementation) SelectExtensionVersion(extensionUUID string) (*nemgen.ExtensionVersion, error) {
-	outputtools.PrintlnColored(i.Localize("extension_scaffold_loading_versions", ""), outputtools.Blue)
+	outputtools.PrintlnColored(i.localize.Localize("extension_scaffold_loading_versions", ""), outputtools.Blue)
 	ctx, err := productclient.ClientContext()
 	if err != nil {
 		return nil, err
@@ -108,7 +108,7 @@ func (i *Implementation) SelectExtensionVersion(extensionUUID string) (*nemgen.E
 	}
 
 	prompt := promptui.Select{
-		Label:     i.Localize("extension_scaffold_select_extension_version", "Select extension version"),
+		Label:     i.localize.Localize("extension_scaffold_select_extension_version", "Select extension version"),
 		Items:     versions,
 		Templates: templates,
 	}

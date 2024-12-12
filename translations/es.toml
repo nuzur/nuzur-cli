@@ -33,3 +33,15 @@ other = "Versiones de la extensión"
 
 [extension_scaffold_path]
 other = "¿Donde quieres generar el código? (Default: .)"
+
+[login_close]
+other = "Cerrar"
+
+[login_title_success]
+other = "Login Exitoso"
+
+[login_subtitle_success]
+other = "Puedes cerrar esta página y regresar a la terminal"
+
+[login_title_error]
+other = "Error"

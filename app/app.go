@@ -5,9 +5,9 @@ import (
 	"os"
 	"sort"
 
-	"github.com/nicksnyder/go-i18n/v2/i18n"
 	"github.com/nuzur/nuzur-cli/auth"
 	nuzurconfig "github.com/nuzur/nuzur-cli/config"
+	"github.com/nuzur/nuzur-cli/localize"
 	"github.com/nuzur/nuzur-cli/productclient"
 	"github.com/urfave/cli"
 	"go.uber.org/config"
@@ -15,7 +15,7 @@ import (
 
 type Implementation struct {
 	cliapp         *cli.App
-	i18nBundle     *i18n.Bundle
+	localize       *localize.Implementation
 	configProvider config.Provider
 	auth           *auth.AuthClientImplementation
 	productClient  *productclient.Client
@@ -28,15 +28,16 @@ func New() (*Implementation, error) {
 		return nil, err
 	}
 
+	loc := localize.New()
+
 	auth, err := auth.New(auth.Params{
 		ConfigProvider: configProvider,
+		Localize:       loc,
 	})
 	if err != nil {
 		log.Fatalf("error creating auth client: %v\n", err)
 		return nil, err
 	}
-
-	i18nBundle := initTranslations()
 
 	pc, err := productclient.New(productclient.Params{})
 	if err != nil {
@@ -44,7 +45,7 @@ func New() (*Implementation, error) {
 	}
 
 	imp := Implementation{
-		i18nBundle:     i18nBundle,
+		localize:       loc,
 		configProvider: configProvider,
 		auth:           &auth,
 		productClient:  pc,
@@ -62,10 +63,10 @@ func (i *Implementation) Run() error {
 func initCliApp(imp Implementation) *cli.App {
 	cliapp := cli.NewApp()
 	cliapp.Name = "Nuzur CLI"
-	cliapp.Usage = imp.Localize("app_usage", "Manage your nuzur projects and extensions")
+	cliapp.Usage = imp.localize.Localize("app_usage", "Manage your nuzur projects and extensions")
 	cliapp.Version = "0.0.11"
 	cliapp.Author = "nuzur"
-	cliapp.Description = imp.Localize("app_desc", "Nuzur CLI tools for developers to manage projects and extensions")
+	cliapp.Description = imp.localize.Localize("app_desc", "Nuzur CLI tools for developers to manage projects and extensions")
 
 	cliapp.Commands = imp.Commands()
 
