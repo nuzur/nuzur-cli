@@ -2,13 +2,19 @@ package auth
 
 import (
 	"bytes"
+	"embed"
 	"fmt"
 	"net/http"
-	"os"
 	"text/template"
 
 	"github.com/gorilla/mux"
 )
+
+// content holds our static web server content.
+//
+//go:embed html/assets/img/* html/assets/css/*
+//go:embed html/login.html
+var content embed.FS
 
 func (c *AuthClientImplementation) startServer() {
 	rtr := mux.NewRouter()
@@ -39,8 +45,8 @@ func (c *AuthClientImplementation) startServer() {
 		}
 	})
 
-	rtr.PathPrefix("/assets/css").Handler(http.StripPrefix("/assets/css", http.FileServer(http.Dir("html/assets/css"))))
-	rtr.PathPrefix("/assets/img").Handler(http.StripPrefix("/assets/img", http.FileServer(http.Dir("html/assets/img"))))
+	rtr.PathPrefix("/html/assets/css").Handler(http.FileServerFS(content))
+	rtr.PathPrefix("/html/assets/img").Handler(http.FileServerFS(content))
 
 	go func() {
 		err := http.ListenAndServe(serverAddress, rtr)
@@ -54,8 +60,7 @@ func (c *AuthClientImplementation) startServer() {
 func (c *AuthClientImplementation) RenderResponseHTML(success bool, responseErr error) (*string, error) {
 
 	// read template file
-	templateFilePath := "./html/login.html"
-	templateData, err := os.ReadFile(templateFilePath)
+	templateData, err := content.ReadFile("html/login.html")
 	if err != nil {
 		fmt.Println("reading error", err)
 		return nil, err

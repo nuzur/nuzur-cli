@@ -3,10 +3,8 @@ package auth
 import (
 	"fmt"
 	"os"
-	"path"
 
 	"github.com/nuzur/filetools"
-	"github.com/nuzur/nuzur-cli/constants"
 	"github.com/nuzur/nuzur-cli/files"
 	"github.com/nuzur/nuzur-cli/outputtools"
 )
@@ -17,7 +15,7 @@ type LoginParams struct {
 }
 
 func (c *AuthClientImplementation) Login(params LoginParams) error {
-	if filetools.FileExists(path.Join(filetools.CurrentPath(), constants.TOKEN_FILE)) {
+	if filetools.FileExists(files.TokenFilePath()) {
 		err := c.LoginStatus(params)
 		if err == nil {
 			return nil
@@ -42,7 +40,7 @@ func (c *AuthClientImplementation) Login(params LoginParams) error {
 }
 
 func (c *AuthClientImplementation) LoginStatus(params LoginParams) error {
-	if !filetools.FileExists(path.Join(filetools.CurrentPath(), constants.TOKEN_FILE)) {
+	if !filetools.FileExists(files.TokenFilePath()) {
 		outputtools.PrintlnColored(params.LoggedOut, outputtools.Red)
 		return nil
 	}

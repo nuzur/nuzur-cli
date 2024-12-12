@@ -7,7 +7,6 @@ import (
 
 	"github.com/Nerzal/gocloak/v13"
 	"github.com/nuzur/filetools"
-	"github.com/nuzur/nuzur-cli/constants"
 	"github.com/nuzur/nuzur-cli/files"
 	"github.com/nuzur/nuzur-cli/productclient"
 	"github.com/nuzur/nuzur-cli/protodeps/gen"
@@ -47,7 +46,7 @@ func (c *AuthClientImplementation) FetchToken(code string) error {
 		return err
 	}
 
-	err = filetools.Write(constants.TOKEN_FILE, []byte(token.AccessToken))
+	err = filetools.Write(files.TokenFilePath(), []byte(token.AccessToken))
 	if err != nil {
 		fmt.Printf("error writing token file: %v", err)
 		return err

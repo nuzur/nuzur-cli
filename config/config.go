@@ -1,12 +1,17 @@
 package config
 
 import (
+	"bytes"
+	"embed"
 	"fmt"
-	"path"
 
-	"github.com/nuzur/filetools"
+	_ "embed"
+
 	"go.uber.org/config"
 )
+
+//go:embed base.yaml
+var baseyaml embed.FS
 
 type Config struct {
 	KeycloakConfig     *KeycloakConfig     `yaml:"keycloak-config"`
@@ -29,9 +34,12 @@ func (c *AuthCallbackServer) GetCallbackURL() string {
 }
 
 func New() (config.Provider, error) {
-	pt := filetools.CurrentPath()
+	file, err := baseyaml.ReadFile("base.yaml")
+	if err != nil {
+		return nil, err
+	}
 	cp, err := config.NewYAML(
-		config.File(path.Join(pt, "config", "base.yaml")),
+		config.RawSource(bytes.NewReader(file)),
 	)
 
 	if err != nil {

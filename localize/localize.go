@@ -3,6 +3,8 @@ package localize
 import (
 	"path/filepath"
 
+	_ "embed"
+
 	"github.com/BurntSushi/toml"
 	"github.com/nicksnyder/go-i18n/v2/i18n"
 	"github.com/nuzur/filetools"
@@ -14,12 +16,24 @@ type Implementation struct {
 	bundle *i18n.Bundle
 }
 
+//go:embed translations/en.toml
+var translations_en string
+
+//go:embed translations/es.toml
+var translations_es string
+
 func New() *Implementation {
+
 	bundle := i18n.NewBundle(language.English)
 	bundle.RegisterUnmarshalFunc("toml", toml.Unmarshal)
-	translationPath := filepath.Join(filetools.CurrentPath(), "translations")
-	bundle.LoadMessageFile(filepath.Join(translationPath, "en.toml"))
-	bundle.LoadMessageFile(filepath.Join(translationPath, "es.toml"))
+
+	translations_en_path := filepath.Join("/tmp", "nuzur", "en.toml")
+	translations_es_path := filepath.Join("/tmp", "nuzur", "es.toml")
+	filetools.Write(translations_en_path, []byte(translations_en))
+	filetools.Write(translations_es_path, []byte(translations_es))
+
+	bundle.LoadMessageFile(translations_en_path)
+	bundle.LoadMessageFile(translations_es_path)
 	return &Implementation{
 		bundle: bundle,
 	}
