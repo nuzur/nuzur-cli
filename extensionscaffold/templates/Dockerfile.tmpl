@@ -1,0 +1,35 @@
+
+############################
+# STEP 1 build executable binary
+############################
+
+FROM golang:alpine as builder
+
+# Install git.
+# Git is required for fetching the dependencies.
+RUN apk add --no-cache git
+
+# all go code
+WORKDIR $GOPATH/src
+
+# copy all code
+COPY . .
+
+# Fetch dependencies
+RUN go mod tidy
+
+# Build the binary.
+RUN go build .
+
+RUN pwd
+RUN echo $GOPATH
+
+############################
+# STEP 2 final thin build 
+############################
+FROM alpine:3.11.3
+ENV PORT=5234
+RUN apk --no-cache add bash curl ca-certificates
+WORKDIR /root/
+COPY --from=builder /go/src .
+ENTRYPOINT ["bash", "-c", "/root/{{.Extension.Identifier}}"]

@@ -46,10 +46,20 @@ func (i *Implementation) ExtensionScaffoldCommand() cli.Command {
 				return err
 			}
 
+			prompt = promptui.Prompt{
+				Label:   i.localize.Localize("extension_module_path", ""),
+				Default: "github.com/x/y",
+			}
+			modulePath, err := prompt.Run()
+			if err != nil {
+				return err
+			}
+
 			return es.Scaffold(extensionscaffold.ScaffoldParams{
 				ExtensionUUID:        selectedExtension.Uuid,
 				ExtensionVersionUUID: selectedVersion.Uuid,
 				Path:                 path,
+				Module:               modulePath,
 			})
 		},
 	}

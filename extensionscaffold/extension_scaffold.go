@@ -1,13 +1,19 @@
 package extensionscaffold
 
 import (
+	"embed"
 	"errors"
-	"fmt"
+	"path/filepath"
 
+	"github.com/nuzur/filetools"
 	"github.com/nuzur/nuzur-cli/auth"
 	"github.com/nuzur/nuzur-cli/productclient"
 	"github.com/nuzur/nuzur-cli/protodeps/gen"
+	nemgen "github.com/nuzur/nuzur-cli/protodeps/nem/idl/gen"
 )
+
+//go:embed templates/**
+var templates embed.FS
 
 type Implementation struct {
 	productClient *productclient.Client
@@ -34,6 +40,13 @@ type ScaffoldParams struct {
 	ExtensionUUID        string
 	ExtensionVersionUUID string
 	Path                 string
+	Module               string
+}
+
+type GenData struct {
+	ModulePath       string
+	Extension        *nemgen.Extension
+	ExtensionVersion *nemgen.ExtensionVersion
 }
 
 func (i *Implementation) Scaffold(params ScaffoldParams) error {
@@ -57,7 +70,31 @@ func (i *Implementation) Scaffold(params ScaffoldParams) error {
 		return errors.New("not the owner of the extension")
 	}
 
-	fmt.Printf("ext: %v \n", extension)
+	extensionVersion, err := i.productClient.ProductClient.GetExtensionVersion(ctx, &gen.GetExtensionVersionRequest{
+		VersionUuid: params.ExtensionVersionUUID,
+	})
+	if err != nil {
+		return err
+	}
+
+	genData := GenData{
+		ModulePath:       params.Module,
+		Extension:        extension,
+		ExtensionVersion: extensionVersion,
+	}
+
+	tmplBytes, err := templates.ReadFile("templates/main.go.tmpl")
+	if err != nil {
+		return err
+	}
+	_, err = filetools.GenerateFile(ctx, filetools.FileRequest{
+		OutputPath:    filepath.Join(params.Path, "main.go"),
+		TemplateBytes: tmplBytes,
+		Data:          genData,
+	})
+	if err != nil {
+		return err
+	}
 
 	return nil
 }

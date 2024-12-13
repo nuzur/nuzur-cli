@@ -37,8 +37,8 @@ github.com/manifoldco/promptui v0.9.0 h1:3V4HzJk1TtXW1MTZMP7mdlwbBpIinw3HztaIlYt
 github.com/manifoldco/promptui v0.9.0/go.mod h1:ka04sppxSGFAtxX0qhlYQjISsg9mR4GWtQEhdbn6Pgg=
 github.com/nicksnyder/go-i18n/v2 v2.4.1 h1:zwzjtX4uYyiaU02K5Ia3zSkpJZrByARkRB4V3YPrr0g=
 github.com/nicksnyder/go-i18n/v2 v2.4.1/go.mod h1:++Pl70FR6Cki7hdzZRnEEqdc2dJt+SAGotyFg/SvZMk=
-github.com/nuzur/filetools v0.0.2 h1:qDHS1lowaeSia5dGq73hiUbpEdutHv+cjmCGI/olsdc=
-github.com/nuzur/filetools v0.0.2/go.mod h1:jRAy/C7ilpw0HBDFYhXGv5+IS3WIen468z8XsFEVAdw=
+github.com/nuzur/filetools v0.0.3 h1:Ns2g9/f9SqZUujZa0hkt4rbLfDpQJLcA30d7rKCZ8PE=
+github.com/nuzur/filetools v0.0.3/go.mod h1:jRAy/C7ilpw0HBDFYhXGv5+IS3WIen468z8XsFEVAdw=
 github.com/opentracing/opentracing-go v1.2.0 h1:uEJPy/1a5RIPAJ0Ov+OIO8OxWu77jEv+1B0VhjKrZUs=
 github.com/opentracing/opentracing-go v1.2.0/go.mod h1:GxEUsuufX4nBwe+T+Wl9TAgYrxe9dPLANfrWvHYVTgc=
 github.com/pkg/errors v0.9.1 h1:FEBLx1zS214owpjy7qsBeixbURkuhQAwrK5UwLGTwt4=

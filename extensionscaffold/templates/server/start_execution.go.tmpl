@@ -1,0 +1,93 @@
+package server
+
+import (
+	"context"
+	"fmt"
+
+	"github.com/gofrs/uuid"
+	"github.com/nuzur/extension-sdk/client"
+	pb "github.com/nuzur/extension-sdk/idl/gen"
+	nemgen "github.com/nuzur/extension-sdk/proto_deps/nem/idl/gen"
+	"{{.ModulePath}}/config"
+	"golang.org/x/sync/errgroup"
+)
+
+func (s *server) StartExecution(ctx context.Context, req *pb.StartExecutionRequest) (*pb.StartExecutionResponse, error) {
+	projectUUID := uuid.FromStringOrNil(req.ProjectUuid)
+	projectVersionUUID := uuid.FromStringOrNil(req.ProjectVersionUuid)
+	projectExtensionUUID := uuid.FromStringOrNil(req.ProjectExtensionUuid)
+
+	// resolve config values
+	configvalues := &config.Values{}
+	err := s.client.ResolveConfigValues(ctx, client.ResolveConfigValuesRequest{
+		ProjectUUID:          projectUUID,
+		ProjectExtensionUUID: projectExtensionUUID,
+		RawConfigValues:      req.ConfigValues,
+	}, configvalues)
+	if err != nil {
+		return nil, err
+	}
+
+	// get the base dependencies
+	eg, _ := errgroup.WithContext(ctx)
+	var deps *client.BaseDependenciesResponse
+	eg.Go(func() error {
+		deps, err = s.client.GetBaseDependencies(ctx, client.BaseDependenciesRequest{
+			ProjectUUID:        projectUUID,
+			ProjectVersionUUID: projectVersionUUID,
+		})
+		if err != nil {
+			return err
+		}
+		return nil
+	})
+	// remove
+	fmt.Printf("deps: %v", deps)
+
+	// create the execution record
+	var exec *nemgen.ExtensionExecution
+	eg.Go(func() error {
+		exec, err = s.client.CreateExecution(ctx, client.CreateExecutionRequest{
+			ProjectUUID:          projectUUID,
+			ProjectVersionUUID:   projectVersionUUID,
+			ProjectExtensionUUID: projectExtensionUUID,
+			Metadata:             "", // TODO update metadata with config values and/or other needed data
+		})
+		if err != nil {
+			return err
+		}
+		return nil
+	})
+
+	err = eg.Wait()
+	if err != nil {
+		return nil, err
+	}
+
+	// TODO your extension logic here
+
+	// update execution status
+	_, err = s.client.UpdateExecution(ctx, client.UpdateExecutionRequest{
+		ExecutionUUID:      uuid.FromStringOrNil(exec.Uuid),
+		ProjectUUID:        projectUUID,
+		ProjectVersionUUID: projectVersionUUID,
+		Status:             pb.ExecutionStatus_EXECUTION_STATUS_SUCCEEDED,
+		StatusMsg:          "", // TODO update
+	})
+	if err != nil {
+		return nil, err
+	}
+
+	// build and return response
+	return &pb.StartExecutionResponse{
+		ExecutionUuid: exec.Uuid,
+		Type:          pb.ExecutionResponseType_EXECUTION_RESPONSE_TYPE_FINAL,
+		Data: &pb.ExecutionResponseTypeData{
+			Final: &pb.ExecutionResponseTypeFinalData{
+				Status: pb.ExecutionStatus_EXECUTION_STATUS_SUCCEEDED,
+				//DisplayBlocks:   <your display blocks here>,
+				//FileDownloadUrl: <your download url here>,
+			},
+		},
+	}, nil
+}

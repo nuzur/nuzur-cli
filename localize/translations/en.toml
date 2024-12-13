@@ -32,7 +32,10 @@ other = "Extensions"
 other = "Extension versions"
 
 [extension_scaffold_path]
-other = "Where would you like to scaffold the code? (Default: .)"
+other = "Where would you like to scaffold the code? (.)"
+
+[extension_module_path]
+other = "Specify the module path: (github.com/x/y)"
 
 [login_close]
 other = "Close"

@@ -32,7 +32,10 @@ other = "Extensiones"
 other = "Versiones de la extensión"
 
 [extension_scaffold_path]
-other = "¿Donde quieres generar el código? (Default: .)"
+other = "¿Donde quieres generar el código? (.)"
+
+[extension_module_path]
+other = "Indica el nombre del módulo: (github.com/x/y)"
 
 [login_close]
 other = "Cerrar"

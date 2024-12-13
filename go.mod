@@ -28,7 +28,7 @@ require (
 	github.com/Nerzal/gocloak/v13 v13.9.0
 	github.com/gorilla/mux v1.8.1
 	github.com/nicksnyder/go-i18n/v2 v2.4.1
-	github.com/nuzur/filetools v0.0.2
+	github.com/nuzur/filetools v0.0.3
 	github.com/urfave/cli v1.22.16
 	go.uber.org/multierr v1.10.0 // indirect
 	golang.org/x/lint v0.0.0-20190930215403-16217165b5de // indirect

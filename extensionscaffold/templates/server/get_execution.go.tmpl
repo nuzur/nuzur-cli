@@ -1,0 +1,46 @@
+package server
+
+import (
+	"context"
+	"fmt"
+	"os"
+	"path"
+
+	"github.com/gofrs/uuid"
+	"github.com/nuzur/extension-sdk/client"
+	"github.com/nuzur/extension-sdk/filetools"
+	pb "github.com/nuzur/extension-sdk/idl/gen"
+	sdkmapper "github.com/nuzur/extension-sdk/mapper"
+	"github.com/nuzur/extension-sdk/proto_deps/nem/idl/gen"
+	"{{.ModulePath}}/constants"
+)
+
+func (s *server) GetExecution(ctx context.Context, req *pb.GetExecutionRequest) (*pb.GetExecutionResponse, error) {
+	exec, err := s.client.GetExecution(ctx, uuid.FromStringOrNil(req.ExecutionUuid))
+	if err != nil {
+		return nil, err
+	}
+
+	// if the status is different that succeeded just return
+	if exec.Status != gen.ExtensionExecutionStatus_EXTENSION_EXECUTION_STATUS_SUCCEEDED {
+		return sdkmapper.MapExecutionToGetResponse(exec, nil, nil), nil
+	}
+
+	// download results
+	downloadRes, err := s.client.DownloadExecutionResults(ctx, client.DownloadExecutionResultsRequest{
+		ExecutionUUID:      uuid.FromStringOrNil(req.ExecutionUuid),
+		ProjectUUID:        uuid.FromStringOrNil(exec.ProjectUuid),
+		ProjectVersionUUID: uuid.FromStringOrNil(exec.ProjectVersionUuid),
+		FileExtension:      constants.ResultsFileExtension,
+	})
+	if err != nil || downloadRes == nil {
+		return nil, err
+	}
+
+	// TODO open the downloaded file and build the response
+
+	// cleanup
+	os.RemoveAll(path.Join(filetools.CurrentPath(), "previous-executions", fmt.Sprintf("%s.%s", req.ExecutionUuid, constants.ResultsFileExtension)))
+
+	return sdkmapper.MapExecutionToGetResponse(exec, nil, nil), nil
+}
