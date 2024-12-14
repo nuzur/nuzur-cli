@@ -10,12 +10,17 @@ import (
 	"path"
 	"path/filepath"
 	"strings"
+	"text/template"
 
+	gopluralize "github.com/gertd/go-pluralize"
+	"github.com/iancoleman/strcase"
+	extensiongen "github.com/nuzur/extension-sdk/idl/gen"
 	"github.com/nuzur/filetools"
 	"github.com/nuzur/nuzur-cli/auth"
 	"github.com/nuzur/nuzur-cli/productclient"
 	"github.com/nuzur/nuzur-cli/protodeps/gen"
 	nemgen "github.com/nuzur/nuzur-cli/protodeps/nem/idl/gen"
+	"google.golang.org/protobuf/encoding/protojson"
 )
 
 //go:embed templates/**
@@ -53,6 +58,7 @@ type GenData struct {
 	ModulePath       string
 	Extension        *nemgen.Extension
 	ExtensionVersion *nemgen.ExtensionVersion
+	ConfigEntity     *extensiongen.ExtensionConfigurationEntity
 }
 
 func (i *Implementation) Scaffold(params ScaffoldParams) error {
@@ -87,15 +93,24 @@ func (i *Implementation) Scaffold(params ScaffoldParams) error {
 		return err
 	}
 
+	// unmarshall extension config entity from the version
+	extensionConfigEntity := extensiongen.ExtensionConfigurationEntity{}
+	err = protojson.Unmarshal([]byte(extensionVersion.ConfigurationEntity), &extensionConfigEntity)
+	if err != nil {
+		return err
+	}
+
 	genData := GenData{
 		ModulePath:       params.Module,
 		Extension:        extension,
 		ExtensionVersion: extensionVersion,
+		ConfigEntity:     &extensionConfigEntity,
 	}
 
 	// generate files
 
 	// top level
+	fmt.Printf("[extension-scaffold] generating top level files\n")
 	err = genFile(ctx, params.Path, "main.go", genData)
 	if err != nil {
 		return err
@@ -110,12 +125,14 @@ func (i *Implementation) Scaffold(params ScaffoldParams) error {
 	}
 
 	// constants
+	fmt.Printf("[extension-scaffold] generating constants\n")
 	err = genFile(ctx, params.Path, "constants/constants.go", genData)
 	if err != nil {
 		return err
 	}
 
 	// config
+	fmt.Printf("[extension-scaffold] generating config\n")
 	err = genFile(ctx, params.Path, "config/configvalues.go", genData)
 	if err != nil {
 		return err
@@ -126,6 +143,7 @@ func (i *Implementation) Scaffold(params ScaffoldParams) error {
 	}
 
 	// server
+	fmt.Printf("[extension-scaffold] generating server\n")
 	err = genFile(ctx, params.Path, "server/get_execution.go", genData)
 	if err != nil {
 		return err
@@ -148,6 +166,7 @@ func (i *Implementation) Scaffold(params ScaffoldParams) error {
 	}
 
 	// go mod init
+	fmt.Printf("[extension-scaffold] go mod init\n")
 	var out bytes.Buffer
 	var stderr bytes.Buffer
 	if !filetools.FileExists(path.Join(params.Path, "go.mod")) {
@@ -157,20 +176,21 @@ func (i *Implementation) Scaffold(params ScaffoldParams) error {
 		cmd.Stderr = &stderr
 		err := cmd.Run()
 		if err != nil {
-			fmt.Printf("error running go mod init: %v | %v | %v\n", err, out.String(), stderr.String())
+			fmt.Printf("[extension-scaffold] error running go mod init: %v | %v | %v\n", err, out.String(), stderr.String())
 		}
 	} else {
-		fmt.Printf("go.mod already exists\n")
+		fmt.Printf("[extension-scaffold] go.mod already exists\n")
 	}
 
 	// go mod tidy
+	fmt.Printf("[extension-scaffold] go mod tidy\n")
 	cmd := exec.Command("go", "mod", "tidy")
 	cmd.Dir = params.Path
 	cmd.Stdout = &out
 	cmd.Stderr = &stderr
 	err = cmd.Run()
 	if err != nil {
-		fmt.Printf("error running go mod init: %v | %v | %v\n", err, out.String(), stderr.String())
+		fmt.Printf("[extension-scaffold] error running go mod init: %v | %v | %v\n", err, out.String(), stderr.String())
 	}
 
 	return nil
@@ -182,11 +202,21 @@ func genFile(ctx context.Context, path string, fileName string, genData GenData)
 	if err != nil {
 		return err
 	}
+
+	funcmap := template.FuncMap{
+		"ToCamel": strcase.ToCamel,
+		"ToCamelSingle": func(in string) string {
+			pl := gopluralize.NewClient()
+			ins := pl.Singular(in)
+			return strcase.ToCamel(ins)
+		},
+	}
 	_, err = filetools.GenerateFile(ctx, filetools.FileRequest{
 		OutputPath:      filepath.Join(path, fileName),
 		TemplateBytes:   tmplBytes,
 		Data:            genData,
 		DisableGoFormat: !isGoFile,
+		Funcs:           funcmap,
 	})
 	if err != nil {
 		return err

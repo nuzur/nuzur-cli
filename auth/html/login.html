@@ -14,7 +14,7 @@
                 <img alt="nuzur logo" src="/html/assets/img/nuzur_logo.png" width="120px">
                 <h1>{{.Title}}</h1>
                 <p>{{.Subtitle}}</p>
-                <a onclick="self.close()" class="button">{{.Close}}</a>
+                <a onclick="window.opener=null; window.close(); return false;" class="button">{{.Close}}</a>
             </div>
         </div>
     </main>

@@ -1,3 +1,87 @@
 package config
 
-// todo build based on version entity config
+
+import (
+{{ $firstTime := false}}
+{{- range $field := .ConfigEntity.Fields -}}
+    {{- if and (eq $field.Type 6) (eq $firstTime false) -}}
+    {{ $firstTime = true}} 
+    "time"   
+    {{end -}}
+{{end -}}
+)
+
+
+{{range $field := .ConfigEntity.Fields}}
+    {{if eq $field.Type 8}}
+    type {{ToCamelSingle $field.Identifier}} string
+        {{ if and (ne $field.TypeConfig nil) (ne $field.TypeConfig.Enum nil)}}
+        const (
+            {{- range $option := $field.TypeConfig.Enum.Options -}}
+                {{ToCamel $option.Value}}{{ToCamelSingle $field.Identifier}} {{ToCamelSingle $field.Identifier}} = "{{$option.Identifier}}"  
+            {{end}}
+        )
+        {{end}}
+    {{end}}
+{{end}}
+
+type Values struct {
+    {{- range $field := .ConfigEntity.Fields -}}
+        {{- if eq $field.Type 1 -}}
+            {{ToCamel $field.Identifier}} string `json:"{{$field.Identifier}}"`
+        {{end -}}
+        {{- if eq $field.Type 2 -}}
+            {{ToCamel $field.Identifier}} int64 `json:"{{$field.Identifier}}"`
+        {{end -}}
+        {{- if eq $field.Type 3 -}}
+            {{ToCamel $field.Identifier}} float64 `json:"{{$field.Identifier}}"`
+        {{end -}}
+        {{- if eq $field.Type 4 -}}
+            {{ToCamel $field.Identifier}} bool `json:"{{$field.Identifier}}"`
+        {{end -}}
+        {{- if eq $field.Type 5 -}}
+            {{ToCamel $field.Identifier}} string `json:"{{$field.Identifier}}"`
+        {{end -}}
+        {{- if eq $field.Type 6 -}}
+            {{ToCamel $field.Identifier}} time.Time `json:"{{$field.Identifier}}"`
+        {{end -}}
+        {{- if eq $field.Type 7 -}}
+            {{ToCamel $field.Identifier}} time.Time `json:"{{$field.Identifier}}"`
+        {{end -}}
+        {{- if eq $field.Type 8 -}}
+            {{- if and (ne $field.TypeConfig nil) (ne $field.TypeConfig.Enum nil) -}}
+                {{ToCamel $field.Identifier}} {{if eq $field.TypeConfig.Enum.AllowMultiple true }}[]{{end}}{{ToCamelSingle $field.Identifier}} `json:"{{$field.Identifier}}"`
+            {{end -}}
+        {{end -}}
+        {{- if eq $field.Type 9 -}}
+            {{- if and (ne $field.TypeConfig nil) (ne $field.TypeConfig.Array nil) -}}
+            {{ $arrayFieldType := $field.TypeConfig.Array.ArrayType}}
+            {{- if eq $arrayFieldType 1 -}}
+                {{ToCamel $field.Identifier}} []string `json:"{{$field.Identifier}}"`
+            {{end -}}
+            {{- if eq $arrayFieldType 2 -}}
+                {{ToCamel $field.Identifier}} []int64 `json:"{{$field.Identifier}}"`
+            {{end -}}
+            {{- if eq $arrayFieldType 3 -}}
+                {{ToCamel $field.Identifier}} []float64 `json:"{{$field.Identifier}}"`
+            {{end -}}
+            {{- if eq $arrayFieldType 4 -}}
+                {{ToCamel $field.Identifier}} []bool `json:"{{$field.Identifier}}"`
+            {{end -}}
+            {{- if eq $arrayFieldType 5 -}}
+                {{ToCamel $field.Identifier}} []string `json:"{{$field.Identifier}}"`
+            {{end -}}
+            {{- if eq $arrayFieldType 6 -}}
+                {{ToCamel $field.Identifier}} []time.Time `json:"{{$field.Identifier}}"`
+            {{end -}}
+            {{- if eq $arrayFieldType 7 -}}
+                {{ToCamel $field.Identifier}} []time.Time `json:"{{$field.Identifier}}"`
+            {{end -}}
+            {{- if eq $arrayFieldType 8 -}}
+                {{ToCamel $field.Identifier}} []{{ToCamelSingle $field.Identifier}} `json:"{{$field.Identifier}}"`
+            {{end -}}
+            
+            {{end -}}
+        {{end -}}
+    {{end}}
+}
