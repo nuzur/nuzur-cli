@@ -48,6 +48,7 @@ const (
 	NuzurProduct_GetSignedFileURL_FullMethodName                            = "/NuzurProduct/GetSignedFileURL"
 	NuzurProduct_UploadExtensionExecutionFile_FullMethodName                = "/NuzurProduct/UploadExtensionExecutionFile"
 	NuzurProduct_GetExtensionExecutionFile_FullMethodName                   = "/NuzurProduct/GetExtensionExecutionFile"
+	NuzurProduct_UploadExtensionIcon_FullMethodName                         = "/NuzurProduct/UploadExtensionIcon"
 	NuzurProduct_ListExtensions_FullMethodName                              = "/NuzurProduct/ListExtensions"
 	NuzurProduct_GetExtension_FullMethodName                                = "/NuzurProduct/GetExtension"
 	NuzurProduct_CreateExtension_FullMethodName                             = "/NuzurProduct/CreateExtension"
@@ -100,6 +101,7 @@ type NuzurProductClient interface {
 	GetSignedFileURL(ctx context.Context, in *GetSignedFileURLRequest, opts ...grpc.CallOption) (*GetSignedFileURLResponse, error)
 	UploadExtensionExecutionFile(ctx context.Context, in *UploadExtensionExecutionFileRequest, opts ...grpc.CallOption) (*UploadExtensionExecutionFileResponse, error)
 	GetExtensionExecutionFile(ctx context.Context, in *GetExtensionExecutionFileRequest, opts ...grpc.CallOption) (*GetExtensionExecutionFileResponse, error)
+	UploadExtensionIcon(ctx context.Context, in *UploadExtensionIconRequest, opts ...grpc.CallOption) (*UploadExtensionIconResponse, error)
 	// extensions
 	ListExtensions(ctx context.Context, in *ListExtensionsRequest, opts ...grpc.CallOption) (*ListExtensionsResponse, error)
 	GetExtension(ctx context.Context, in *GetExtensionRequest, opts ...grpc.CallOption) (*gen.Extension, error)
@@ -405,6 +407,16 @@ func (c *nuzurProductClient) GetExtensionExecutionFile(ctx context.Context, in *
 	return out, nil
 }
 
+func (c *nuzurProductClient) UploadExtensionIcon(ctx context.Context, in *UploadExtensionIconRequest, opts ...grpc.CallOption) (*UploadExtensionIconResponse, error) {
+	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
+	out := new(UploadExtensionIconResponse)
+	err := c.cc.Invoke(ctx, NuzurProduct_UploadExtensionIcon_FullMethodName, in, out, cOpts...)
+	if err != nil {
+		return nil, err
+	}
+	return out, nil
+}
+
 func (c *nuzurProductClient) ListExtensions(ctx context.Context, in *ListExtensionsRequest, opts ...grpc.CallOption) (*ListExtensionsResponse, error) {
 	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
 	out := new(ListExtensionsResponse)
@@ -563,6 +575,7 @@ type NuzurProductServer interface {
 	GetSignedFileURL(context.Context, *GetSignedFileURLRequest) (*GetSignedFileURLResponse, error)
 	UploadExtensionExecutionFile(context.Context, *UploadExtensionExecutionFileRequest) (*UploadExtensionExecutionFileResponse, error)
 	GetExtensionExecutionFile(context.Context, *GetExtensionExecutionFileRequest) (*GetExtensionExecutionFileResponse, error)
+	UploadExtensionIcon(context.Context, *UploadExtensionIconRequest) (*UploadExtensionIconResponse, error)
 	// extensions
 	ListExtensions(context.Context, *ListExtensionsRequest) (*ListExtensionsResponse, error)
 	GetExtension(context.Context, *GetExtensionRequest) (*gen.Extension, error)
@@ -671,6 +684,9 @@ func (UnimplementedNuzurProductServer) UploadExtensionExecutionFile(context.Cont
 }
 func (UnimplementedNuzurProductServer) GetExtensionExecutionFile(context.Context, *GetExtensionExecutionFileRequest) (*GetExtensionExecutionFileResponse, error) {
 	return nil, status.Errorf(codes.Unimplemented, "method GetExtensionExecutionFile not implemented")
+}
+func (UnimplementedNuzurProductServer) UploadExtensionIcon(context.Context, *UploadExtensionIconRequest) (*UploadExtensionIconResponse, error) {
+	return nil, status.Errorf(codes.Unimplemented, "method UploadExtensionIcon not implemented")
 }
 func (UnimplementedNuzurProductServer) ListExtensions(context.Context, *ListExtensionsRequest) (*ListExtensionsResponse, error) {
 	return nil, status.Errorf(codes.Unimplemented, "method ListExtensions not implemented")
@@ -1233,6 +1249,24 @@ func _NuzurProduct_GetExtensionExecutionFile_Handler(srv interface{}, ctx contex
 	return interceptor(ctx, in, info, handler)
 }
 
+func _NuzurProduct_UploadExtensionIcon_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
+	in := new(UploadExtensionIconRequest)
+	if err := dec(in); err != nil {
+		return nil, err
+	}
+	if interceptor == nil {
+		return srv.(NuzurProductServer).UploadExtensionIcon(ctx, in)
+	}
+	info := &grpc.UnaryServerInfo{
+		Server:     srv,
+		FullMethod: NuzurProduct_UploadExtensionIcon_FullMethodName,
+	}
+	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
+		return srv.(NuzurProductServer).UploadExtensionIcon(ctx, req.(*UploadExtensionIconRequest))
+	}
+	return interceptor(ctx, in, info, handler)
+}
+
 func _NuzurProduct_ListExtensions_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
 	in := new(ListExtensionsRequest)
 	if err := dec(in); err != nil {
@@ -1567,6 +1601,10 @@ var NuzurProduct_ServiceDesc = grpc.ServiceDesc{
 		{
 			MethodName: "GetExtensionExecutionFile",
 			Handler:    _NuzurProduct_GetExtensionExecutionFile_Handler,
+		},
+		{
+			MethodName: "UploadExtensionIcon",
+			Handler:    _NuzurProduct_UploadExtensionIcon_Handler,
 		},
 		{
 			MethodName: "ListExtensions",
