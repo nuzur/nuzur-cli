@@ -48,3 +48,6 @@ other = "You can close this page and return to the terminal"
 
 [login_title_error]
 other = "Login Error"
+
+[extension_update_config_desc]
+other = "Update the configuration for an extension"
