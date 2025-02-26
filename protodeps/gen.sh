@@ -5,11 +5,8 @@ go install google.golang.org/grpc/cmd/protoc-gen-go-grpc@latest
 export PATH="$PATH:$(go env GOPATH)/bin"
 
 find ./gen -name "*.go" -type f -delete
-find ./nem/idl/gen -name "*.go" -type f -delete
 
-protoc --go_out=. --go-grpc_out=. --proto_path=./../../nuzur-go/nem/idl/proto ./../../nuzur-go/nem/idl/proto/*.proto
-protoc --go_out=. --go-grpc_out=. --proto_path=./../../nuzur-go/product/idl/proto --proto_path=./../../nuzur-go/nem/idl/proto ./../../nuzur-go/product/idl/proto/*.proto
+protoc --go_out=. --go-grpc_out=. --proto_path=./../../nuzur-go/product/idl/proto --proto_path=./../../nem/idl/proto ./../../nuzur-go/product/idl/proto/*.proto
 
-
-sed -i '' 's/nem\/idl\/gen/github.com\/nuzur\/nuzur-cli\/protodeps\/nem\/idl\/gen/g' ./gen/product.pb.go
-sed -i '' 's/nem\/idl\/gen/github.com\/nuzur\/nuzur-cli\/protodeps\/nem\/idl\/gen/g' ./gen/product_grpc.pb.go
+sed -i '' 's/nem\/idl\/gen/github.com\/nuzur\/nem\/idl\/gen/g' ./gen/product.pb.go
+sed -i '' 's/nem\/idl\/gen/github.com\/nuzur\/nem\/idl\/gen/g' ./gen/product_grpc.pb.go

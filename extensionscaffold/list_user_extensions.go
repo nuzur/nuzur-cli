@@ -1,9 +1,9 @@
 package extensionscaffold
 
 import (
+	nemgen "github.com/nuzur/nem/idl/gen"
 	"github.com/nuzur/nuzur-cli/productclient"
 	"github.com/nuzur/nuzur-cli/protodeps/gen"
-	nemgen "github.com/nuzur/nuzur-cli/protodeps/nem/idl/gen"
 )
 
 func (i *Implementation) ListUserExtensions() ([]*nemgen.Extension, error) {

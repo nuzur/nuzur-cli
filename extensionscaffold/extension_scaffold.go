@@ -16,10 +16,10 @@ import (
 	"github.com/iancoleman/strcase"
 	extensiongen "github.com/nuzur/extension-sdk/idl/gen"
 	"github.com/nuzur/filetools"
+	nemgen "github.com/nuzur/nem/idl/gen"
 	"github.com/nuzur/nuzur-cli/auth"
 	"github.com/nuzur/nuzur-cli/productclient"
 	"github.com/nuzur/nuzur-cli/protodeps/gen"
-	nemgen "github.com/nuzur/nuzur-cli/protodeps/nem/idl/gen"
 	"google.golang.org/protobuf/encoding/protojson"
 )
 

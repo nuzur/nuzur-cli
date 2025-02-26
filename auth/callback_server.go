@@ -29,7 +29,7 @@ func (c *AuthClientImplementation) startServer() {
 				if err == nil && render != nil {
 					fmt.Fprintf(w, *render)
 				} else {
-					fmt.Printf("error: %v", err)
+					fmt.Printf("error render: %v", err)
 				}
 
 			} else {
@@ -38,7 +38,7 @@ func (c *AuthClientImplementation) startServer() {
 				if err == nil && render != nil {
 					fmt.Fprintf(w, *render)
 				} else {
-					fmt.Printf("error: %v", err)
+					fmt.Printf("error fetch: %v", err)
 				}
 			}
 			c.closeApp.Done()

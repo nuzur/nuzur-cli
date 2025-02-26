@@ -63,6 +63,7 @@ func ClientContext() (context.Context, error) {
 	if err != nil {
 		return nil, err
 	}
+
 	ctx, _ := context.WithTimeout(context.Background(), 10*time.Second)
 	ctx = metadata.NewOutgoingContext(ctx, metadata.New(map[string]string{
 		"authorization": fmt.Sprintf("bearer %s", string(tokenBytes)),

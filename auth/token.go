@@ -7,10 +7,10 @@ import (
 
 	"github.com/Nerzal/gocloak/v13"
 	"github.com/nuzur/filetools"
+	nemgen "github.com/nuzur/nem/idl/gen"
 	"github.com/nuzur/nuzur-cli/files"
 	"github.com/nuzur/nuzur-cli/productclient"
 	"github.com/nuzur/nuzur-cli/protodeps/gen"
-	nemgen "github.com/nuzur/nuzur-cli/protodeps/nem/idl/gen"
 )
 
 func (c *AuthClientImplementation) GetTokenUser() (*nemgen.User, error) {
@@ -23,7 +23,12 @@ func (c *AuthClientImplementation) GetTokenUser() (*nemgen.User, error) {
 	if err != nil {
 		return nil, err
 	}
-	return pc.ProductClient.GetTokenUser(ctx, &gen.GetTokenUserRequest{})
+	user, err := pc.ProductClient.GetTokenUser(ctx, &gen.GetTokenUserRequest{})
+	if err != nil {
+		return nil, fmt.Errorf("error getting token user: %v", err)
+	}
+
+	return user, nil
 }
 
 func (c *AuthClientImplementation) FetchToken(code string) error {
