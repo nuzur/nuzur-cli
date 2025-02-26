@@ -22,8 +22,8 @@ type Client struct {
 }
 
 type Params struct {
-	API_ADDRESS *string
-	DisableTLS  bool
+	PRODUCT_API_ADDRESS *string
+	DisableTLS          bool
 }
 
 func New(params Params) (*Client, error) {
@@ -41,9 +41,9 @@ func New(params Params) (*Client, error) {
 		opts = append(opts, grpc.WithTransportCredentials(creds))
 	}
 
-	api_address := constants.API_PROD_ADDRESS
-	if params.API_ADDRESS != nil {
-		api_address = *params.API_ADDRESS
+	api_address := constants.PRODUCT_PROD_ADDRESS
+	if params.PRODUCT_API_ADDRESS != nil {
+		api_address = *params.PRODUCT_API_ADDRESS
 	}
 	conn, err := grpc.NewClient(api_address, opts...)
 	if err != nil {

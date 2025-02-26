@@ -1,4 +1,4 @@
 package constants
 
 const TOKEN_FILE = "token.txt"
-const API_PROD_ADDRESS = "api.nuzur.com:443"
+const PRODUCT_PROD_ADDRESS = "product.nuzur.com:443"
