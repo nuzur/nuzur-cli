@@ -28,3 +28,4 @@ dist/
 token.txt
 nuzur-cli
 .DS_Store
+test/*

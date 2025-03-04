@@ -142,6 +142,28 @@ func (i *Implementation) Scaffold(params ScaffoldParams) error {
 		return err
 	}
 
+	// translations
+	fmt.Printf("[extension-scaffold] generating translations\n")
+	err = genFile(ctx, params.Path, "translations/en.toml", genData)
+	if err != nil {
+		return err
+	}
+	err = genFile(ctx, params.Path, "translations/es.toml", genData)
+	if err != nil {
+		return err
+	}
+
+	// github workflows
+	fmt.Printf("[extension-scaffold] generating github workflows\n")
+	err = genFile(ctx, params.Path, ".github/workflows/go.yaml", genData)
+	if err != nil {
+		return err
+	}
+	err = genFile(ctx, params.Path, ".github/workflows/publish-image.yaml", genData)
+	if err != nil {
+		return err
+	}
+
 	// server
 	fmt.Printf("[extension-scaffold] generating server\n")
 	err = genFile(ctx, params.Path, "server/get_execution.go", genData)
