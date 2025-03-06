@@ -56,6 +56,7 @@ type ScaffoldParams struct {
 
 type GenData struct {
 	ModulePath       string
+	ModuleName       string
 	Extension        *nemgen.Extension
 	ExtensionVersion *nemgen.ExtensionVersion
 	ConfigEntity     *extensiongen.ExtensionConfigurationEntity
@@ -100,8 +101,10 @@ func (i *Implementation) Scaffold(params ScaffoldParams) error {
 		return err
 	}
 
+	pathParts := strings.Split(params.Module, "/")
 	genData := GenData{
 		ModulePath:       params.Module,
+		ModuleName:       pathParts[len(pathParts)-1],
 		Extension:        extension,
 		ExtensionVersion: extensionVersion,
 		ConfigEntity:     &extensionConfigEntity,
