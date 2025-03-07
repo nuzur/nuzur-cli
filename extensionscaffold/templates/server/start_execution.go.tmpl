@@ -51,7 +51,7 @@ func (s *server) StartExecution(ctx context.Context, req *pb.StartExecutionReque
 			ProjectUUID:          projectUUID,
 			ProjectVersionUUID:   projectVersionUUID,
 			ProjectExtensionUUID: projectExtensionUUID,
-			Metadata:             "", // TODO update metadata with config values and/or other needed data
+			Metadata:             "{}", // TODO update metadata with config values and/or other needed data
 		})
 		if err != nil {
 			return err
