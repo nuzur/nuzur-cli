@@ -32,7 +32,7 @@ require (
 	github.com/nicksnyder/go-i18n/v2 v2.4.1
 	github.com/nuzur/extension-sdk v0.0.42
 	github.com/nuzur/filetools v0.0.3
-	github.com/nuzur/nem v1.0.16
+	github.com/nuzur/nem v1.0.17
 	github.com/urfave/cli v1.22.17
 	go.uber.org/multierr v1.11.0 // indirect
 	golang.org/x/lint v0.0.0-20201208152925-83fdc39ff7b5 // indirect
