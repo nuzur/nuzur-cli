@@ -30,7 +30,7 @@ require (
 	github.com/gorilla/mux v1.8.1
 	github.com/iancoleman/strcase v0.3.0
 	github.com/nicksnyder/go-i18n/v2 v2.4.1
-	github.com/nuzur/extension-sdk v0.0.42
+	github.com/nuzur/extension-sdk v0.0.61
 	github.com/nuzur/filetools v0.0.3
 	github.com/nuzur/nem v1.0.20
 	github.com/urfave/cli v1.22.17

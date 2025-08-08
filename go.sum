@@ -48,8 +48,8 @@ github.com/manifoldco/promptui v0.9.0 h1:3V4HzJk1TtXW1MTZMP7mdlwbBpIinw3HztaIlYt
 github.com/manifoldco/promptui v0.9.0/go.mod h1:ka04sppxSGFAtxX0qhlYQjISsg9mR4GWtQEhdbn6Pgg=
 github.com/nicksnyder/go-i18n/v2 v2.4.1 h1:zwzjtX4uYyiaU02K5Ia3zSkpJZrByARkRB4V3YPrr0g=
 github.com/nicksnyder/go-i18n/v2 v2.4.1/go.mod h1:++Pl70FR6Cki7hdzZRnEEqdc2dJt+SAGotyFg/SvZMk=
-github.com/nuzur/extension-sdk v0.0.42 h1:ukZGz9JrPPy1NVYUH0nHdpMB/qD3dK3q4Zb7JIVAhDo=
-github.com/nuzur/extension-sdk v0.0.42/go.mod h1:bgkXFfN4r1I0cOxW5fXcN5yz9skZGMGxpyU/XZGdoW8=
+github.com/nuzur/extension-sdk v0.0.61 h1:aLY6JB12eqv92gBavzuSk6QyQl4yQPrkg1GGMIdZ7pg=
+github.com/nuzur/extension-sdk v0.0.61/go.mod h1:NuYwvcapqd8FwoQ2vHGdXcQDCvV9opcoE+qhnLAgkBY=
 github.com/nuzur/filetools v0.0.3 h1:Ns2g9/f9SqZUujZa0hkt4rbLfDpQJLcA30d7rKCZ8PE=
 github.com/nuzur/filetools v0.0.3/go.mod h1:jRAy/C7ilpw0HBDFYhXGv5+IS3WIen468z8XsFEVAdw=
 github.com/nuzur/nem v1.0.20 h1:1NJ0ZsTBnSxAB+IwqHZLejmeG5ZzWS2+1yTAETnHam0=
