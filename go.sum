@@ -52,8 +52,8 @@ github.com/nuzur/extension-sdk v0.0.64 h1:ryWeJgDbZtm1UvswvnioFGJQyfXuUWdBzT9Qew
 github.com/nuzur/extension-sdk v0.0.64/go.mod h1:mBCf6KmExqmvSutaWdRM+ECkKgOuwAY5lyqb68ba4n4=
 github.com/nuzur/filetools v0.0.3 h1:Ns2g9/f9SqZUujZa0hkt4rbLfDpQJLcA30d7rKCZ8PE=
 github.com/nuzur/filetools v0.0.3/go.mod h1:jRAy/C7ilpw0HBDFYhXGv5+IS3WIen468z8XsFEVAdw=
-github.com/nuzur/nem v1.0.26 h1:9qeO2muSi8veby5pfdYbI2k5kOvtAy6Wa6McXtfnUR0=
-github.com/nuzur/nem v1.0.26/go.mod h1:JBrZAL310+nGvQopR10xTvnUrB0/bk7MLxx/JKYoPvk=
+github.com/nuzur/nem v1.0.27 h1:p/ZHR0KbWStYxvUo7LrKgEadMFB8qJ3HCQ+TGsbd/qo=
+github.com/nuzur/nem v1.0.27/go.mod h1:JBrZAL310+nGvQopR10xTvnUrB0/bk7MLxx/JKYoPvk=
 github.com/opentracing/opentracing-go v1.2.0 h1:uEJPy/1a5RIPAJ0Ov+OIO8OxWu77jEv+1B0VhjKrZUs=
 github.com/opentracing/opentracing-go v1.2.0/go.mod h1:GxEUsuufX4nBwe+T+Wl9TAgYrxe9dPLANfrWvHYVTgc=
 github.com/pkg/errors v0.9.1 h1:FEBLx1zS214owpjy7qsBeixbURkuhQAwrK5UwLGTwt4=

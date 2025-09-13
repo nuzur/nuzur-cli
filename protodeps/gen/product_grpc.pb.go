@@ -22,12 +22,22 @@ const _ = grpc.SupportPackageIsVersion9
 const (
 	NuzurProduct_GetUser_FullMethodName                                     = "/NuzurProduct/GetUser"
 	NuzurProduct_GetTokenUser_FullMethodName                                = "/NuzurProduct/GetTokenUser"
+	NuzurProduct_GetUserByEmail_FullMethodName                              = "/NuzurProduct/GetUserByEmail"
+	NuzurProduct_GetTokenUserRoleForProject_FullMethodName                  = "/NuzurProduct/GetTokenUserRoleForProject"
+	NuzurProduct_GetTokenUserRoleForTeam_FullMethodName                     = "/NuzurProduct/GetTokenUserRoleForTeam"
+	NuzurProduct_ListUsersForTeam_FullMethodName                            = "/NuzurProduct/ListUsersForTeam"
+	NuzurProduct_ListUsersForProject_FullMethodName                         = "/NuzurProduct/ListUsersForProject"
+	NuzurProduct_AddUserToProject_FullMethodName                            = "/NuzurProduct/AddUserToProject"
+	NuzurProduct_UpdateUserProject_FullMethodName                           = "/NuzurProduct/UpdateUserProject"
+	NuzurProduct_RemoveUserFromProject_FullMethodName                       = "/NuzurProduct/RemoveUserFromProject"
+	NuzurProduct_AddUserToTeam_FullMethodName                               = "/NuzurProduct/AddUserToTeam"
+	NuzurProduct_UpdateUserTeam_FullMethodName                              = "/NuzurProduct/UpdateUserTeam"
+	NuzurProduct_RemoveUserFromTeam_FullMethodName                          = "/NuzurProduct/RemoveUserFromTeam"
 	NuzurProduct_ListTeamsForUser_FullMethodName                            = "/NuzurProduct/ListTeamsForUser"
+	NuzurProduct_ListTeamsForAdminUser_FullMethodName                       = "/NuzurProduct/ListTeamsForAdminUser"
 	NuzurProduct_GetTeamForUser_FullMethodName                              = "/NuzurProduct/GetTeamForUser"
 	NuzurProduct_CreateTeam_FullMethodName                                  = "/NuzurProduct/CreateTeam"
 	NuzurProduct_UpdateTeam_FullMethodName                                  = "/NuzurProduct/UpdateTeam"
-	NuzurProduct_InviteUserToTeam_FullMethodName                            = "/NuzurProduct/InviteUserToTeam"
-	NuzurProduct_ActivateUserTeamInvite_FullMethodName                      = "/NuzurProduct/ActivateUserTeamInvite"
 	NuzurProduct_GetConnectionWithSecret_FullMethodName                     = "/NuzurProduct/GetConnectionWithSecret"
 	NuzurProduct_CreateConnectionSecret_FullMethodName                      = "/NuzurProduct/CreateConnectionSecret"
 	NuzurProduct_UpdateConnectionSecret_FullMethodName                      = "/NuzurProduct/UpdateConnectionSecret"
@@ -40,15 +50,25 @@ const (
 	NuzurProduct_ListProjectVersionsForUser_FullMethodName                  = "/NuzurProduct/ListProjectVersionsForUser"
 	NuzurProduct_GetProjectVersionForUser_FullMethodName                    = "/NuzurProduct/GetProjectVersionForUser"
 	NuzurProduct_GetLatestProjectVersion_FullMethodName                     = "/NuzurProduct/GetLatestProjectVersion"
+	NuzurProduct_GetLatestProjectVersionForUser_FullMethodName              = "/NuzurProduct/GetLatestProjectVersionForUser"
+	NuzurProduct_GetLatestProjectVersionUUIDForUser_FullMethodName          = "/NuzurProduct/GetLatestProjectVersionUUIDForUser"
+	NuzurProduct_GetProjectVersionVersion_FullMethodName                    = "/NuzurProduct/GetProjectVersionVersion"
+	NuzurProduct_GetProjectVersionIdentifier_FullMethodName                 = "/NuzurProduct/GetProjectVersionIdentifier"
 	NuzurProduct_CreateProjectVersion_FullMethodName                        = "/NuzurProduct/CreateProjectVersion"
 	NuzurProduct_CreateDraftProjectVersionForExistingProject_FullMethodName = "/NuzurProduct/CreateDraftProjectVersionForExistingProject"
 	NuzurProduct_UpdateProjectVersion_FullMethodName                        = "/NuzurProduct/UpdateProjectVersion"
 	NuzurProduct_DiscardDraftProjectVersion_FullMethodName                  = "/NuzurProduct/DiscardDraftProjectVersion"
-	NuzurProduct_UploadProjectSnapshot_FullMethodName                       = "/NuzurProduct/UploadProjectSnapshot"
+	NuzurProduct_SendProjectVersionForReview_FullMethodName                 = "/NuzurProduct/SendProjectVersionForReview"
+	NuzurProduct_WithdrawFromReviewProjectVersion_FullMethodName            = "/NuzurProduct/WithdrawFromReviewProjectVersion"
+	NuzurProduct_ReviewProjectVersion_FullMethodName                        = "/NuzurProduct/ReviewProjectVersion"
+	NuzurProduct_UploadProjectVersionSnapshot_FullMethodName                = "/NuzurProduct/UploadProjectVersionSnapshot"
 	NuzurProduct_GetSignedFileURL_FullMethodName                            = "/NuzurProduct/GetSignedFileURL"
 	NuzurProduct_UploadExtensionExecutionFile_FullMethodName                = "/NuzurProduct/UploadExtensionExecutionFile"
 	NuzurProduct_GetExtensionExecutionFile_FullMethodName                   = "/NuzurProduct/GetExtensionExecutionFile"
 	NuzurProduct_UploadExtensionIcon_FullMethodName                         = "/NuzurProduct/UploadExtensionIcon"
+	NuzurProduct_UploadRecordFieldFile_FullMethodName                       = "/NuzurProduct/UploadRecordFieldFile"
+	NuzurProduct_GetRecordFieldSignedFileURL_FullMethodName                 = "/NuzurProduct/GetRecordFieldSignedFileURL"
+	NuzurProduct_GetRecordFileContent_FullMethodName                        = "/NuzurProduct/GetRecordFileContent"
 	NuzurProduct_ListExtensions_FullMethodName                              = "/NuzurProduct/ListExtensions"
 	NuzurProduct_GetExtension_FullMethodName                                = "/NuzurProduct/GetExtension"
 	NuzurProduct_CreateExtension_FullMethodName                             = "/NuzurProduct/CreateExtension"
@@ -61,6 +81,24 @@ const (
 	NuzurProduct_GetExtensionExecution_FullMethodName                       = "/NuzurProduct/GetExtensionExecution"
 	NuzurProduct_CreateExtensionExecution_FullMethodName                    = "/NuzurProduct/CreateExtensionExecution"
 	NuzurProduct_UpdateExtensionExecution_FullMethodName                    = "/NuzurProduct/UpdateExtensionExecution"
+	NuzurProduct_ListUserChangeRequests_FullMethodName                      = "/NuzurProduct/ListUserChangeRequests"
+	NuzurProduct_GetChangeRequest_FullMethodName                            = "/NuzurProduct/GetChangeRequest"
+	NuzurProduct_CreateChangeRequest_FullMethodName                         = "/NuzurProduct/CreateChangeRequest"
+	NuzurProduct_UpdateChangeRequest_FullMethodName                         = "/NuzurProduct/UpdateChangeRequest"
+	NuzurProduct_ListChangeRequestsForReview_FullMethodName                 = "/NuzurProduct/ListChangeRequestsForReview"
+	NuzurProduct_GetUserProjectVersionData_FullMethodName                   = "/NuzurProduct/GetUserProjectVersionData"
+	NuzurProduct_SaveUserProjectVersionData_FullMethodName                  = "/NuzurProduct/SaveUserProjectVersionData"
+	NuzurProduct_GetObjectStoreWithSecret_FullMethodName                    = "/NuzurProduct/GetObjectStoreWithSecret"
+	NuzurProduct_CreateObjectStoreSecret_FullMethodName                     = "/NuzurProduct/CreateObjectStoreSecret"
+	NuzurProduct_UpdateObjectStoreSecret_FullMethodName                     = "/NuzurProduct/UpdateObjectStoreSecret"
+	NuzurProduct_DeleteObjectStoreSecret_FullMethodName                     = "/NuzurProduct/DeleteObjectStoreSecret"
+	NuzurProduct_GenerateSQLForCR_FullMethodName                            = "/NuzurProduct/GenerateSQLForCR"
+	NuzurProduct_ReviewDataChange_FullMethodName                            = "/NuzurProduct/ReviewDataChange"
+	NuzurProduct_GetMembership_FullMethodName                               = "/NuzurProduct/GetMembership"
+	NuzurProduct_CreateMembership_FullMethodName                            = "/NuzurProduct/CreateMembership"
+	NuzurProduct_UpdateMembership_FullMethodName                            = "/NuzurProduct/UpdateMembership"
+	NuzurProduct_MembershipForProject_FullMethodName                        = "/NuzurProduct/MembershipForProject"
+	NuzurProduct_MembershipForTeam_FullMethodName                           = "/NuzurProduct/MembershipForTeam"
 )
 
 // NuzurProductClient is the client API for NuzurProduct service.
@@ -70,13 +108,24 @@ type NuzurProductClient interface {
 	// user
 	GetUser(ctx context.Context, in *GetUserRequest, opts ...grpc.CallOption) (*gen.User, error)
 	GetTokenUser(ctx context.Context, in *GetTokenUserRequest, opts ...grpc.CallOption) (*gen.User, error)
+	GetUserByEmail(ctx context.Context, in *GetUserByEmailRequest, opts ...grpc.CallOption) (*gen.User, error)
+	GetTokenUserRoleForProject(ctx context.Context, in *GetUserRoleForProjectRequest, opts ...grpc.CallOption) (*GetUserRoleForProjectResponse, error)
+	GetTokenUserRoleForTeam(ctx context.Context, in *GetUserRoleForTeamRequest, opts ...grpc.CallOption) (*GetUserRoleForTeamResponse, error)
+	// user relations
+	ListUsersForTeam(ctx context.Context, in *ListUsersForTeamRequest, opts ...grpc.CallOption) (*ListUsersForTeamResponse, error)
+	ListUsersForProject(ctx context.Context, in *ListUsersForProjectRequest, opts ...grpc.CallOption) (*ListUsersForProjectResponse, error)
+	AddUserToProject(ctx context.Context, in *AddUserToProjectRequest, opts ...grpc.CallOption) (*gen.UserProject, error)
+	UpdateUserProject(ctx context.Context, in *UpdateUserProjectRequest, opts ...grpc.CallOption) (*gen.UserProject, error)
+	RemoveUserFromProject(ctx context.Context, in *RemoveUserFromProjectRequest, opts ...grpc.CallOption) (*gen.UserProject, error)
+	AddUserToTeam(ctx context.Context, in *AddUserToTeamRequest, opts ...grpc.CallOption) (*gen.UserTeam, error)
+	UpdateUserTeam(ctx context.Context, in *UpdateUserTeamRequest, opts ...grpc.CallOption) (*gen.UserTeam, error)
+	RemoveUserFromTeam(ctx context.Context, in *RemoveUserFromTeamRequest, opts ...grpc.CallOption) (*gen.UserTeam, error)
 	// team
 	ListTeamsForUser(ctx context.Context, in *ListTeamsForUserRequest, opts ...grpc.CallOption) (*ListTeamsForUserResponse, error)
+	ListTeamsForAdminUser(ctx context.Context, in *ListTeamsForAdminUserRequest, opts ...grpc.CallOption) (*ListTeamsForAdminUserResponse, error)
 	GetTeamForUser(ctx context.Context, in *GetTeamForUserRequest, opts ...grpc.CallOption) (*gen.Team, error)
 	CreateTeam(ctx context.Context, in *CreateTeamRequest, opts ...grpc.CallOption) (*gen.Team, error)
 	UpdateTeam(ctx context.Context, in *UpdateTeamRequest, opts ...grpc.CallOption) (*gen.Team, error)
-	InviteUserToTeam(ctx context.Context, in *InviteUserToTeamRequest, opts ...grpc.CallOption) (*gen.UserTeam, error)
-	ActivateUserTeamInvite(ctx context.Context, in *ActivateUserTeamInviteRequest, opts ...grpc.CallOption) (*gen.UserTeam, error)
 	// connection
 	GetConnectionWithSecret(ctx context.Context, in *GetConnectionWithSecretRequest, opts ...grpc.CallOption) (*gen.Connection, error)
 	CreateConnectionSecret(ctx context.Context, in *CreateConnectionSecretRequest, opts ...grpc.CallOption) (*gen.Connection, error)
@@ -92,16 +141,27 @@ type NuzurProductClient interface {
 	ListProjectVersionsForUser(ctx context.Context, in *ListProjectVersionsForUserRequest, opts ...grpc.CallOption) (*ListProjectVersionsForUserResponse, error)
 	GetProjectVersionForUser(ctx context.Context, in *GetProjectVersionForUserRequest, opts ...grpc.CallOption) (*gen.ProjectVersion, error)
 	GetLatestProjectVersion(ctx context.Context, in *GetLatestProjectVersionRequest, opts ...grpc.CallOption) (*gen.ProjectVersion, error)
+	GetLatestProjectVersionForUser(ctx context.Context, in *GetLatestProjectVersionForUserRequest, opts ...grpc.CallOption) (*gen.ProjectVersion, error)
+	GetLatestProjectVersionUUIDForUser(ctx context.Context, in *GetLatestProjectVersionUUIDForUserRequest, opts ...grpc.CallOption) (*GetLatestProjectVersionUUIDForUserResponse, error)
+	GetProjectVersionVersion(ctx context.Context, in *GetProjectVersionVersionRequest, opts ...grpc.CallOption) (*GetProjectVersionVersionResponse, error)
+	GetProjectVersionIdentifier(ctx context.Context, in *GetProjectVersionIdentifierRequest, opts ...grpc.CallOption) (*GetProjectVersionIdentifierResponse, error)
 	CreateProjectVersion(ctx context.Context, in *CreateProjectVersionRequest, opts ...grpc.CallOption) (*gen.ProjectVersion, error)
 	CreateDraftProjectVersionForExistingProject(ctx context.Context, in *CreateDraftProjectVersionForExistingProjectRequest, opts ...grpc.CallOption) (*gen.ProjectVersion, error)
 	UpdateProjectVersion(ctx context.Context, in *UpdateProjectVersionRequest, opts ...grpc.CallOption) (*gen.ProjectVersion, error)
 	DiscardDraftProjectVersion(ctx context.Context, in *DiscardDraftProjectVersionRequest, opts ...grpc.CallOption) (*gen.ProjectVersion, error)
+	SendProjectVersionForReview(ctx context.Context, in *SendProjectVersionForReviewRequest, opts ...grpc.CallOption) (*gen.ProjectVersion, error)
+	WithdrawFromReviewProjectVersion(ctx context.Context, in *WithdrawFromReviewProjectVersionRequest, opts ...grpc.CallOption) (*gen.ProjectVersion, error)
+	ReviewProjectVersion(ctx context.Context, in *ReviewProjectVersionRequest, opts ...grpc.CallOption) (*gen.ProjectVersion, error)
 	// files
-	UploadProjectSnapshot(ctx context.Context, in *UploadProjectSnapshotRequest, opts ...grpc.CallOption) (*UploadProjectSnapshotResponse, error)
+	UploadProjectVersionSnapshot(ctx context.Context, in *UploadProjectVersionSnapshotRequest, opts ...grpc.CallOption) (*UploadProjectVersionSnapshotResponse, error)
 	GetSignedFileURL(ctx context.Context, in *GetSignedFileURLRequest, opts ...grpc.CallOption) (*GetSignedFileURLResponse, error)
 	UploadExtensionExecutionFile(ctx context.Context, in *UploadExtensionExecutionFileRequest, opts ...grpc.CallOption) (*UploadExtensionExecutionFileResponse, error)
 	GetExtensionExecutionFile(ctx context.Context, in *GetExtensionExecutionFileRequest, opts ...grpc.CallOption) (*GetExtensionExecutionFileResponse, error)
 	UploadExtensionIcon(ctx context.Context, in *UploadExtensionIconRequest, opts ...grpc.CallOption) (*UploadExtensionIconResponse, error)
+	// data manager - records
+	UploadRecordFieldFile(ctx context.Context, in *UploadRecordFieldFileRequest, opts ...grpc.CallOption) (*UploadRecordFieldFileResponse, error)
+	GetRecordFieldSignedFileURL(ctx context.Context, in *GetRecordFieldSignedFileURLRequest, opts ...grpc.CallOption) (*GetRecordFieldSignedFileURLResponse, error)
+	GetRecordFileContent(ctx context.Context, in *GetRecordFileContentRequest, opts ...grpc.CallOption) (*GetRecordFileContentResponse, error)
 	// extensions
 	ListExtensions(ctx context.Context, in *ListExtensionsRequest, opts ...grpc.CallOption) (*ListExtensionsResponse, error)
 	GetExtension(ctx context.Context, in *GetExtensionRequest, opts ...grpc.CallOption) (*gen.Extension, error)
@@ -117,6 +177,29 @@ type NuzurProductClient interface {
 	GetExtensionExecution(ctx context.Context, in *GetExtensionExecutionRequest, opts ...grpc.CallOption) (*gen.ExtensionExecution, error)
 	CreateExtensionExecution(ctx context.Context, in *CreateExtensionExecutionRequest, opts ...grpc.CallOption) (*gen.ExtensionExecution, error)
 	UpdateExtensionExecution(ctx context.Context, in *UpdateExtensionExecutionRequest, opts ...grpc.CallOption) (*gen.ExtensionExecution, error)
+	// change request
+	ListUserChangeRequests(ctx context.Context, in *ListUserChangeRequestsRequest, opts ...grpc.CallOption) (*ListUserChangeRequestsResponse, error)
+	GetChangeRequest(ctx context.Context, in *GetChangeRequestRequest, opts ...grpc.CallOption) (*gen.ChangeRequest, error)
+	CreateChangeRequest(ctx context.Context, in *CreateChangeRequestRequest, opts ...grpc.CallOption) (*gen.ChangeRequest, error)
+	UpdateChangeRequest(ctx context.Context, in *UpdateChangeRequestRequest, opts ...grpc.CallOption) (*gen.ChangeRequest, error)
+	ListChangeRequestsForReview(ctx context.Context, in *ListChangeRequestsForReviewRequest, opts ...grpc.CallOption) (*ListChangeRequestsForReviewResponse, error)
+	// user project version data
+	GetUserProjectVersionData(ctx context.Context, in *GetUserProjectVersionDataRequest, opts ...grpc.CallOption) (*GetUserProjectVersionDataResponse, error)
+	SaveUserProjectVersionData(ctx context.Context, in *SaveUserProjectVersionDataRequest, opts ...grpc.CallOption) (*SaveUserProjectVersionDataResponse, error)
+	// object store secrets
+	GetObjectStoreWithSecret(ctx context.Context, in *GetObjectStoreWithSecretRequest, opts ...grpc.CallOption) (*gen.ObjectStore, error)
+	CreateObjectStoreSecret(ctx context.Context, in *CreateObjectStoreSecretRequest, opts ...grpc.CallOption) (*gen.ObjectStore, error)
+	UpdateObjectStoreSecret(ctx context.Context, in *UpdateObjectStoreSecretRequest, opts ...grpc.CallOption) (*gen.ObjectStore, error)
+	DeleteObjectStoreSecret(ctx context.Context, in *DeleteObjectStoreSecretRequest, opts ...grpc.CallOption) (*gen.ObjectStore, error)
+	// data manager
+	GenerateSQLForCR(ctx context.Context, in *GenerateSQLForCRRequest, opts ...grpc.CallOption) (*GenerateSQLForCRResponse, error)
+	ReviewDataChange(ctx context.Context, in *ReviewDataChangeRequest, opts ...grpc.CallOption) (*ReviewDataChangeResponse, error)
+	// membership
+	GetMembership(ctx context.Context, in *GetMembershipRequest, opts ...grpc.CallOption) (*gen.Membership, error)
+	CreateMembership(ctx context.Context, in *CreateMembershipRequest, opts ...grpc.CallOption) (*gen.Membership, error)
+	UpdateMembership(ctx context.Context, in *UpdateMembershipRequest, opts ...grpc.CallOption) (*gen.Membership, error)
+	MembershipForProject(ctx context.Context, in *MembershipForProjectRequest, opts ...grpc.CallOption) (*gen.Membership, error)
+	MembershipForTeam(ctx context.Context, in *MembershipForTeamRequest, opts ...grpc.CallOption) (*gen.Membership, error)
 }
 
 type nuzurProductClient struct {
@@ -147,10 +230,130 @@ func (c *nuzurProductClient) GetTokenUser(ctx context.Context, in *GetTokenUserR
 	return out, nil
 }
 
+func (c *nuzurProductClient) GetUserByEmail(ctx context.Context, in *GetUserByEmailRequest, opts ...grpc.CallOption) (*gen.User, error) {
+	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
+	out := new(gen.User)
+	err := c.cc.Invoke(ctx, NuzurProduct_GetUserByEmail_FullMethodName, in, out, cOpts...)
+	if err != nil {
+		return nil, err
+	}
+	return out, nil
+}
+
+func (c *nuzurProductClient) GetTokenUserRoleForProject(ctx context.Context, in *GetUserRoleForProjectRequest, opts ...grpc.CallOption) (*GetUserRoleForProjectResponse, error) {
+	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
+	out := new(GetUserRoleForProjectResponse)
+	err := c.cc.Invoke(ctx, NuzurProduct_GetTokenUserRoleForProject_FullMethodName, in, out, cOpts...)
+	if err != nil {
+		return nil, err
+	}
+	return out, nil
+}
+
+func (c *nuzurProductClient) GetTokenUserRoleForTeam(ctx context.Context, in *GetUserRoleForTeamRequest, opts ...grpc.CallOption) (*GetUserRoleForTeamResponse, error) {
+	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
+	out := new(GetUserRoleForTeamResponse)
+	err := c.cc.Invoke(ctx, NuzurProduct_GetTokenUserRoleForTeam_FullMethodName, in, out, cOpts...)
+	if err != nil {
+		return nil, err
+	}
+	return out, nil
+}
+
+func (c *nuzurProductClient) ListUsersForTeam(ctx context.Context, in *ListUsersForTeamRequest, opts ...grpc.CallOption) (*ListUsersForTeamResponse, error) {
+	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
+	out := new(ListUsersForTeamResponse)
+	err := c.cc.Invoke(ctx, NuzurProduct_ListUsersForTeam_FullMethodName, in, out, cOpts...)
+	if err != nil {
+		return nil, err
+	}
+	return out, nil
+}
+
+func (c *nuzurProductClient) ListUsersForProject(ctx context.Context, in *ListUsersForProjectRequest, opts ...grpc.CallOption) (*ListUsersForProjectResponse, error) {
+	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
+	out := new(ListUsersForProjectResponse)
+	err := c.cc.Invoke(ctx, NuzurProduct_ListUsersForProject_FullMethodName, in, out, cOpts...)
+	if err != nil {
+		return nil, err
+	}
+	return out, nil
+}
+
+func (c *nuzurProductClient) AddUserToProject(ctx context.Context, in *AddUserToProjectRequest, opts ...grpc.CallOption) (*gen.UserProject, error) {
+	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
+	out := new(gen.UserProject)
+	err := c.cc.Invoke(ctx, NuzurProduct_AddUserToProject_FullMethodName, in, out, cOpts...)
+	if err != nil {
+		return nil, err
+	}
+	return out, nil
+}
+
+func (c *nuzurProductClient) UpdateUserProject(ctx context.Context, in *UpdateUserProjectRequest, opts ...grpc.CallOption) (*gen.UserProject, error) {
+	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
+	out := new(gen.UserProject)
+	err := c.cc.Invoke(ctx, NuzurProduct_UpdateUserProject_FullMethodName, in, out, cOpts...)
+	if err != nil {
+		return nil, err
+	}
+	return out, nil
+}
+
+func (c *nuzurProductClient) RemoveUserFromProject(ctx context.Context, in *RemoveUserFromProjectRequest, opts ...grpc.CallOption) (*gen.UserProject, error) {
+	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
+	out := new(gen.UserProject)
+	err := c.cc.Invoke(ctx, NuzurProduct_RemoveUserFromProject_FullMethodName, in, out, cOpts...)
+	if err != nil {
+		return nil, err
+	}
+	return out, nil
+}
+
+func (c *nuzurProductClient) AddUserToTeam(ctx context.Context, in *AddUserToTeamRequest, opts ...grpc.CallOption) (*gen.UserTeam, error) {
+	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
+	out := new(gen.UserTeam)
+	err := c.cc.Invoke(ctx, NuzurProduct_AddUserToTeam_FullMethodName, in, out, cOpts...)
+	if err != nil {
+		return nil, err
+	}
+	return out, nil
+}
+
+func (c *nuzurProductClient) UpdateUserTeam(ctx context.Context, in *UpdateUserTeamRequest, opts ...grpc.CallOption) (*gen.UserTeam, error) {
+	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
+	out := new(gen.UserTeam)
+	err := c.cc.Invoke(ctx, NuzurProduct_UpdateUserTeam_FullMethodName, in, out, cOpts...)
+	if err != nil {
+		return nil, err
+	}
+	return out, nil
+}
+
+func (c *nuzurProductClient) RemoveUserFromTeam(ctx context.Context, in *RemoveUserFromTeamRequest, opts ...grpc.CallOption) (*gen.UserTeam, error) {
+	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
+	out := new(gen.UserTeam)
+	err := c.cc.Invoke(ctx, NuzurProduct_RemoveUserFromTeam_FullMethodName, in, out, cOpts...)
+	if err != nil {
+		return nil, err
+	}
+	return out, nil
+}
+
 func (c *nuzurProductClient) ListTeamsForUser(ctx context.Context, in *ListTeamsForUserRequest, opts ...grpc.CallOption) (*ListTeamsForUserResponse, error) {
 	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
 	out := new(ListTeamsForUserResponse)
 	err := c.cc.Invoke(ctx, NuzurProduct_ListTeamsForUser_FullMethodName, in, out, cOpts...)
+	if err != nil {
+		return nil, err
+	}
+	return out, nil
+}
+
+func (c *nuzurProductClient) ListTeamsForAdminUser(ctx context.Context, in *ListTeamsForAdminUserRequest, opts ...grpc.CallOption) (*ListTeamsForAdminUserResponse, error) {
+	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
+	out := new(ListTeamsForAdminUserResponse)
+	err := c.cc.Invoke(ctx, NuzurProduct_ListTeamsForAdminUser_FullMethodName, in, out, cOpts...)
 	if err != nil {
 		return nil, err
 	}
@@ -181,26 +384,6 @@ func (c *nuzurProductClient) UpdateTeam(ctx context.Context, in *UpdateTeamReque
 	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
 	out := new(gen.Team)
 	err := c.cc.Invoke(ctx, NuzurProduct_UpdateTeam_FullMethodName, in, out, cOpts...)
-	if err != nil {
-		return nil, err
-	}
-	return out, nil
-}
-
-func (c *nuzurProductClient) InviteUserToTeam(ctx context.Context, in *InviteUserToTeamRequest, opts ...grpc.CallOption) (*gen.UserTeam, error) {
-	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
-	out := new(gen.UserTeam)
-	err := c.cc.Invoke(ctx, NuzurProduct_InviteUserToTeam_FullMethodName, in, out, cOpts...)
-	if err != nil {
-		return nil, err
-	}
-	return out, nil
-}
-
-func (c *nuzurProductClient) ActivateUserTeamInvite(ctx context.Context, in *ActivateUserTeamInviteRequest, opts ...grpc.CallOption) (*gen.UserTeam, error) {
-	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
-	out := new(gen.UserTeam)
-	err := c.cc.Invoke(ctx, NuzurProduct_ActivateUserTeamInvite_FullMethodName, in, out, cOpts...)
 	if err != nil {
 		return nil, err
 	}
@@ -327,6 +510,46 @@ func (c *nuzurProductClient) GetLatestProjectVersion(ctx context.Context, in *Ge
 	return out, nil
 }
 
+func (c *nuzurProductClient) GetLatestProjectVersionForUser(ctx context.Context, in *GetLatestProjectVersionForUserRequest, opts ...grpc.CallOption) (*gen.ProjectVersion, error) {
+	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
+	out := new(gen.ProjectVersion)
+	err := c.cc.Invoke(ctx, NuzurProduct_GetLatestProjectVersionForUser_FullMethodName, in, out, cOpts...)
+	if err != nil {
+		return nil, err
+	}
+	return out, nil
+}
+
+func (c *nuzurProductClient) GetLatestProjectVersionUUIDForUser(ctx context.Context, in *GetLatestProjectVersionUUIDForUserRequest, opts ...grpc.CallOption) (*GetLatestProjectVersionUUIDForUserResponse, error) {
+	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
+	out := new(GetLatestProjectVersionUUIDForUserResponse)
+	err := c.cc.Invoke(ctx, NuzurProduct_GetLatestProjectVersionUUIDForUser_FullMethodName, in, out, cOpts...)
+	if err != nil {
+		return nil, err
+	}
+	return out, nil
+}
+
+func (c *nuzurProductClient) GetProjectVersionVersion(ctx context.Context, in *GetProjectVersionVersionRequest, opts ...grpc.CallOption) (*GetProjectVersionVersionResponse, error) {
+	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
+	out := new(GetProjectVersionVersionResponse)
+	err := c.cc.Invoke(ctx, NuzurProduct_GetProjectVersionVersion_FullMethodName, in, out, cOpts...)
+	if err != nil {
+		return nil, err
+	}
+	return out, nil
+}
+
+func (c *nuzurProductClient) GetProjectVersionIdentifier(ctx context.Context, in *GetProjectVersionIdentifierRequest, opts ...grpc.CallOption) (*GetProjectVersionIdentifierResponse, error) {
+	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
+	out := new(GetProjectVersionIdentifierResponse)
+	err := c.cc.Invoke(ctx, NuzurProduct_GetProjectVersionIdentifier_FullMethodName, in, out, cOpts...)
+	if err != nil {
+		return nil, err
+	}
+	return out, nil
+}
+
 func (c *nuzurProductClient) CreateProjectVersion(ctx context.Context, in *CreateProjectVersionRequest, opts ...grpc.CallOption) (*gen.ProjectVersion, error) {
 	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
 	out := new(gen.ProjectVersion)
@@ -367,10 +590,40 @@ func (c *nuzurProductClient) DiscardDraftProjectVersion(ctx context.Context, in 
 	return out, nil
 }
 
-func (c *nuzurProductClient) UploadProjectSnapshot(ctx context.Context, in *UploadProjectSnapshotRequest, opts ...grpc.CallOption) (*UploadProjectSnapshotResponse, error) {
+func (c *nuzurProductClient) SendProjectVersionForReview(ctx context.Context, in *SendProjectVersionForReviewRequest, opts ...grpc.CallOption) (*gen.ProjectVersion, error) {
 	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
-	out := new(UploadProjectSnapshotResponse)
-	err := c.cc.Invoke(ctx, NuzurProduct_UploadProjectSnapshot_FullMethodName, in, out, cOpts...)
+	out := new(gen.ProjectVersion)
+	err := c.cc.Invoke(ctx, NuzurProduct_SendProjectVersionForReview_FullMethodName, in, out, cOpts...)
+	if err != nil {
+		return nil, err
+	}
+	return out, nil
+}
+
+func (c *nuzurProductClient) WithdrawFromReviewProjectVersion(ctx context.Context, in *WithdrawFromReviewProjectVersionRequest, opts ...grpc.CallOption) (*gen.ProjectVersion, error) {
+	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
+	out := new(gen.ProjectVersion)
+	err := c.cc.Invoke(ctx, NuzurProduct_WithdrawFromReviewProjectVersion_FullMethodName, in, out, cOpts...)
+	if err != nil {
+		return nil, err
+	}
+	return out, nil
+}
+
+func (c *nuzurProductClient) ReviewProjectVersion(ctx context.Context, in *ReviewProjectVersionRequest, opts ...grpc.CallOption) (*gen.ProjectVersion, error) {
+	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
+	out := new(gen.ProjectVersion)
+	err := c.cc.Invoke(ctx, NuzurProduct_ReviewProjectVersion_FullMethodName, in, out, cOpts...)
+	if err != nil {
+		return nil, err
+	}
+	return out, nil
+}
+
+func (c *nuzurProductClient) UploadProjectVersionSnapshot(ctx context.Context, in *UploadProjectVersionSnapshotRequest, opts ...grpc.CallOption) (*UploadProjectVersionSnapshotResponse, error) {
+	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
+	out := new(UploadProjectVersionSnapshotResponse)
+	err := c.cc.Invoke(ctx, NuzurProduct_UploadProjectVersionSnapshot_FullMethodName, in, out, cOpts...)
 	if err != nil {
 		return nil, err
 	}
@@ -411,6 +664,36 @@ func (c *nuzurProductClient) UploadExtensionIcon(ctx context.Context, in *Upload
 	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
 	out := new(UploadExtensionIconResponse)
 	err := c.cc.Invoke(ctx, NuzurProduct_UploadExtensionIcon_FullMethodName, in, out, cOpts...)
+	if err != nil {
+		return nil, err
+	}
+	return out, nil
+}
+
+func (c *nuzurProductClient) UploadRecordFieldFile(ctx context.Context, in *UploadRecordFieldFileRequest, opts ...grpc.CallOption) (*UploadRecordFieldFileResponse, error) {
+	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
+	out := new(UploadRecordFieldFileResponse)
+	err := c.cc.Invoke(ctx, NuzurProduct_UploadRecordFieldFile_FullMethodName, in, out, cOpts...)
+	if err != nil {
+		return nil, err
+	}
+	return out, nil
+}
+
+func (c *nuzurProductClient) GetRecordFieldSignedFileURL(ctx context.Context, in *GetRecordFieldSignedFileURLRequest, opts ...grpc.CallOption) (*GetRecordFieldSignedFileURLResponse, error) {
+	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
+	out := new(GetRecordFieldSignedFileURLResponse)
+	err := c.cc.Invoke(ctx, NuzurProduct_GetRecordFieldSignedFileURL_FullMethodName, in, out, cOpts...)
+	if err != nil {
+		return nil, err
+	}
+	return out, nil
+}
+
+func (c *nuzurProductClient) GetRecordFileContent(ctx context.Context, in *GetRecordFileContentRequest, opts ...grpc.CallOption) (*GetRecordFileContentResponse, error) {
+	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
+	out := new(GetRecordFileContentResponse)
+	err := c.cc.Invoke(ctx, NuzurProduct_GetRecordFileContent_FullMethodName, in, out, cOpts...)
 	if err != nil {
 		return nil, err
 	}
@@ -537,6 +820,186 @@ func (c *nuzurProductClient) UpdateExtensionExecution(ctx context.Context, in *U
 	return out, nil
 }
 
+func (c *nuzurProductClient) ListUserChangeRequests(ctx context.Context, in *ListUserChangeRequestsRequest, opts ...grpc.CallOption) (*ListUserChangeRequestsResponse, error) {
+	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
+	out := new(ListUserChangeRequestsResponse)
+	err := c.cc.Invoke(ctx, NuzurProduct_ListUserChangeRequests_FullMethodName, in, out, cOpts...)
+	if err != nil {
+		return nil, err
+	}
+	return out, nil
+}
+
+func (c *nuzurProductClient) GetChangeRequest(ctx context.Context, in *GetChangeRequestRequest, opts ...grpc.CallOption) (*gen.ChangeRequest, error) {
+	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
+	out := new(gen.ChangeRequest)
+	err := c.cc.Invoke(ctx, NuzurProduct_GetChangeRequest_FullMethodName, in, out, cOpts...)
+	if err != nil {
+		return nil, err
+	}
+	return out, nil
+}
+
+func (c *nuzurProductClient) CreateChangeRequest(ctx context.Context, in *CreateChangeRequestRequest, opts ...grpc.CallOption) (*gen.ChangeRequest, error) {
+	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
+	out := new(gen.ChangeRequest)
+	err := c.cc.Invoke(ctx, NuzurProduct_CreateChangeRequest_FullMethodName, in, out, cOpts...)
+	if err != nil {
+		return nil, err
+	}
+	return out, nil
+}
+
+func (c *nuzurProductClient) UpdateChangeRequest(ctx context.Context, in *UpdateChangeRequestRequest, opts ...grpc.CallOption) (*gen.ChangeRequest, error) {
+	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
+	out := new(gen.ChangeRequest)
+	err := c.cc.Invoke(ctx, NuzurProduct_UpdateChangeRequest_FullMethodName, in, out, cOpts...)
+	if err != nil {
+		return nil, err
+	}
+	return out, nil
+}
+
+func (c *nuzurProductClient) ListChangeRequestsForReview(ctx context.Context, in *ListChangeRequestsForReviewRequest, opts ...grpc.CallOption) (*ListChangeRequestsForReviewResponse, error) {
+	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
+	out := new(ListChangeRequestsForReviewResponse)
+	err := c.cc.Invoke(ctx, NuzurProduct_ListChangeRequestsForReview_FullMethodName, in, out, cOpts...)
+	if err != nil {
+		return nil, err
+	}
+	return out, nil
+}
+
+func (c *nuzurProductClient) GetUserProjectVersionData(ctx context.Context, in *GetUserProjectVersionDataRequest, opts ...grpc.CallOption) (*GetUserProjectVersionDataResponse, error) {
+	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
+	out := new(GetUserProjectVersionDataResponse)
+	err := c.cc.Invoke(ctx, NuzurProduct_GetUserProjectVersionData_FullMethodName, in, out, cOpts...)
+	if err != nil {
+		return nil, err
+	}
+	return out, nil
+}
+
+func (c *nuzurProductClient) SaveUserProjectVersionData(ctx context.Context, in *SaveUserProjectVersionDataRequest, opts ...grpc.CallOption) (*SaveUserProjectVersionDataResponse, error) {
+	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
+	out := new(SaveUserProjectVersionDataResponse)
+	err := c.cc.Invoke(ctx, NuzurProduct_SaveUserProjectVersionData_FullMethodName, in, out, cOpts...)
+	if err != nil {
+		return nil, err
+	}
+	return out, nil
+}
+
+func (c *nuzurProductClient) GetObjectStoreWithSecret(ctx context.Context, in *GetObjectStoreWithSecretRequest, opts ...grpc.CallOption) (*gen.ObjectStore, error) {
+	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
+	out := new(gen.ObjectStore)
+	err := c.cc.Invoke(ctx, NuzurProduct_GetObjectStoreWithSecret_FullMethodName, in, out, cOpts...)
+	if err != nil {
+		return nil, err
+	}
+	return out, nil
+}
+
+func (c *nuzurProductClient) CreateObjectStoreSecret(ctx context.Context, in *CreateObjectStoreSecretRequest, opts ...grpc.CallOption) (*gen.ObjectStore, error) {
+	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
+	out := new(gen.ObjectStore)
+	err := c.cc.Invoke(ctx, NuzurProduct_CreateObjectStoreSecret_FullMethodName, in, out, cOpts...)
+	if err != nil {
+		return nil, err
+	}
+	return out, nil
+}
+
+func (c *nuzurProductClient) UpdateObjectStoreSecret(ctx context.Context, in *UpdateObjectStoreSecretRequest, opts ...grpc.CallOption) (*gen.ObjectStore, error) {
+	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
+	out := new(gen.ObjectStore)
+	err := c.cc.Invoke(ctx, NuzurProduct_UpdateObjectStoreSecret_FullMethodName, in, out, cOpts...)
+	if err != nil {
+		return nil, err
+	}
+	return out, nil
+}
+
+func (c *nuzurProductClient) DeleteObjectStoreSecret(ctx context.Context, in *DeleteObjectStoreSecretRequest, opts ...grpc.CallOption) (*gen.ObjectStore, error) {
+	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
+	out := new(gen.ObjectStore)
+	err := c.cc.Invoke(ctx, NuzurProduct_DeleteObjectStoreSecret_FullMethodName, in, out, cOpts...)
+	if err != nil {
+		return nil, err
+	}
+	return out, nil
+}
+
+func (c *nuzurProductClient) GenerateSQLForCR(ctx context.Context, in *GenerateSQLForCRRequest, opts ...grpc.CallOption) (*GenerateSQLForCRResponse, error) {
+	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
+	out := new(GenerateSQLForCRResponse)
+	err := c.cc.Invoke(ctx, NuzurProduct_GenerateSQLForCR_FullMethodName, in, out, cOpts...)
+	if err != nil {
+		return nil, err
+	}
+	return out, nil
+}
+
+func (c *nuzurProductClient) ReviewDataChange(ctx context.Context, in *ReviewDataChangeRequest, opts ...grpc.CallOption) (*ReviewDataChangeResponse, error) {
+	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
+	out := new(ReviewDataChangeResponse)
+	err := c.cc.Invoke(ctx, NuzurProduct_ReviewDataChange_FullMethodName, in, out, cOpts...)
+	if err != nil {
+		return nil, err
+	}
+	return out, nil
+}
+
+func (c *nuzurProductClient) GetMembership(ctx context.Context, in *GetMembershipRequest, opts ...grpc.CallOption) (*gen.Membership, error) {
+	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
+	out := new(gen.Membership)
+	err := c.cc.Invoke(ctx, NuzurProduct_GetMembership_FullMethodName, in, out, cOpts...)
+	if err != nil {
+		return nil, err
+	}
+	return out, nil
+}
+
+func (c *nuzurProductClient) CreateMembership(ctx context.Context, in *CreateMembershipRequest, opts ...grpc.CallOption) (*gen.Membership, error) {
+	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
+	out := new(gen.Membership)
+	err := c.cc.Invoke(ctx, NuzurProduct_CreateMembership_FullMethodName, in, out, cOpts...)
+	if err != nil {
+		return nil, err
+	}
+	return out, nil
+}
+
+func (c *nuzurProductClient) UpdateMembership(ctx context.Context, in *UpdateMembershipRequest, opts ...grpc.CallOption) (*gen.Membership, error) {
+	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
+	out := new(gen.Membership)
+	err := c.cc.Invoke(ctx, NuzurProduct_UpdateMembership_FullMethodName, in, out, cOpts...)
+	if err != nil {
+		return nil, err
+	}
+	return out, nil
+}
+
+func (c *nuzurProductClient) MembershipForProject(ctx context.Context, in *MembershipForProjectRequest, opts ...grpc.CallOption) (*gen.Membership, error) {
+	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
+	out := new(gen.Membership)
+	err := c.cc.Invoke(ctx, NuzurProduct_MembershipForProject_FullMethodName, in, out, cOpts...)
+	if err != nil {
+		return nil, err
+	}
+	return out, nil
+}
+
+func (c *nuzurProductClient) MembershipForTeam(ctx context.Context, in *MembershipForTeamRequest, opts ...grpc.CallOption) (*gen.Membership, error) {
+	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
+	out := new(gen.Membership)
+	err := c.cc.Invoke(ctx, NuzurProduct_MembershipForTeam_FullMethodName, in, out, cOpts...)
+	if err != nil {
+		return nil, err
+	}
+	return out, nil
+}
+
 // NuzurProductServer is the server API for NuzurProduct service.
 // All implementations must embed UnimplementedNuzurProductServer
 // for forward compatibility.
@@ -544,13 +1007,24 @@ type NuzurProductServer interface {
 	// user
 	GetUser(context.Context, *GetUserRequest) (*gen.User, error)
 	GetTokenUser(context.Context, *GetTokenUserRequest) (*gen.User, error)
+	GetUserByEmail(context.Context, *GetUserByEmailRequest) (*gen.User, error)
+	GetTokenUserRoleForProject(context.Context, *GetUserRoleForProjectRequest) (*GetUserRoleForProjectResponse, error)
+	GetTokenUserRoleForTeam(context.Context, *GetUserRoleForTeamRequest) (*GetUserRoleForTeamResponse, error)
+	// user relations
+	ListUsersForTeam(context.Context, *ListUsersForTeamRequest) (*ListUsersForTeamResponse, error)
+	ListUsersForProject(context.Context, *ListUsersForProjectRequest) (*ListUsersForProjectResponse, error)
+	AddUserToProject(context.Context, *AddUserToProjectRequest) (*gen.UserProject, error)
+	UpdateUserProject(context.Context, *UpdateUserProjectRequest) (*gen.UserProject, error)
+	RemoveUserFromProject(context.Context, *RemoveUserFromProjectRequest) (*gen.UserProject, error)
+	AddUserToTeam(context.Context, *AddUserToTeamRequest) (*gen.UserTeam, error)
+	UpdateUserTeam(context.Context, *UpdateUserTeamRequest) (*gen.UserTeam, error)
+	RemoveUserFromTeam(context.Context, *RemoveUserFromTeamRequest) (*gen.UserTeam, error)
 	// team
 	ListTeamsForUser(context.Context, *ListTeamsForUserRequest) (*ListTeamsForUserResponse, error)
+	ListTeamsForAdminUser(context.Context, *ListTeamsForAdminUserRequest) (*ListTeamsForAdminUserResponse, error)
 	GetTeamForUser(context.Context, *GetTeamForUserRequest) (*gen.Team, error)
 	CreateTeam(context.Context, *CreateTeamRequest) (*gen.Team, error)
 	UpdateTeam(context.Context, *UpdateTeamRequest) (*gen.Team, error)
-	InviteUserToTeam(context.Context, *InviteUserToTeamRequest) (*gen.UserTeam, error)
-	ActivateUserTeamInvite(context.Context, *ActivateUserTeamInviteRequest) (*gen.UserTeam, error)
 	// connection
 	GetConnectionWithSecret(context.Context, *GetConnectionWithSecretRequest) (*gen.Connection, error)
 	CreateConnectionSecret(context.Context, *CreateConnectionSecretRequest) (*gen.Connection, error)
@@ -566,16 +1040,27 @@ type NuzurProductServer interface {
 	ListProjectVersionsForUser(context.Context, *ListProjectVersionsForUserRequest) (*ListProjectVersionsForUserResponse, error)
 	GetProjectVersionForUser(context.Context, *GetProjectVersionForUserRequest) (*gen.ProjectVersion, error)
 	GetLatestProjectVersion(context.Context, *GetLatestProjectVersionRequest) (*gen.ProjectVersion, error)
+	GetLatestProjectVersionForUser(context.Context, *GetLatestProjectVersionForUserRequest) (*gen.ProjectVersion, error)
+	GetLatestProjectVersionUUIDForUser(context.Context, *GetLatestProjectVersionUUIDForUserRequest) (*GetLatestProjectVersionUUIDForUserResponse, error)
+	GetProjectVersionVersion(context.Context, *GetProjectVersionVersionRequest) (*GetProjectVersionVersionResponse, error)
+	GetProjectVersionIdentifier(context.Context, *GetProjectVersionIdentifierRequest) (*GetProjectVersionIdentifierResponse, error)
 	CreateProjectVersion(context.Context, *CreateProjectVersionRequest) (*gen.ProjectVersion, error)
 	CreateDraftProjectVersionForExistingProject(context.Context, *CreateDraftProjectVersionForExistingProjectRequest) (*gen.ProjectVersion, error)
 	UpdateProjectVersion(context.Context, *UpdateProjectVersionRequest) (*gen.ProjectVersion, error)
 	DiscardDraftProjectVersion(context.Context, *DiscardDraftProjectVersionRequest) (*gen.ProjectVersion, error)
+	SendProjectVersionForReview(context.Context, *SendProjectVersionForReviewRequest) (*gen.ProjectVersion, error)
+	WithdrawFromReviewProjectVersion(context.Context, *WithdrawFromReviewProjectVersionRequest) (*gen.ProjectVersion, error)
+	ReviewProjectVersion(context.Context, *ReviewProjectVersionRequest) (*gen.ProjectVersion, error)
 	// files
-	UploadProjectSnapshot(context.Context, *UploadProjectSnapshotRequest) (*UploadProjectSnapshotResponse, error)
+	UploadProjectVersionSnapshot(context.Context, *UploadProjectVersionSnapshotRequest) (*UploadProjectVersionSnapshotResponse, error)
 	GetSignedFileURL(context.Context, *GetSignedFileURLRequest) (*GetSignedFileURLResponse, error)
 	UploadExtensionExecutionFile(context.Context, *UploadExtensionExecutionFileRequest) (*UploadExtensionExecutionFileResponse, error)
 	GetExtensionExecutionFile(context.Context, *GetExtensionExecutionFileRequest) (*GetExtensionExecutionFileResponse, error)
 	UploadExtensionIcon(context.Context, *UploadExtensionIconRequest) (*UploadExtensionIconResponse, error)
+	// data manager - records
+	UploadRecordFieldFile(context.Context, *UploadRecordFieldFileRequest) (*UploadRecordFieldFileResponse, error)
+	GetRecordFieldSignedFileURL(context.Context, *GetRecordFieldSignedFileURLRequest) (*GetRecordFieldSignedFileURLResponse, error)
+	GetRecordFileContent(context.Context, *GetRecordFileContentRequest) (*GetRecordFileContentResponse, error)
 	// extensions
 	ListExtensions(context.Context, *ListExtensionsRequest) (*ListExtensionsResponse, error)
 	GetExtension(context.Context, *GetExtensionRequest) (*gen.Extension, error)
@@ -591,6 +1076,29 @@ type NuzurProductServer interface {
 	GetExtensionExecution(context.Context, *GetExtensionExecutionRequest) (*gen.ExtensionExecution, error)
 	CreateExtensionExecution(context.Context, *CreateExtensionExecutionRequest) (*gen.ExtensionExecution, error)
 	UpdateExtensionExecution(context.Context, *UpdateExtensionExecutionRequest) (*gen.ExtensionExecution, error)
+	// change request
+	ListUserChangeRequests(context.Context, *ListUserChangeRequestsRequest) (*ListUserChangeRequestsResponse, error)
+	GetChangeRequest(context.Context, *GetChangeRequestRequest) (*gen.ChangeRequest, error)
+	CreateChangeRequest(context.Context, *CreateChangeRequestRequest) (*gen.ChangeRequest, error)
+	UpdateChangeRequest(context.Context, *UpdateChangeRequestRequest) (*gen.ChangeRequest, error)
+	ListChangeRequestsForReview(context.Context, *ListChangeRequestsForReviewRequest) (*ListChangeRequestsForReviewResponse, error)
+	// user project version data
+	GetUserProjectVersionData(context.Context, *GetUserProjectVersionDataRequest) (*GetUserProjectVersionDataResponse, error)
+	SaveUserProjectVersionData(context.Context, *SaveUserProjectVersionDataRequest) (*SaveUserProjectVersionDataResponse, error)
+	// object store secrets
+	GetObjectStoreWithSecret(context.Context, *GetObjectStoreWithSecretRequest) (*gen.ObjectStore, error)
+	CreateObjectStoreSecret(context.Context, *CreateObjectStoreSecretRequest) (*gen.ObjectStore, error)
+	UpdateObjectStoreSecret(context.Context, *UpdateObjectStoreSecretRequest) (*gen.ObjectStore, error)
+	DeleteObjectStoreSecret(context.Context, *DeleteObjectStoreSecretRequest) (*gen.ObjectStore, error)
+	// data manager
+	GenerateSQLForCR(context.Context, *GenerateSQLForCRRequest) (*GenerateSQLForCRResponse, error)
+	ReviewDataChange(context.Context, *ReviewDataChangeRequest) (*ReviewDataChangeResponse, error)
+	// membership
+	GetMembership(context.Context, *GetMembershipRequest) (*gen.Membership, error)
+	CreateMembership(context.Context, *CreateMembershipRequest) (*gen.Membership, error)
+	UpdateMembership(context.Context, *UpdateMembershipRequest) (*gen.Membership, error)
+	MembershipForProject(context.Context, *MembershipForProjectRequest) (*gen.Membership, error)
+	MembershipForTeam(context.Context, *MembershipForTeamRequest) (*gen.Membership, error)
 	mustEmbedUnimplementedNuzurProductServer()
 }
 
@@ -607,8 +1115,44 @@ func (UnimplementedNuzurProductServer) GetUser(context.Context, *GetUserRequest)
 func (UnimplementedNuzurProductServer) GetTokenUser(context.Context, *GetTokenUserRequest) (*gen.User, error) {
 	return nil, status.Errorf(codes.Unimplemented, "method GetTokenUser not implemented")
 }
+func (UnimplementedNuzurProductServer) GetUserByEmail(context.Context, *GetUserByEmailRequest) (*gen.User, error) {
+	return nil, status.Errorf(codes.Unimplemented, "method GetUserByEmail not implemented")
+}
+func (UnimplementedNuzurProductServer) GetTokenUserRoleForProject(context.Context, *GetUserRoleForProjectRequest) (*GetUserRoleForProjectResponse, error) {
+	return nil, status.Errorf(codes.Unimplemented, "method GetTokenUserRoleForProject not implemented")
+}
+func (UnimplementedNuzurProductServer) GetTokenUserRoleForTeam(context.Context, *GetUserRoleForTeamRequest) (*GetUserRoleForTeamResponse, error) {
+	return nil, status.Errorf(codes.Unimplemented, "method GetTokenUserRoleForTeam not implemented")
+}
+func (UnimplementedNuzurProductServer) ListUsersForTeam(context.Context, *ListUsersForTeamRequest) (*ListUsersForTeamResponse, error) {
+	return nil, status.Errorf(codes.Unimplemented, "method ListUsersForTeam not implemented")
+}
+func (UnimplementedNuzurProductServer) ListUsersForProject(context.Context, *ListUsersForProjectRequest) (*ListUsersForProjectResponse, error) {
+	return nil, status.Errorf(codes.Unimplemented, "method ListUsersForProject not implemented")
+}
+func (UnimplementedNuzurProductServer) AddUserToProject(context.Context, *AddUserToProjectRequest) (*gen.UserProject, error) {
+	return nil, status.Errorf(codes.Unimplemented, "method AddUserToProject not implemented")
+}
+func (UnimplementedNuzurProductServer) UpdateUserProject(context.Context, *UpdateUserProjectRequest) (*gen.UserProject, error) {
+	return nil, status.Errorf(codes.Unimplemented, "method UpdateUserProject not implemented")
+}
+func (UnimplementedNuzurProductServer) RemoveUserFromProject(context.Context, *RemoveUserFromProjectRequest) (*gen.UserProject, error) {
+	return nil, status.Errorf(codes.Unimplemented, "method RemoveUserFromProject not implemented")
+}
+func (UnimplementedNuzurProductServer) AddUserToTeam(context.Context, *AddUserToTeamRequest) (*gen.UserTeam, error) {
+	return nil, status.Errorf(codes.Unimplemented, "method AddUserToTeam not implemented")
+}
+func (UnimplementedNuzurProductServer) UpdateUserTeam(context.Context, *UpdateUserTeamRequest) (*gen.UserTeam, error) {
+	return nil, status.Errorf(codes.Unimplemented, "method UpdateUserTeam not implemented")
+}
+func (UnimplementedNuzurProductServer) RemoveUserFromTeam(context.Context, *RemoveUserFromTeamRequest) (*gen.UserTeam, error) {
+	return nil, status.Errorf(codes.Unimplemented, "method RemoveUserFromTeam not implemented")
+}
 func (UnimplementedNuzurProductServer) ListTeamsForUser(context.Context, *ListTeamsForUserRequest) (*ListTeamsForUserResponse, error) {
 	return nil, status.Errorf(codes.Unimplemented, "method ListTeamsForUser not implemented")
+}
+func (UnimplementedNuzurProductServer) ListTeamsForAdminUser(context.Context, *ListTeamsForAdminUserRequest) (*ListTeamsForAdminUserResponse, error) {
+	return nil, status.Errorf(codes.Unimplemented, "method ListTeamsForAdminUser not implemented")
 }
 func (UnimplementedNuzurProductServer) GetTeamForUser(context.Context, *GetTeamForUserRequest) (*gen.Team, error) {
 	return nil, status.Errorf(codes.Unimplemented, "method GetTeamForUser not implemented")
@@ -618,12 +1162,6 @@ func (UnimplementedNuzurProductServer) CreateTeam(context.Context, *CreateTeamRe
 }
 func (UnimplementedNuzurProductServer) UpdateTeam(context.Context, *UpdateTeamRequest) (*gen.Team, error) {
 	return nil, status.Errorf(codes.Unimplemented, "method UpdateTeam not implemented")
-}
-func (UnimplementedNuzurProductServer) InviteUserToTeam(context.Context, *InviteUserToTeamRequest) (*gen.UserTeam, error) {
-	return nil, status.Errorf(codes.Unimplemented, "method InviteUserToTeam not implemented")
-}
-func (UnimplementedNuzurProductServer) ActivateUserTeamInvite(context.Context, *ActivateUserTeamInviteRequest) (*gen.UserTeam, error) {
-	return nil, status.Errorf(codes.Unimplemented, "method ActivateUserTeamInvite not implemented")
 }
 func (UnimplementedNuzurProductServer) GetConnectionWithSecret(context.Context, *GetConnectionWithSecretRequest) (*gen.Connection, error) {
 	return nil, status.Errorf(codes.Unimplemented, "method GetConnectionWithSecret not implemented")
@@ -661,6 +1199,18 @@ func (UnimplementedNuzurProductServer) GetProjectVersionForUser(context.Context,
 func (UnimplementedNuzurProductServer) GetLatestProjectVersion(context.Context, *GetLatestProjectVersionRequest) (*gen.ProjectVersion, error) {
 	return nil, status.Errorf(codes.Unimplemented, "method GetLatestProjectVersion not implemented")
 }
+func (UnimplementedNuzurProductServer) GetLatestProjectVersionForUser(context.Context, *GetLatestProjectVersionForUserRequest) (*gen.ProjectVersion, error) {
+	return nil, status.Errorf(codes.Unimplemented, "method GetLatestProjectVersionForUser not implemented")
+}
+func (UnimplementedNuzurProductServer) GetLatestProjectVersionUUIDForUser(context.Context, *GetLatestProjectVersionUUIDForUserRequest) (*GetLatestProjectVersionUUIDForUserResponse, error) {
+	return nil, status.Errorf(codes.Unimplemented, "method GetLatestProjectVersionUUIDForUser not implemented")
+}
+func (UnimplementedNuzurProductServer) GetProjectVersionVersion(context.Context, *GetProjectVersionVersionRequest) (*GetProjectVersionVersionResponse, error) {
+	return nil, status.Errorf(codes.Unimplemented, "method GetProjectVersionVersion not implemented")
+}
+func (UnimplementedNuzurProductServer) GetProjectVersionIdentifier(context.Context, *GetProjectVersionIdentifierRequest) (*GetProjectVersionIdentifierResponse, error) {
+	return nil, status.Errorf(codes.Unimplemented, "method GetProjectVersionIdentifier not implemented")
+}
 func (UnimplementedNuzurProductServer) CreateProjectVersion(context.Context, *CreateProjectVersionRequest) (*gen.ProjectVersion, error) {
 	return nil, status.Errorf(codes.Unimplemented, "method CreateProjectVersion not implemented")
 }
@@ -673,8 +1223,17 @@ func (UnimplementedNuzurProductServer) UpdateProjectVersion(context.Context, *Up
 func (UnimplementedNuzurProductServer) DiscardDraftProjectVersion(context.Context, *DiscardDraftProjectVersionRequest) (*gen.ProjectVersion, error) {
 	return nil, status.Errorf(codes.Unimplemented, "method DiscardDraftProjectVersion not implemented")
 }
-func (UnimplementedNuzurProductServer) UploadProjectSnapshot(context.Context, *UploadProjectSnapshotRequest) (*UploadProjectSnapshotResponse, error) {
-	return nil, status.Errorf(codes.Unimplemented, "method UploadProjectSnapshot not implemented")
+func (UnimplementedNuzurProductServer) SendProjectVersionForReview(context.Context, *SendProjectVersionForReviewRequest) (*gen.ProjectVersion, error) {
+	return nil, status.Errorf(codes.Unimplemented, "method SendProjectVersionForReview not implemented")
+}
+func (UnimplementedNuzurProductServer) WithdrawFromReviewProjectVersion(context.Context, *WithdrawFromReviewProjectVersionRequest) (*gen.ProjectVersion, error) {
+	return nil, status.Errorf(codes.Unimplemented, "method WithdrawFromReviewProjectVersion not implemented")
+}
+func (UnimplementedNuzurProductServer) ReviewProjectVersion(context.Context, *ReviewProjectVersionRequest) (*gen.ProjectVersion, error) {
+	return nil, status.Errorf(codes.Unimplemented, "method ReviewProjectVersion not implemented")
+}
+func (UnimplementedNuzurProductServer) UploadProjectVersionSnapshot(context.Context, *UploadProjectVersionSnapshotRequest) (*UploadProjectVersionSnapshotResponse, error) {
+	return nil, status.Errorf(codes.Unimplemented, "method UploadProjectVersionSnapshot not implemented")
 }
 func (UnimplementedNuzurProductServer) GetSignedFileURL(context.Context, *GetSignedFileURLRequest) (*GetSignedFileURLResponse, error) {
 	return nil, status.Errorf(codes.Unimplemented, "method GetSignedFileURL not implemented")
@@ -687,6 +1246,15 @@ func (UnimplementedNuzurProductServer) GetExtensionExecutionFile(context.Context
 }
 func (UnimplementedNuzurProductServer) UploadExtensionIcon(context.Context, *UploadExtensionIconRequest) (*UploadExtensionIconResponse, error) {
 	return nil, status.Errorf(codes.Unimplemented, "method UploadExtensionIcon not implemented")
+}
+func (UnimplementedNuzurProductServer) UploadRecordFieldFile(context.Context, *UploadRecordFieldFileRequest) (*UploadRecordFieldFileResponse, error) {
+	return nil, status.Errorf(codes.Unimplemented, "method UploadRecordFieldFile not implemented")
+}
+func (UnimplementedNuzurProductServer) GetRecordFieldSignedFileURL(context.Context, *GetRecordFieldSignedFileURLRequest) (*GetRecordFieldSignedFileURLResponse, error) {
+	return nil, status.Errorf(codes.Unimplemented, "method GetRecordFieldSignedFileURL not implemented")
+}
+func (UnimplementedNuzurProductServer) GetRecordFileContent(context.Context, *GetRecordFileContentRequest) (*GetRecordFileContentResponse, error) {
+	return nil, status.Errorf(codes.Unimplemented, "method GetRecordFileContent not implemented")
 }
 func (UnimplementedNuzurProductServer) ListExtensions(context.Context, *ListExtensionsRequest) (*ListExtensionsResponse, error) {
 	return nil, status.Errorf(codes.Unimplemented, "method ListExtensions not implemented")
@@ -723,6 +1291,60 @@ func (UnimplementedNuzurProductServer) CreateExtensionExecution(context.Context,
 }
 func (UnimplementedNuzurProductServer) UpdateExtensionExecution(context.Context, *UpdateExtensionExecutionRequest) (*gen.ExtensionExecution, error) {
 	return nil, status.Errorf(codes.Unimplemented, "method UpdateExtensionExecution not implemented")
+}
+func (UnimplementedNuzurProductServer) ListUserChangeRequests(context.Context, *ListUserChangeRequestsRequest) (*ListUserChangeRequestsResponse, error) {
+	return nil, status.Errorf(codes.Unimplemented, "method ListUserChangeRequests not implemented")
+}
+func (UnimplementedNuzurProductServer) GetChangeRequest(context.Context, *GetChangeRequestRequest) (*gen.ChangeRequest, error) {
+	return nil, status.Errorf(codes.Unimplemented, "method GetChangeRequest not implemented")
+}
+func (UnimplementedNuzurProductServer) CreateChangeRequest(context.Context, *CreateChangeRequestRequest) (*gen.ChangeRequest, error) {
+	return nil, status.Errorf(codes.Unimplemented, "method CreateChangeRequest not implemented")
+}
+func (UnimplementedNuzurProductServer) UpdateChangeRequest(context.Context, *UpdateChangeRequestRequest) (*gen.ChangeRequest, error) {
+	return nil, status.Errorf(codes.Unimplemented, "method UpdateChangeRequest not implemented")
+}
+func (UnimplementedNuzurProductServer) ListChangeRequestsForReview(context.Context, *ListChangeRequestsForReviewRequest) (*ListChangeRequestsForReviewResponse, error) {
+	return nil, status.Errorf(codes.Unimplemented, "method ListChangeRequestsForReview not implemented")
+}
+func (UnimplementedNuzurProductServer) GetUserProjectVersionData(context.Context, *GetUserProjectVersionDataRequest) (*GetUserProjectVersionDataResponse, error) {
+	return nil, status.Errorf(codes.Unimplemented, "method GetUserProjectVersionData not implemented")
+}
+func (UnimplementedNuzurProductServer) SaveUserProjectVersionData(context.Context, *SaveUserProjectVersionDataRequest) (*SaveUserProjectVersionDataResponse, error) {
+	return nil, status.Errorf(codes.Unimplemented, "method SaveUserProjectVersionData not implemented")
+}
+func (UnimplementedNuzurProductServer) GetObjectStoreWithSecret(context.Context, *GetObjectStoreWithSecretRequest) (*gen.ObjectStore, error) {
+	return nil, status.Errorf(codes.Unimplemented, "method GetObjectStoreWithSecret not implemented")
+}
+func (UnimplementedNuzurProductServer) CreateObjectStoreSecret(context.Context, *CreateObjectStoreSecretRequest) (*gen.ObjectStore, error) {
+	return nil, status.Errorf(codes.Unimplemented, "method CreateObjectStoreSecret not implemented")
+}
+func (UnimplementedNuzurProductServer) UpdateObjectStoreSecret(context.Context, *UpdateObjectStoreSecretRequest) (*gen.ObjectStore, error) {
+	return nil, status.Errorf(codes.Unimplemented, "method UpdateObjectStoreSecret not implemented")
+}
+func (UnimplementedNuzurProductServer) DeleteObjectStoreSecret(context.Context, *DeleteObjectStoreSecretRequest) (*gen.ObjectStore, error) {
+	return nil, status.Errorf(codes.Unimplemented, "method DeleteObjectStoreSecret not implemented")
+}
+func (UnimplementedNuzurProductServer) GenerateSQLForCR(context.Context, *GenerateSQLForCRRequest) (*GenerateSQLForCRResponse, error) {
+	return nil, status.Errorf(codes.Unimplemented, "method GenerateSQLForCR not implemented")
+}
+func (UnimplementedNuzurProductServer) ReviewDataChange(context.Context, *ReviewDataChangeRequest) (*ReviewDataChangeResponse, error) {
+	return nil, status.Errorf(codes.Unimplemented, "method ReviewDataChange not implemented")
+}
+func (UnimplementedNuzurProductServer) GetMembership(context.Context, *GetMembershipRequest) (*gen.Membership, error) {
+	return nil, status.Errorf(codes.Unimplemented, "method GetMembership not implemented")
+}
+func (UnimplementedNuzurProductServer) CreateMembership(context.Context, *CreateMembershipRequest) (*gen.Membership, error) {
+	return nil, status.Errorf(codes.Unimplemented, "method CreateMembership not implemented")
+}
+func (UnimplementedNuzurProductServer) UpdateMembership(context.Context, *UpdateMembershipRequest) (*gen.Membership, error) {
+	return nil, status.Errorf(codes.Unimplemented, "method UpdateMembership not implemented")
+}
+func (UnimplementedNuzurProductServer) MembershipForProject(context.Context, *MembershipForProjectRequest) (*gen.Membership, error) {
+	return nil, status.Errorf(codes.Unimplemented, "method MembershipForProject not implemented")
+}
+func (UnimplementedNuzurProductServer) MembershipForTeam(context.Context, *MembershipForTeamRequest) (*gen.Membership, error) {
+	return nil, status.Errorf(codes.Unimplemented, "method MembershipForTeam not implemented")
 }
 func (UnimplementedNuzurProductServer) mustEmbedUnimplementedNuzurProductServer() {}
 func (UnimplementedNuzurProductServer) testEmbeddedByValue()                      {}
@@ -781,6 +1403,204 @@ func _NuzurProduct_GetTokenUser_Handler(srv interface{}, ctx context.Context, de
 	return interceptor(ctx, in, info, handler)
 }
 
+func _NuzurProduct_GetUserByEmail_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
+	in := new(GetUserByEmailRequest)
+	if err := dec(in); err != nil {
+		return nil, err
+	}
+	if interceptor == nil {
+		return srv.(NuzurProductServer).GetUserByEmail(ctx, in)
+	}
+	info := &grpc.UnaryServerInfo{
+		Server:     srv,
+		FullMethod: NuzurProduct_GetUserByEmail_FullMethodName,
+	}
+	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
+		return srv.(NuzurProductServer).GetUserByEmail(ctx, req.(*GetUserByEmailRequest))
+	}
+	return interceptor(ctx, in, info, handler)
+}
+
+func _NuzurProduct_GetTokenUserRoleForProject_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
+	in := new(GetUserRoleForProjectRequest)
+	if err := dec(in); err != nil {
+		return nil, err
+	}
+	if interceptor == nil {
+		return srv.(NuzurProductServer).GetTokenUserRoleForProject(ctx, in)
+	}
+	info := &grpc.UnaryServerInfo{
+		Server:     srv,
+		FullMethod: NuzurProduct_GetTokenUserRoleForProject_FullMethodName,
+	}
+	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
+		return srv.(NuzurProductServer).GetTokenUserRoleForProject(ctx, req.(*GetUserRoleForProjectRequest))
+	}
+	return interceptor(ctx, in, info, handler)
+}
+
+func _NuzurProduct_GetTokenUserRoleForTeam_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
+	in := new(GetUserRoleForTeamRequest)
+	if err := dec(in); err != nil {
+		return nil, err
+	}
+	if interceptor == nil {
+		return srv.(NuzurProductServer).GetTokenUserRoleForTeam(ctx, in)
+	}
+	info := &grpc.UnaryServerInfo{
+		Server:     srv,
+		FullMethod: NuzurProduct_GetTokenUserRoleForTeam_FullMethodName,
+	}
+	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
+		return srv.(NuzurProductServer).GetTokenUserRoleForTeam(ctx, req.(*GetUserRoleForTeamRequest))
+	}
+	return interceptor(ctx, in, info, handler)
+}
+
+func _NuzurProduct_ListUsersForTeam_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
+	in := new(ListUsersForTeamRequest)
+	if err := dec(in); err != nil {
+		return nil, err
+	}
+	if interceptor == nil {
+		return srv.(NuzurProductServer).ListUsersForTeam(ctx, in)
+	}
+	info := &grpc.UnaryServerInfo{
+		Server:     srv,
+		FullMethod: NuzurProduct_ListUsersForTeam_FullMethodName,
+	}
+	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
+		return srv.(NuzurProductServer).ListUsersForTeam(ctx, req.(*ListUsersForTeamRequest))
+	}
+	return interceptor(ctx, in, info, handler)
+}
+
+func _NuzurProduct_ListUsersForProject_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
+	in := new(ListUsersForProjectRequest)
+	if err := dec(in); err != nil {
+		return nil, err
+	}
+	if interceptor == nil {
+		return srv.(NuzurProductServer).ListUsersForProject(ctx, in)
+	}
+	info := &grpc.UnaryServerInfo{
+		Server:     srv,
+		FullMethod: NuzurProduct_ListUsersForProject_FullMethodName,
+	}
+	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
+		return srv.(NuzurProductServer).ListUsersForProject(ctx, req.(*ListUsersForProjectRequest))
+	}
+	return interceptor(ctx, in, info, handler)
+}
+
+func _NuzurProduct_AddUserToProject_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
+	in := new(AddUserToProjectRequest)
+	if err := dec(in); err != nil {
+		return nil, err
+	}
+	if interceptor == nil {
+		return srv.(NuzurProductServer).AddUserToProject(ctx, in)
+	}
+	info := &grpc.UnaryServerInfo{
+		Server:     srv,
+		FullMethod: NuzurProduct_AddUserToProject_FullMethodName,
+	}
+	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
+		return srv.(NuzurProductServer).AddUserToProject(ctx, req.(*AddUserToProjectRequest))
+	}
+	return interceptor(ctx, in, info, handler)
+}
+
+func _NuzurProduct_UpdateUserProject_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
+	in := new(UpdateUserProjectRequest)
+	if err := dec(in); err != nil {
+		return nil, err
+	}
+	if interceptor == nil {
+		return srv.(NuzurProductServer).UpdateUserProject(ctx, in)
+	}
+	info := &grpc.UnaryServerInfo{
+		Server:     srv,
+		FullMethod: NuzurProduct_UpdateUserProject_FullMethodName,
+	}
+	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
+		return srv.(NuzurProductServer).UpdateUserProject(ctx, req.(*UpdateUserProjectRequest))
+	}
+	return interceptor(ctx, in, info, handler)
+}
+
+func _NuzurProduct_RemoveUserFromProject_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
+	in := new(RemoveUserFromProjectRequest)
+	if err := dec(in); err != nil {
+		return nil, err
+	}
+	if interceptor == nil {
+		return srv.(NuzurProductServer).RemoveUserFromProject(ctx, in)
+	}
+	info := &grpc.UnaryServerInfo{
+		Server:     srv,
+		FullMethod: NuzurProduct_RemoveUserFromProject_FullMethodName,
+	}
+	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
+		return srv.(NuzurProductServer).RemoveUserFromProject(ctx, req.(*RemoveUserFromProjectRequest))
+	}
+	return interceptor(ctx, in, info, handler)
+}
+
+func _NuzurProduct_AddUserToTeam_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
+	in := new(AddUserToTeamRequest)
+	if err := dec(in); err != nil {
+		return nil, err
+	}
+	if interceptor == nil {
+		return srv.(NuzurProductServer).AddUserToTeam(ctx, in)
+	}
+	info := &grpc.UnaryServerInfo{
+		Server:     srv,
+		FullMethod: NuzurProduct_AddUserToTeam_FullMethodName,
+	}
+	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
+		return srv.(NuzurProductServer).AddUserToTeam(ctx, req.(*AddUserToTeamRequest))
+	}
+	return interceptor(ctx, in, info, handler)
+}
+
+func _NuzurProduct_UpdateUserTeam_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
+	in := new(UpdateUserTeamRequest)
+	if err := dec(in); err != nil {
+		return nil, err
+	}
+	if interceptor == nil {
+		return srv.(NuzurProductServer).UpdateUserTeam(ctx, in)
+	}
+	info := &grpc.UnaryServerInfo{
+		Server:     srv,
+		FullMethod: NuzurProduct_UpdateUserTeam_FullMethodName,
+	}
+	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
+		return srv.(NuzurProductServer).UpdateUserTeam(ctx, req.(*UpdateUserTeamRequest))
+	}
+	return interceptor(ctx, in, info, handler)
+}
+
+func _NuzurProduct_RemoveUserFromTeam_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
+	in := new(RemoveUserFromTeamRequest)
+	if err := dec(in); err != nil {
+		return nil, err
+	}
+	if interceptor == nil {
+		return srv.(NuzurProductServer).RemoveUserFromTeam(ctx, in)
+	}
+	info := &grpc.UnaryServerInfo{
+		Server:     srv,
+		FullMethod: NuzurProduct_RemoveUserFromTeam_FullMethodName,
+	}
+	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
+		return srv.(NuzurProductServer).RemoveUserFromTeam(ctx, req.(*RemoveUserFromTeamRequest))
+	}
+	return interceptor(ctx, in, info, handler)
+}
+
 func _NuzurProduct_ListTeamsForUser_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
 	in := new(ListTeamsForUserRequest)
 	if err := dec(in); err != nil {
@@ -795,6 +1615,24 @@ func _NuzurProduct_ListTeamsForUser_Handler(srv interface{}, ctx context.Context
 	}
 	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
 		return srv.(NuzurProductServer).ListTeamsForUser(ctx, req.(*ListTeamsForUserRequest))
+	}
+	return interceptor(ctx, in, info, handler)
+}
+
+func _NuzurProduct_ListTeamsForAdminUser_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
+	in := new(ListTeamsForAdminUserRequest)
+	if err := dec(in); err != nil {
+		return nil, err
+	}
+	if interceptor == nil {
+		return srv.(NuzurProductServer).ListTeamsForAdminUser(ctx, in)
+	}
+	info := &grpc.UnaryServerInfo{
+		Server:     srv,
+		FullMethod: NuzurProduct_ListTeamsForAdminUser_FullMethodName,
+	}
+	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
+		return srv.(NuzurProductServer).ListTeamsForAdminUser(ctx, req.(*ListTeamsForAdminUserRequest))
 	}
 	return interceptor(ctx, in, info, handler)
 }
@@ -849,42 +1687,6 @@ func _NuzurProduct_UpdateTeam_Handler(srv interface{}, ctx context.Context, dec 
 	}
 	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
 		return srv.(NuzurProductServer).UpdateTeam(ctx, req.(*UpdateTeamRequest))
-	}
-	return interceptor(ctx, in, info, handler)
-}
-
-func _NuzurProduct_InviteUserToTeam_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
-	in := new(InviteUserToTeamRequest)
-	if err := dec(in); err != nil {
-		return nil, err
-	}
-	if interceptor == nil {
-		return srv.(NuzurProductServer).InviteUserToTeam(ctx, in)
-	}
-	info := &grpc.UnaryServerInfo{
-		Server:     srv,
-		FullMethod: NuzurProduct_InviteUserToTeam_FullMethodName,
-	}
-	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
-		return srv.(NuzurProductServer).InviteUserToTeam(ctx, req.(*InviteUserToTeamRequest))
-	}
-	return interceptor(ctx, in, info, handler)
-}
-
-func _NuzurProduct_ActivateUserTeamInvite_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
-	in := new(ActivateUserTeamInviteRequest)
-	if err := dec(in); err != nil {
-		return nil, err
-	}
-	if interceptor == nil {
-		return srv.(NuzurProductServer).ActivateUserTeamInvite(ctx, in)
-	}
-	info := &grpc.UnaryServerInfo{
-		Server:     srv,
-		FullMethod: NuzurProduct_ActivateUserTeamInvite_FullMethodName,
-	}
-	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
-		return srv.(NuzurProductServer).ActivateUserTeamInvite(ctx, req.(*ActivateUserTeamInviteRequest))
 	}
 	return interceptor(ctx, in, info, handler)
 }
@@ -1105,6 +1907,78 @@ func _NuzurProduct_GetLatestProjectVersion_Handler(srv interface{}, ctx context.
 	return interceptor(ctx, in, info, handler)
 }
 
+func _NuzurProduct_GetLatestProjectVersionForUser_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
+	in := new(GetLatestProjectVersionForUserRequest)
+	if err := dec(in); err != nil {
+		return nil, err
+	}
+	if interceptor == nil {
+		return srv.(NuzurProductServer).GetLatestProjectVersionForUser(ctx, in)
+	}
+	info := &grpc.UnaryServerInfo{
+		Server:     srv,
+		FullMethod: NuzurProduct_GetLatestProjectVersionForUser_FullMethodName,
+	}
+	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
+		return srv.(NuzurProductServer).GetLatestProjectVersionForUser(ctx, req.(*GetLatestProjectVersionForUserRequest))
+	}
+	return interceptor(ctx, in, info, handler)
+}
+
+func _NuzurProduct_GetLatestProjectVersionUUIDForUser_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
+	in := new(GetLatestProjectVersionUUIDForUserRequest)
+	if err := dec(in); err != nil {
+		return nil, err
+	}
+	if interceptor == nil {
+		return srv.(NuzurProductServer).GetLatestProjectVersionUUIDForUser(ctx, in)
+	}
+	info := &grpc.UnaryServerInfo{
+		Server:     srv,
+		FullMethod: NuzurProduct_GetLatestProjectVersionUUIDForUser_FullMethodName,
+	}
+	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
+		return srv.(NuzurProductServer).GetLatestProjectVersionUUIDForUser(ctx, req.(*GetLatestProjectVersionUUIDForUserRequest))
+	}
+	return interceptor(ctx, in, info, handler)
+}
+
+func _NuzurProduct_GetProjectVersionVersion_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
+	in := new(GetProjectVersionVersionRequest)
+	if err := dec(in); err != nil {
+		return nil, err
+	}
+	if interceptor == nil {
+		return srv.(NuzurProductServer).GetProjectVersionVersion(ctx, in)
+	}
+	info := &grpc.UnaryServerInfo{
+		Server:     srv,
+		FullMethod: NuzurProduct_GetProjectVersionVersion_FullMethodName,
+	}
+	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
+		return srv.(NuzurProductServer).GetProjectVersionVersion(ctx, req.(*GetProjectVersionVersionRequest))
+	}
+	return interceptor(ctx, in, info, handler)
+}
+
+func _NuzurProduct_GetProjectVersionIdentifier_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
+	in := new(GetProjectVersionIdentifierRequest)
+	if err := dec(in); err != nil {
+		return nil, err
+	}
+	if interceptor == nil {
+		return srv.(NuzurProductServer).GetProjectVersionIdentifier(ctx, in)
+	}
+	info := &grpc.UnaryServerInfo{
+		Server:     srv,
+		FullMethod: NuzurProduct_GetProjectVersionIdentifier_FullMethodName,
+	}
+	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
+		return srv.(NuzurProductServer).GetProjectVersionIdentifier(ctx, req.(*GetProjectVersionIdentifierRequest))
+	}
+	return interceptor(ctx, in, info, handler)
+}
+
 func _NuzurProduct_CreateProjectVersion_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
 	in := new(CreateProjectVersionRequest)
 	if err := dec(in); err != nil {
@@ -1177,20 +2051,74 @@ func _NuzurProduct_DiscardDraftProjectVersion_Handler(srv interface{}, ctx conte
 	return interceptor(ctx, in, info, handler)
 }
 
-func _NuzurProduct_UploadProjectSnapshot_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
-	in := new(UploadProjectSnapshotRequest)
+func _NuzurProduct_SendProjectVersionForReview_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
+	in := new(SendProjectVersionForReviewRequest)
 	if err := dec(in); err != nil {
 		return nil, err
 	}
 	if interceptor == nil {
-		return srv.(NuzurProductServer).UploadProjectSnapshot(ctx, in)
+		return srv.(NuzurProductServer).SendProjectVersionForReview(ctx, in)
 	}
 	info := &grpc.UnaryServerInfo{
 		Server:     srv,
-		FullMethod: NuzurProduct_UploadProjectSnapshot_FullMethodName,
+		FullMethod: NuzurProduct_SendProjectVersionForReview_FullMethodName,
 	}
 	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
-		return srv.(NuzurProductServer).UploadProjectSnapshot(ctx, req.(*UploadProjectSnapshotRequest))
+		return srv.(NuzurProductServer).SendProjectVersionForReview(ctx, req.(*SendProjectVersionForReviewRequest))
+	}
+	return interceptor(ctx, in, info, handler)
+}
+
+func _NuzurProduct_WithdrawFromReviewProjectVersion_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
+	in := new(WithdrawFromReviewProjectVersionRequest)
+	if err := dec(in); err != nil {
+		return nil, err
+	}
+	if interceptor == nil {
+		return srv.(NuzurProductServer).WithdrawFromReviewProjectVersion(ctx, in)
+	}
+	info := &grpc.UnaryServerInfo{
+		Server:     srv,
+		FullMethod: NuzurProduct_WithdrawFromReviewProjectVersion_FullMethodName,
+	}
+	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
+		return srv.(NuzurProductServer).WithdrawFromReviewProjectVersion(ctx, req.(*WithdrawFromReviewProjectVersionRequest))
+	}
+	return interceptor(ctx, in, info, handler)
+}
+
+func _NuzurProduct_ReviewProjectVersion_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
+	in := new(ReviewProjectVersionRequest)
+	if err := dec(in); err != nil {
+		return nil, err
+	}
+	if interceptor == nil {
+		return srv.(NuzurProductServer).ReviewProjectVersion(ctx, in)
+	}
+	info := &grpc.UnaryServerInfo{
+		Server:     srv,
+		FullMethod: NuzurProduct_ReviewProjectVersion_FullMethodName,
+	}
+	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
+		return srv.(NuzurProductServer).ReviewProjectVersion(ctx, req.(*ReviewProjectVersionRequest))
+	}
+	return interceptor(ctx, in, info, handler)
+}
+
+func _NuzurProduct_UploadProjectVersionSnapshot_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
+	in := new(UploadProjectVersionSnapshotRequest)
+	if err := dec(in); err != nil {
+		return nil, err
+	}
+	if interceptor == nil {
+		return srv.(NuzurProductServer).UploadProjectVersionSnapshot(ctx, in)
+	}
+	info := &grpc.UnaryServerInfo{
+		Server:     srv,
+		FullMethod: NuzurProduct_UploadProjectVersionSnapshot_FullMethodName,
+	}
+	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
+		return srv.(NuzurProductServer).UploadProjectVersionSnapshot(ctx, req.(*UploadProjectVersionSnapshotRequest))
 	}
 	return interceptor(ctx, in, info, handler)
 }
@@ -1263,6 +2191,60 @@ func _NuzurProduct_UploadExtensionIcon_Handler(srv interface{}, ctx context.Cont
 	}
 	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
 		return srv.(NuzurProductServer).UploadExtensionIcon(ctx, req.(*UploadExtensionIconRequest))
+	}
+	return interceptor(ctx, in, info, handler)
+}
+
+func _NuzurProduct_UploadRecordFieldFile_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
+	in := new(UploadRecordFieldFileRequest)
+	if err := dec(in); err != nil {
+		return nil, err
+	}
+	if interceptor == nil {
+		return srv.(NuzurProductServer).UploadRecordFieldFile(ctx, in)
+	}
+	info := &grpc.UnaryServerInfo{
+		Server:     srv,
+		FullMethod: NuzurProduct_UploadRecordFieldFile_FullMethodName,
+	}
+	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
+		return srv.(NuzurProductServer).UploadRecordFieldFile(ctx, req.(*UploadRecordFieldFileRequest))
+	}
+	return interceptor(ctx, in, info, handler)
+}
+
+func _NuzurProduct_GetRecordFieldSignedFileURL_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
+	in := new(GetRecordFieldSignedFileURLRequest)
+	if err := dec(in); err != nil {
+		return nil, err
+	}
+	if interceptor == nil {
+		return srv.(NuzurProductServer).GetRecordFieldSignedFileURL(ctx, in)
+	}
+	info := &grpc.UnaryServerInfo{
+		Server:     srv,
+		FullMethod: NuzurProduct_GetRecordFieldSignedFileURL_FullMethodName,
+	}
+	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
+		return srv.(NuzurProductServer).GetRecordFieldSignedFileURL(ctx, req.(*GetRecordFieldSignedFileURLRequest))
+	}
+	return interceptor(ctx, in, info, handler)
+}
+
+func _NuzurProduct_GetRecordFileContent_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
+	in := new(GetRecordFileContentRequest)
+	if err := dec(in); err != nil {
+		return nil, err
+	}
+	if interceptor == nil {
+		return srv.(NuzurProductServer).GetRecordFileContent(ctx, in)
+	}
+	info := &grpc.UnaryServerInfo{
+		Server:     srv,
+		FullMethod: NuzurProduct_GetRecordFileContent_FullMethodName,
+	}
+	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
+		return srv.(NuzurProductServer).GetRecordFileContent(ctx, req.(*GetRecordFileContentRequest))
 	}
 	return interceptor(ctx, in, info, handler)
 }
@@ -1483,6 +2465,330 @@ func _NuzurProduct_UpdateExtensionExecution_Handler(srv interface{}, ctx context
 	return interceptor(ctx, in, info, handler)
 }
 
+func _NuzurProduct_ListUserChangeRequests_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
+	in := new(ListUserChangeRequestsRequest)
+	if err := dec(in); err != nil {
+		return nil, err
+	}
+	if interceptor == nil {
+		return srv.(NuzurProductServer).ListUserChangeRequests(ctx, in)
+	}
+	info := &grpc.UnaryServerInfo{
+		Server:     srv,
+		FullMethod: NuzurProduct_ListUserChangeRequests_FullMethodName,
+	}
+	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
+		return srv.(NuzurProductServer).ListUserChangeRequests(ctx, req.(*ListUserChangeRequestsRequest))
+	}
+	return interceptor(ctx, in, info, handler)
+}
+
+func _NuzurProduct_GetChangeRequest_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
+	in := new(GetChangeRequestRequest)
+	if err := dec(in); err != nil {
+		return nil, err
+	}
+	if interceptor == nil {
+		return srv.(NuzurProductServer).GetChangeRequest(ctx, in)
+	}
+	info := &grpc.UnaryServerInfo{
+		Server:     srv,
+		FullMethod: NuzurProduct_GetChangeRequest_FullMethodName,
+	}
+	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
+		return srv.(NuzurProductServer).GetChangeRequest(ctx, req.(*GetChangeRequestRequest))
+	}
+	return interceptor(ctx, in, info, handler)
+}
+
+func _NuzurProduct_CreateChangeRequest_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
+	in := new(CreateChangeRequestRequest)
+	if err := dec(in); err != nil {
+		return nil, err
+	}
+	if interceptor == nil {
+		return srv.(NuzurProductServer).CreateChangeRequest(ctx, in)
+	}
+	info := &grpc.UnaryServerInfo{
+		Server:     srv,
+		FullMethod: NuzurProduct_CreateChangeRequest_FullMethodName,
+	}
+	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
+		return srv.(NuzurProductServer).CreateChangeRequest(ctx, req.(*CreateChangeRequestRequest))
+	}
+	return interceptor(ctx, in, info, handler)
+}
+
+func _NuzurProduct_UpdateChangeRequest_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
+	in := new(UpdateChangeRequestRequest)
+	if err := dec(in); err != nil {
+		return nil, err
+	}
+	if interceptor == nil {
+		return srv.(NuzurProductServer).UpdateChangeRequest(ctx, in)
+	}
+	info := &grpc.UnaryServerInfo{
+		Server:     srv,
+		FullMethod: NuzurProduct_UpdateChangeRequest_FullMethodName,
+	}
+	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
+		return srv.(NuzurProductServer).UpdateChangeRequest(ctx, req.(*UpdateChangeRequestRequest))
+	}
+	return interceptor(ctx, in, info, handler)
+}
+
+func _NuzurProduct_ListChangeRequestsForReview_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
+	in := new(ListChangeRequestsForReviewRequest)
+	if err := dec(in); err != nil {
+		return nil, err
+	}
+	if interceptor == nil {
+		return srv.(NuzurProductServer).ListChangeRequestsForReview(ctx, in)
+	}
+	info := &grpc.UnaryServerInfo{
+		Server:     srv,
+		FullMethod: NuzurProduct_ListChangeRequestsForReview_FullMethodName,
+	}
+	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
+		return srv.(NuzurProductServer).ListChangeRequestsForReview(ctx, req.(*ListChangeRequestsForReviewRequest))
+	}
+	return interceptor(ctx, in, info, handler)
+}
+
+func _NuzurProduct_GetUserProjectVersionData_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
+	in := new(GetUserProjectVersionDataRequest)
+	if err := dec(in); err != nil {
+		return nil, err
+	}
+	if interceptor == nil {
+		return srv.(NuzurProductServer).GetUserProjectVersionData(ctx, in)
+	}
+	info := &grpc.UnaryServerInfo{
+		Server:     srv,
+		FullMethod: NuzurProduct_GetUserProjectVersionData_FullMethodName,
+	}
+	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
+		return srv.(NuzurProductServer).GetUserProjectVersionData(ctx, req.(*GetUserProjectVersionDataRequest))
+	}
+	return interceptor(ctx, in, info, handler)
+}
+
+func _NuzurProduct_SaveUserProjectVersionData_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
+	in := new(SaveUserProjectVersionDataRequest)
+	if err := dec(in); err != nil {
+		return nil, err
+	}
+	if interceptor == nil {
+		return srv.(NuzurProductServer).SaveUserProjectVersionData(ctx, in)
+	}
+	info := &grpc.UnaryServerInfo{
+		Server:     srv,
+		FullMethod: NuzurProduct_SaveUserProjectVersionData_FullMethodName,
+	}
+	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
+		return srv.(NuzurProductServer).SaveUserProjectVersionData(ctx, req.(*SaveUserProjectVersionDataRequest))
+	}
+	return interceptor(ctx, in, info, handler)
+}
+
+func _NuzurProduct_GetObjectStoreWithSecret_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
+	in := new(GetObjectStoreWithSecretRequest)
+	if err := dec(in); err != nil {
+		return nil, err
+	}
+	if interceptor == nil {
+		return srv.(NuzurProductServer).GetObjectStoreWithSecret(ctx, in)
+	}
+	info := &grpc.UnaryServerInfo{
+		Server:     srv,
+		FullMethod: NuzurProduct_GetObjectStoreWithSecret_FullMethodName,
+	}
+	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
+		return srv.(NuzurProductServer).GetObjectStoreWithSecret(ctx, req.(*GetObjectStoreWithSecretRequest))
+	}
+	return interceptor(ctx, in, info, handler)
+}
+
+func _NuzurProduct_CreateObjectStoreSecret_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
+	in := new(CreateObjectStoreSecretRequest)
+	if err := dec(in); err != nil {
+		return nil, err
+	}
+	if interceptor == nil {
+		return srv.(NuzurProductServer).CreateObjectStoreSecret(ctx, in)
+	}
+	info := &grpc.UnaryServerInfo{
+		Server:     srv,
+		FullMethod: NuzurProduct_CreateObjectStoreSecret_FullMethodName,
+	}
+	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
+		return srv.(NuzurProductServer).CreateObjectStoreSecret(ctx, req.(*CreateObjectStoreSecretRequest))
+	}
+	return interceptor(ctx, in, info, handler)
+}
+
+func _NuzurProduct_UpdateObjectStoreSecret_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
+	in := new(UpdateObjectStoreSecretRequest)
+	if err := dec(in); err != nil {
+		return nil, err
+	}
+	if interceptor == nil {
+		return srv.(NuzurProductServer).UpdateObjectStoreSecret(ctx, in)
+	}
+	info := &grpc.UnaryServerInfo{
+		Server:     srv,
+		FullMethod: NuzurProduct_UpdateObjectStoreSecret_FullMethodName,
+	}
+	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
+		return srv.(NuzurProductServer).UpdateObjectStoreSecret(ctx, req.(*UpdateObjectStoreSecretRequest))
+	}
+	return interceptor(ctx, in, info, handler)
+}
+
+func _NuzurProduct_DeleteObjectStoreSecret_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
+	in := new(DeleteObjectStoreSecretRequest)
+	if err := dec(in); err != nil {
+		return nil, err
+	}
+	if interceptor == nil {
+		return srv.(NuzurProductServer).DeleteObjectStoreSecret(ctx, in)
+	}
+	info := &grpc.UnaryServerInfo{
+		Server:     srv,
+		FullMethod: NuzurProduct_DeleteObjectStoreSecret_FullMethodName,
+	}
+	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
+		return srv.(NuzurProductServer).DeleteObjectStoreSecret(ctx, req.(*DeleteObjectStoreSecretRequest))
+	}
+	return interceptor(ctx, in, info, handler)
+}
+
+func _NuzurProduct_GenerateSQLForCR_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
+	in := new(GenerateSQLForCRRequest)
+	if err := dec(in); err != nil {
+		return nil, err
+	}
+	if interceptor == nil {
+		return srv.(NuzurProductServer).GenerateSQLForCR(ctx, in)
+	}
+	info := &grpc.UnaryServerInfo{
+		Server:     srv,
+		FullMethod: NuzurProduct_GenerateSQLForCR_FullMethodName,
+	}
+	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
+		return srv.(NuzurProductServer).GenerateSQLForCR(ctx, req.(*GenerateSQLForCRRequest))
+	}
+	return interceptor(ctx, in, info, handler)
+}
+
+func _NuzurProduct_ReviewDataChange_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
+	in := new(ReviewDataChangeRequest)
+	if err := dec(in); err != nil {
+		return nil, err
+	}
+	if interceptor == nil {
+		return srv.(NuzurProductServer).ReviewDataChange(ctx, in)
+	}
+	info := &grpc.UnaryServerInfo{
+		Server:     srv,
+		FullMethod: NuzurProduct_ReviewDataChange_FullMethodName,
+	}
+	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
+		return srv.(NuzurProductServer).ReviewDataChange(ctx, req.(*ReviewDataChangeRequest))
+	}
+	return interceptor(ctx, in, info, handler)
+}
+
+func _NuzurProduct_GetMembership_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
+	in := new(GetMembershipRequest)
+	if err := dec(in); err != nil {
+		return nil, err
+	}
+	if interceptor == nil {
+		return srv.(NuzurProductServer).GetMembership(ctx, in)
+	}
+	info := &grpc.UnaryServerInfo{
+		Server:     srv,
+		FullMethod: NuzurProduct_GetMembership_FullMethodName,
+	}
+	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
+		return srv.(NuzurProductServer).GetMembership(ctx, req.(*GetMembershipRequest))
+	}
+	return interceptor(ctx, in, info, handler)
+}
+
+func _NuzurProduct_CreateMembership_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
+	in := new(CreateMembershipRequest)
+	if err := dec(in); err != nil {
+		return nil, err
+	}
+	if interceptor == nil {
+		return srv.(NuzurProductServer).CreateMembership(ctx, in)
+	}
+	info := &grpc.UnaryServerInfo{
+		Server:     srv,
+		FullMethod: NuzurProduct_CreateMembership_FullMethodName,
+	}
+	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
+		return srv.(NuzurProductServer).CreateMembership(ctx, req.(*CreateMembershipRequest))
+	}
+	return interceptor(ctx, in, info, handler)
+}
+
+func _NuzurProduct_UpdateMembership_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
+	in := new(UpdateMembershipRequest)
+	if err := dec(in); err != nil {
+		return nil, err
+	}
+	if interceptor == nil {
+		return srv.(NuzurProductServer).UpdateMembership(ctx, in)
+	}
+	info := &grpc.UnaryServerInfo{
+		Server:     srv,
+		FullMethod: NuzurProduct_UpdateMembership_FullMethodName,
+	}
+	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
+		return srv.(NuzurProductServer).UpdateMembership(ctx, req.(*UpdateMembershipRequest))
+	}
+	return interceptor(ctx, in, info, handler)
+}
+
+func _NuzurProduct_MembershipForProject_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
+	in := new(MembershipForProjectRequest)
+	if err := dec(in); err != nil {
+		return nil, err
+	}
+	if interceptor == nil {
+		return srv.(NuzurProductServer).MembershipForProject(ctx, in)
+	}
+	info := &grpc.UnaryServerInfo{
+		Server:     srv,
+		FullMethod: NuzurProduct_MembershipForProject_FullMethodName,
+	}
+	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
+		return srv.(NuzurProductServer).MembershipForProject(ctx, req.(*MembershipForProjectRequest))
+	}
+	return interceptor(ctx, in, info, handler)
+}
+
+func _NuzurProduct_MembershipForTeam_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
+	in := new(MembershipForTeamRequest)
+	if err := dec(in); err != nil {
+		return nil, err
+	}
+	if interceptor == nil {
+		return srv.(NuzurProductServer).MembershipForTeam(ctx, in)
+	}
+	info := &grpc.UnaryServerInfo{
+		Server:     srv,
+		FullMethod: NuzurProduct_MembershipForTeam_FullMethodName,
+	}
+	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
+		return srv.(NuzurProductServer).MembershipForTeam(ctx, req.(*MembershipForTeamRequest))
+	}
+	return interceptor(ctx, in, info, handler)
+}
+
 // NuzurProduct_ServiceDesc is the grpc.ServiceDesc for NuzurProduct service.
 // It's only intended for direct use with grpc.RegisterService,
 // and not to be introspected or modified (even as a copy)
@@ -1499,8 +2805,56 @@ var NuzurProduct_ServiceDesc = grpc.ServiceDesc{
 			Handler:    _NuzurProduct_GetTokenUser_Handler,
 		},
 		{
+			MethodName: "GetUserByEmail",
+			Handler:    _NuzurProduct_GetUserByEmail_Handler,
+		},
+		{
+			MethodName: "GetTokenUserRoleForProject",
+			Handler:    _NuzurProduct_GetTokenUserRoleForProject_Handler,
+		},
+		{
+			MethodName: "GetTokenUserRoleForTeam",
+			Handler:    _NuzurProduct_GetTokenUserRoleForTeam_Handler,
+		},
+		{
+			MethodName: "ListUsersForTeam",
+			Handler:    _NuzurProduct_ListUsersForTeam_Handler,
+		},
+		{
+			MethodName: "ListUsersForProject",
+			Handler:    _NuzurProduct_ListUsersForProject_Handler,
+		},
+		{
+			MethodName: "AddUserToProject",
+			Handler:    _NuzurProduct_AddUserToProject_Handler,
+		},
+		{
+			MethodName: "UpdateUserProject",
+			Handler:    _NuzurProduct_UpdateUserProject_Handler,
+		},
+		{
+			MethodName: "RemoveUserFromProject",
+			Handler:    _NuzurProduct_RemoveUserFromProject_Handler,
+		},
+		{
+			MethodName: "AddUserToTeam",
+			Handler:    _NuzurProduct_AddUserToTeam_Handler,
+		},
+		{
+			MethodName: "UpdateUserTeam",
+			Handler:    _NuzurProduct_UpdateUserTeam_Handler,
+		},
+		{
+			MethodName: "RemoveUserFromTeam",
+			Handler:    _NuzurProduct_RemoveUserFromTeam_Handler,
+		},
+		{
 			MethodName: "ListTeamsForUser",
 			Handler:    _NuzurProduct_ListTeamsForUser_Handler,
+		},
+		{
+			MethodName: "ListTeamsForAdminUser",
+			Handler:    _NuzurProduct_ListTeamsForAdminUser_Handler,
 		},
 		{
 			MethodName: "GetTeamForUser",
@@ -1513,14 +2867,6 @@ var NuzurProduct_ServiceDesc = grpc.ServiceDesc{
 		{
 			MethodName: "UpdateTeam",
 			Handler:    _NuzurProduct_UpdateTeam_Handler,
-		},
-		{
-			MethodName: "InviteUserToTeam",
-			Handler:    _NuzurProduct_InviteUserToTeam_Handler,
-		},
-		{
-			MethodName: "ActivateUserTeamInvite",
-			Handler:    _NuzurProduct_ActivateUserTeamInvite_Handler,
 		},
 		{
 			MethodName: "GetConnectionWithSecret",
@@ -1571,6 +2917,22 @@ var NuzurProduct_ServiceDesc = grpc.ServiceDesc{
 			Handler:    _NuzurProduct_GetLatestProjectVersion_Handler,
 		},
 		{
+			MethodName: "GetLatestProjectVersionForUser",
+			Handler:    _NuzurProduct_GetLatestProjectVersionForUser_Handler,
+		},
+		{
+			MethodName: "GetLatestProjectVersionUUIDForUser",
+			Handler:    _NuzurProduct_GetLatestProjectVersionUUIDForUser_Handler,
+		},
+		{
+			MethodName: "GetProjectVersionVersion",
+			Handler:    _NuzurProduct_GetProjectVersionVersion_Handler,
+		},
+		{
+			MethodName: "GetProjectVersionIdentifier",
+			Handler:    _NuzurProduct_GetProjectVersionIdentifier_Handler,
+		},
+		{
 			MethodName: "CreateProjectVersion",
 			Handler:    _NuzurProduct_CreateProjectVersion_Handler,
 		},
@@ -1587,8 +2949,20 @@ var NuzurProduct_ServiceDesc = grpc.ServiceDesc{
 			Handler:    _NuzurProduct_DiscardDraftProjectVersion_Handler,
 		},
 		{
-			MethodName: "UploadProjectSnapshot",
-			Handler:    _NuzurProduct_UploadProjectSnapshot_Handler,
+			MethodName: "SendProjectVersionForReview",
+			Handler:    _NuzurProduct_SendProjectVersionForReview_Handler,
+		},
+		{
+			MethodName: "WithdrawFromReviewProjectVersion",
+			Handler:    _NuzurProduct_WithdrawFromReviewProjectVersion_Handler,
+		},
+		{
+			MethodName: "ReviewProjectVersion",
+			Handler:    _NuzurProduct_ReviewProjectVersion_Handler,
+		},
+		{
+			MethodName: "UploadProjectVersionSnapshot",
+			Handler:    _NuzurProduct_UploadProjectVersionSnapshot_Handler,
 		},
 		{
 			MethodName: "GetSignedFileURL",
@@ -1605,6 +2979,18 @@ var NuzurProduct_ServiceDesc = grpc.ServiceDesc{
 		{
 			MethodName: "UploadExtensionIcon",
 			Handler:    _NuzurProduct_UploadExtensionIcon_Handler,
+		},
+		{
+			MethodName: "UploadRecordFieldFile",
+			Handler:    _NuzurProduct_UploadRecordFieldFile_Handler,
+		},
+		{
+			MethodName: "GetRecordFieldSignedFileURL",
+			Handler:    _NuzurProduct_GetRecordFieldSignedFileURL_Handler,
+		},
+		{
+			MethodName: "GetRecordFileContent",
+			Handler:    _NuzurProduct_GetRecordFileContent_Handler,
 		},
 		{
 			MethodName: "ListExtensions",
@@ -1653,6 +3039,78 @@ var NuzurProduct_ServiceDesc = grpc.ServiceDesc{
 		{
 			MethodName: "UpdateExtensionExecution",
 			Handler:    _NuzurProduct_UpdateExtensionExecution_Handler,
+		},
+		{
+			MethodName: "ListUserChangeRequests",
+			Handler:    _NuzurProduct_ListUserChangeRequests_Handler,
+		},
+		{
+			MethodName: "GetChangeRequest",
+			Handler:    _NuzurProduct_GetChangeRequest_Handler,
+		},
+		{
+			MethodName: "CreateChangeRequest",
+			Handler:    _NuzurProduct_CreateChangeRequest_Handler,
+		},
+		{
+			MethodName: "UpdateChangeRequest",
+			Handler:    _NuzurProduct_UpdateChangeRequest_Handler,
+		},
+		{
+			MethodName: "ListChangeRequestsForReview",
+			Handler:    _NuzurProduct_ListChangeRequestsForReview_Handler,
+		},
+		{
+			MethodName: "GetUserProjectVersionData",
+			Handler:    _NuzurProduct_GetUserProjectVersionData_Handler,
+		},
+		{
+			MethodName: "SaveUserProjectVersionData",
+			Handler:    _NuzurProduct_SaveUserProjectVersionData_Handler,
+		},
+		{
+			MethodName: "GetObjectStoreWithSecret",
+			Handler:    _NuzurProduct_GetObjectStoreWithSecret_Handler,
+		},
+		{
+			MethodName: "CreateObjectStoreSecret",
+			Handler:    _NuzurProduct_CreateObjectStoreSecret_Handler,
+		},
+		{
+			MethodName: "UpdateObjectStoreSecret",
+			Handler:    _NuzurProduct_UpdateObjectStoreSecret_Handler,
+		},
+		{
+			MethodName: "DeleteObjectStoreSecret",
+			Handler:    _NuzurProduct_DeleteObjectStoreSecret_Handler,
+		},
+		{
+			MethodName: "GenerateSQLForCR",
+			Handler:    _NuzurProduct_GenerateSQLForCR_Handler,
+		},
+		{
+			MethodName: "ReviewDataChange",
+			Handler:    _NuzurProduct_ReviewDataChange_Handler,
+		},
+		{
+			MethodName: "GetMembership",
+			Handler:    _NuzurProduct_GetMembership_Handler,
+		},
+		{
+			MethodName: "CreateMembership",
+			Handler:    _NuzurProduct_CreateMembership_Handler,
+		},
+		{
+			MethodName: "UpdateMembership",
+			Handler:    _NuzurProduct_UpdateMembership_Handler,
+		},
+		{
+			MethodName: "MembershipForProject",
+			Handler:    _NuzurProduct_MembershipForProject_Handler,
+		},
+		{
+			MethodName: "MembershipForTeam",
+			Handler:    _NuzurProduct_MembershipForTeam_Handler,
 		},
 	},
 	Streams:  []grpc.StreamDesc{},
