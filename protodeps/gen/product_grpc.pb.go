@@ -25,6 +25,7 @@ const (
 	NuzurProduct_GetUserByEmail_FullMethodName                              = "/NuzurProduct/GetUserByEmail"
 	NuzurProduct_GetTokenUserRoleForProject_FullMethodName                  = "/NuzurProduct/GetTokenUserRoleForProject"
 	NuzurProduct_GetTokenUserRoleForTeam_FullMethodName                     = "/NuzurProduct/GetTokenUserRoleForTeam"
+	NuzurProduct_UpdateTokenUser_FullMethodName                             = "/NuzurProduct/UpdateTokenUser"
 	NuzurProduct_ListUsersForTeam_FullMethodName                            = "/NuzurProduct/ListUsersForTeam"
 	NuzurProduct_ListUsersForProject_FullMethodName                         = "/NuzurProduct/ListUsersForProject"
 	NuzurProduct_AddUserToProject_FullMethodName                            = "/NuzurProduct/AddUserToProject"
@@ -66,6 +67,7 @@ const (
 	NuzurProduct_UploadExtensionExecutionFile_FullMethodName                = "/NuzurProduct/UploadExtensionExecutionFile"
 	NuzurProduct_GetExtensionExecutionFile_FullMethodName                   = "/NuzurProduct/GetExtensionExecutionFile"
 	NuzurProduct_UploadExtensionIcon_FullMethodName                         = "/NuzurProduct/UploadExtensionIcon"
+	NuzurProduct_UploadUserAvatar_FullMethodName                            = "/NuzurProduct/UploadUserAvatar"
 	NuzurProduct_UploadRecordFieldFile_FullMethodName                       = "/NuzurProduct/UploadRecordFieldFile"
 	NuzurProduct_GetRecordFieldSignedFileURL_FullMethodName                 = "/NuzurProduct/GetRecordFieldSignedFileURL"
 	NuzurProduct_GetRecordFileContent_FullMethodName                        = "/NuzurProduct/GetRecordFileContent"
@@ -99,6 +101,20 @@ const (
 	NuzurProduct_UpdateMembership_FullMethodName                            = "/NuzurProduct/UpdateMembership"
 	NuzurProduct_MembershipForProject_FullMethodName                        = "/NuzurProduct/MembershipForProject"
 	NuzurProduct_MembershipForTeam_FullMethodName                           = "/NuzurProduct/MembershipForTeam"
+	NuzurProduct_CreateCheckoutSession_FullMethodName                       = "/NuzurProduct/CreateCheckoutSession"
+	NuzurProduct_ListMembershipUsers_FullMethodName                         = "/NuzurProduct/ListMembershipUsers"
+	NuzurProduct_CancelMembership_FullMethodName                            = "/NuzurProduct/CancelMembership"
+	NuzurProduct_UserHasActiveStripeSubscription_FullMethodName             = "/NuzurProduct/UserHasActiveStripeSubscription"
+	NuzurProduct_ListMembershipUserProjects_FullMethodName                  = "/NuzurProduct/ListMembershipUserProjects"
+	NuzurProduct_RemoveMembershipUser_FullMethodName                        = "/NuzurProduct/RemoveMembershipUser"
+	NuzurProduct_SendPrioritySupportEmail_FullMethodName                    = "/NuzurProduct/SendPrioritySupportEmail"
+	NuzurProduct_HandleWebhook_FullMethodName                               = "/NuzurProduct/HandleWebhook"
+	NuzurProduct_IsProActiveForProject_FullMethodName                       = "/NuzurProduct/IsProActiveForProject"
+	NuzurProduct_EvaluateEditorUserPrompt_FullMethodName                    = "/NuzurProduct/EvaluateEditorUserPrompt"
+	NuzurProduct_HandleEditorUserPrompt_FullMethodName                      = "/NuzurProduct/HandleEditorUserPrompt"
+	NuzurProduct_GetEditorUserPromptJob_FullMethodName                      = "/NuzurProduct/GetEditorUserPromptJob"
+	NuzurProduct_HandleFollowupEditorUserPrompt_FullMethodName              = "/NuzurProduct/HandleFollowupEditorUserPrompt"
+	NuzurProduct_FinalizeEditorUserPrompt_FullMethodName                    = "/NuzurProduct/FinalizeEditorUserPrompt"
 )
 
 // NuzurProductClient is the client API for NuzurProduct service.
@@ -111,6 +127,7 @@ type NuzurProductClient interface {
 	GetUserByEmail(ctx context.Context, in *GetUserByEmailRequest, opts ...grpc.CallOption) (*gen.User, error)
 	GetTokenUserRoleForProject(ctx context.Context, in *GetUserRoleForProjectRequest, opts ...grpc.CallOption) (*GetUserRoleForProjectResponse, error)
 	GetTokenUserRoleForTeam(ctx context.Context, in *GetUserRoleForTeamRequest, opts ...grpc.CallOption) (*GetUserRoleForTeamResponse, error)
+	UpdateTokenUser(ctx context.Context, in *UpdateUserRequest, opts ...grpc.CallOption) (*gen.User, error)
 	// user relations
 	ListUsersForTeam(ctx context.Context, in *ListUsersForTeamRequest, opts ...grpc.CallOption) (*ListUsersForTeamResponse, error)
 	ListUsersForProject(ctx context.Context, in *ListUsersForProjectRequest, opts ...grpc.CallOption) (*ListUsersForProjectResponse, error)
@@ -158,6 +175,7 @@ type NuzurProductClient interface {
 	UploadExtensionExecutionFile(ctx context.Context, in *UploadExtensionExecutionFileRequest, opts ...grpc.CallOption) (*UploadExtensionExecutionFileResponse, error)
 	GetExtensionExecutionFile(ctx context.Context, in *GetExtensionExecutionFileRequest, opts ...grpc.CallOption) (*GetExtensionExecutionFileResponse, error)
 	UploadExtensionIcon(ctx context.Context, in *UploadExtensionIconRequest, opts ...grpc.CallOption) (*UploadExtensionIconResponse, error)
+	UploadUserAvatar(ctx context.Context, in *UploadUserAvatarRequest, opts ...grpc.CallOption) (*UploadUserAvatarResponse, error)
 	// data manager - records
 	UploadRecordFieldFile(ctx context.Context, in *UploadRecordFieldFileRequest, opts ...grpc.CallOption) (*UploadRecordFieldFileResponse, error)
 	GetRecordFieldSignedFileURL(ctx context.Context, in *GetRecordFieldSignedFileURLRequest, opts ...grpc.CallOption) (*GetRecordFieldSignedFileURLResponse, error)
@@ -200,6 +218,23 @@ type NuzurProductClient interface {
 	UpdateMembership(ctx context.Context, in *UpdateMembershipRequest, opts ...grpc.CallOption) (*gen.Membership, error)
 	MembershipForProject(ctx context.Context, in *MembershipForProjectRequest, opts ...grpc.CallOption) (*gen.Membership, error)
 	MembershipForTeam(ctx context.Context, in *MembershipForTeamRequest, opts ...grpc.CallOption) (*gen.Membership, error)
+	CreateCheckoutSession(ctx context.Context, in *CreateCheckoutSessionRequest, opts ...grpc.CallOption) (*CreateCheckoutSessionResponse, error)
+	ListMembershipUsers(ctx context.Context, in *ListMembershipUsersRequest, opts ...grpc.CallOption) (*ListMembershipUsersResponse, error)
+	CancelMembership(ctx context.Context, in *CancelMembershipRequest, opts ...grpc.CallOption) (*CancelMembershipResponse, error)
+	UserHasActiveStripeSubscription(ctx context.Context, in *UserHasActiveStripeSubscriptionRequest, opts ...grpc.CallOption) (*UserHasActiveStripeSubscriptionResponse, error)
+	ListMembershipUserProjects(ctx context.Context, in *ListMembershipUserProjectsRequest, opts ...grpc.CallOption) (*ListMembershipUserProjectsResponse, error)
+	RemoveMembershipUser(ctx context.Context, in *RemoveMembershipUserRequest, opts ...grpc.CallOption) (*RemoveMembershipUserResponse, error)
+	// support
+	SendPrioritySupportEmail(ctx context.Context, in *PrioritySupportEmailRequest, opts ...grpc.CallOption) (*PrioritySupportEmailResponse, error)
+	// webhook
+	HandleWebhook(ctx context.Context, in *HandleWebhookRequest, opts ...grpc.CallOption) (*HandleWebhookResponse, error)
+	// pro features
+	IsProActiveForProject(ctx context.Context, in *IsProActiveForProjectRequest, opts ...grpc.CallOption) (*IsProActiveForProjectResponse, error)
+	EvaluateEditorUserPrompt(ctx context.Context, in *EvaluateEditorUserPromptRequest, opts ...grpc.CallOption) (*EvaluateEditorUserPromptResponse, error)
+	HandleEditorUserPrompt(ctx context.Context, in *HandleEditorUserPromptRequest, opts ...grpc.CallOption) (*HandleEditorUserPromptResponse, error)
+	GetEditorUserPromptJob(ctx context.Context, in *GetEditorUserPromptJobRequest, opts ...grpc.CallOption) (*GetEditorUserPromptJobResponse, error)
+	HandleFollowupEditorUserPrompt(ctx context.Context, in *HandleFollowupEditorUserPromptRequest, opts ...grpc.CallOption) (*HandleFollowupEditorUserPromptResponse, error)
+	FinalizeEditorUserPrompt(ctx context.Context, in *FinalizeEditorUserPromptRequest, opts ...grpc.CallOption) (*FinalizeEditorUserPromptResponse, error)
 }
 
 type nuzurProductClient struct {
@@ -254,6 +289,16 @@ func (c *nuzurProductClient) GetTokenUserRoleForTeam(ctx context.Context, in *Ge
 	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
 	out := new(GetUserRoleForTeamResponse)
 	err := c.cc.Invoke(ctx, NuzurProduct_GetTokenUserRoleForTeam_FullMethodName, in, out, cOpts...)
+	if err != nil {
+		return nil, err
+	}
+	return out, nil
+}
+
+func (c *nuzurProductClient) UpdateTokenUser(ctx context.Context, in *UpdateUserRequest, opts ...grpc.CallOption) (*gen.User, error) {
+	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
+	out := new(gen.User)
+	err := c.cc.Invoke(ctx, NuzurProduct_UpdateTokenUser_FullMethodName, in, out, cOpts...)
 	if err != nil {
 		return nil, err
 	}
@@ -670,6 +715,16 @@ func (c *nuzurProductClient) UploadExtensionIcon(ctx context.Context, in *Upload
 	return out, nil
 }
 
+func (c *nuzurProductClient) UploadUserAvatar(ctx context.Context, in *UploadUserAvatarRequest, opts ...grpc.CallOption) (*UploadUserAvatarResponse, error) {
+	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
+	out := new(UploadUserAvatarResponse)
+	err := c.cc.Invoke(ctx, NuzurProduct_UploadUserAvatar_FullMethodName, in, out, cOpts...)
+	if err != nil {
+		return nil, err
+	}
+	return out, nil
+}
+
 func (c *nuzurProductClient) UploadRecordFieldFile(ctx context.Context, in *UploadRecordFieldFileRequest, opts ...grpc.CallOption) (*UploadRecordFieldFileResponse, error) {
 	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
 	out := new(UploadRecordFieldFileResponse)
@@ -1000,6 +1055,146 @@ func (c *nuzurProductClient) MembershipForTeam(ctx context.Context, in *Membersh
 	return out, nil
 }
 
+func (c *nuzurProductClient) CreateCheckoutSession(ctx context.Context, in *CreateCheckoutSessionRequest, opts ...grpc.CallOption) (*CreateCheckoutSessionResponse, error) {
+	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
+	out := new(CreateCheckoutSessionResponse)
+	err := c.cc.Invoke(ctx, NuzurProduct_CreateCheckoutSession_FullMethodName, in, out, cOpts...)
+	if err != nil {
+		return nil, err
+	}
+	return out, nil
+}
+
+func (c *nuzurProductClient) ListMembershipUsers(ctx context.Context, in *ListMembershipUsersRequest, opts ...grpc.CallOption) (*ListMembershipUsersResponse, error) {
+	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
+	out := new(ListMembershipUsersResponse)
+	err := c.cc.Invoke(ctx, NuzurProduct_ListMembershipUsers_FullMethodName, in, out, cOpts...)
+	if err != nil {
+		return nil, err
+	}
+	return out, nil
+}
+
+func (c *nuzurProductClient) CancelMembership(ctx context.Context, in *CancelMembershipRequest, opts ...grpc.CallOption) (*CancelMembershipResponse, error) {
+	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
+	out := new(CancelMembershipResponse)
+	err := c.cc.Invoke(ctx, NuzurProduct_CancelMembership_FullMethodName, in, out, cOpts...)
+	if err != nil {
+		return nil, err
+	}
+	return out, nil
+}
+
+func (c *nuzurProductClient) UserHasActiveStripeSubscription(ctx context.Context, in *UserHasActiveStripeSubscriptionRequest, opts ...grpc.CallOption) (*UserHasActiveStripeSubscriptionResponse, error) {
+	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
+	out := new(UserHasActiveStripeSubscriptionResponse)
+	err := c.cc.Invoke(ctx, NuzurProduct_UserHasActiveStripeSubscription_FullMethodName, in, out, cOpts...)
+	if err != nil {
+		return nil, err
+	}
+	return out, nil
+}
+
+func (c *nuzurProductClient) ListMembershipUserProjects(ctx context.Context, in *ListMembershipUserProjectsRequest, opts ...grpc.CallOption) (*ListMembershipUserProjectsResponse, error) {
+	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
+	out := new(ListMembershipUserProjectsResponse)
+	err := c.cc.Invoke(ctx, NuzurProduct_ListMembershipUserProjects_FullMethodName, in, out, cOpts...)
+	if err != nil {
+		return nil, err
+	}
+	return out, nil
+}
+
+func (c *nuzurProductClient) RemoveMembershipUser(ctx context.Context, in *RemoveMembershipUserRequest, opts ...grpc.CallOption) (*RemoveMembershipUserResponse, error) {
+	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
+	out := new(RemoveMembershipUserResponse)
+	err := c.cc.Invoke(ctx, NuzurProduct_RemoveMembershipUser_FullMethodName, in, out, cOpts...)
+	if err != nil {
+		return nil, err
+	}
+	return out, nil
+}
+
+func (c *nuzurProductClient) SendPrioritySupportEmail(ctx context.Context, in *PrioritySupportEmailRequest, opts ...grpc.CallOption) (*PrioritySupportEmailResponse, error) {
+	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
+	out := new(PrioritySupportEmailResponse)
+	err := c.cc.Invoke(ctx, NuzurProduct_SendPrioritySupportEmail_FullMethodName, in, out, cOpts...)
+	if err != nil {
+		return nil, err
+	}
+	return out, nil
+}
+
+func (c *nuzurProductClient) HandleWebhook(ctx context.Context, in *HandleWebhookRequest, opts ...grpc.CallOption) (*HandleWebhookResponse, error) {
+	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
+	out := new(HandleWebhookResponse)
+	err := c.cc.Invoke(ctx, NuzurProduct_HandleWebhook_FullMethodName, in, out, cOpts...)
+	if err != nil {
+		return nil, err
+	}
+	return out, nil
+}
+
+func (c *nuzurProductClient) IsProActiveForProject(ctx context.Context, in *IsProActiveForProjectRequest, opts ...grpc.CallOption) (*IsProActiveForProjectResponse, error) {
+	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
+	out := new(IsProActiveForProjectResponse)
+	err := c.cc.Invoke(ctx, NuzurProduct_IsProActiveForProject_FullMethodName, in, out, cOpts...)
+	if err != nil {
+		return nil, err
+	}
+	return out, nil
+}
+
+func (c *nuzurProductClient) EvaluateEditorUserPrompt(ctx context.Context, in *EvaluateEditorUserPromptRequest, opts ...grpc.CallOption) (*EvaluateEditorUserPromptResponse, error) {
+	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
+	out := new(EvaluateEditorUserPromptResponse)
+	err := c.cc.Invoke(ctx, NuzurProduct_EvaluateEditorUserPrompt_FullMethodName, in, out, cOpts...)
+	if err != nil {
+		return nil, err
+	}
+	return out, nil
+}
+
+func (c *nuzurProductClient) HandleEditorUserPrompt(ctx context.Context, in *HandleEditorUserPromptRequest, opts ...grpc.CallOption) (*HandleEditorUserPromptResponse, error) {
+	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
+	out := new(HandleEditorUserPromptResponse)
+	err := c.cc.Invoke(ctx, NuzurProduct_HandleEditorUserPrompt_FullMethodName, in, out, cOpts...)
+	if err != nil {
+		return nil, err
+	}
+	return out, nil
+}
+
+func (c *nuzurProductClient) GetEditorUserPromptJob(ctx context.Context, in *GetEditorUserPromptJobRequest, opts ...grpc.CallOption) (*GetEditorUserPromptJobResponse, error) {
+	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
+	out := new(GetEditorUserPromptJobResponse)
+	err := c.cc.Invoke(ctx, NuzurProduct_GetEditorUserPromptJob_FullMethodName, in, out, cOpts...)
+	if err != nil {
+		return nil, err
+	}
+	return out, nil
+}
+
+func (c *nuzurProductClient) HandleFollowupEditorUserPrompt(ctx context.Context, in *HandleFollowupEditorUserPromptRequest, opts ...grpc.CallOption) (*HandleFollowupEditorUserPromptResponse, error) {
+	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
+	out := new(HandleFollowupEditorUserPromptResponse)
+	err := c.cc.Invoke(ctx, NuzurProduct_HandleFollowupEditorUserPrompt_FullMethodName, in, out, cOpts...)
+	if err != nil {
+		return nil, err
+	}
+	return out, nil
+}
+
+func (c *nuzurProductClient) FinalizeEditorUserPrompt(ctx context.Context, in *FinalizeEditorUserPromptRequest, opts ...grpc.CallOption) (*FinalizeEditorUserPromptResponse, error) {
+	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
+	out := new(FinalizeEditorUserPromptResponse)
+	err := c.cc.Invoke(ctx, NuzurProduct_FinalizeEditorUserPrompt_FullMethodName, in, out, cOpts...)
+	if err != nil {
+		return nil, err
+	}
+	return out, nil
+}
+
 // NuzurProductServer is the server API for NuzurProduct service.
 // All implementations must embed UnimplementedNuzurProductServer
 // for forward compatibility.
@@ -1010,6 +1205,7 @@ type NuzurProductServer interface {
 	GetUserByEmail(context.Context, *GetUserByEmailRequest) (*gen.User, error)
 	GetTokenUserRoleForProject(context.Context, *GetUserRoleForProjectRequest) (*GetUserRoleForProjectResponse, error)
 	GetTokenUserRoleForTeam(context.Context, *GetUserRoleForTeamRequest) (*GetUserRoleForTeamResponse, error)
+	UpdateTokenUser(context.Context, *UpdateUserRequest) (*gen.User, error)
 	// user relations
 	ListUsersForTeam(context.Context, *ListUsersForTeamRequest) (*ListUsersForTeamResponse, error)
 	ListUsersForProject(context.Context, *ListUsersForProjectRequest) (*ListUsersForProjectResponse, error)
@@ -1057,6 +1253,7 @@ type NuzurProductServer interface {
 	UploadExtensionExecutionFile(context.Context, *UploadExtensionExecutionFileRequest) (*UploadExtensionExecutionFileResponse, error)
 	GetExtensionExecutionFile(context.Context, *GetExtensionExecutionFileRequest) (*GetExtensionExecutionFileResponse, error)
 	UploadExtensionIcon(context.Context, *UploadExtensionIconRequest) (*UploadExtensionIconResponse, error)
+	UploadUserAvatar(context.Context, *UploadUserAvatarRequest) (*UploadUserAvatarResponse, error)
 	// data manager - records
 	UploadRecordFieldFile(context.Context, *UploadRecordFieldFileRequest) (*UploadRecordFieldFileResponse, error)
 	GetRecordFieldSignedFileURL(context.Context, *GetRecordFieldSignedFileURLRequest) (*GetRecordFieldSignedFileURLResponse, error)
@@ -1099,6 +1296,23 @@ type NuzurProductServer interface {
 	UpdateMembership(context.Context, *UpdateMembershipRequest) (*gen.Membership, error)
 	MembershipForProject(context.Context, *MembershipForProjectRequest) (*gen.Membership, error)
 	MembershipForTeam(context.Context, *MembershipForTeamRequest) (*gen.Membership, error)
+	CreateCheckoutSession(context.Context, *CreateCheckoutSessionRequest) (*CreateCheckoutSessionResponse, error)
+	ListMembershipUsers(context.Context, *ListMembershipUsersRequest) (*ListMembershipUsersResponse, error)
+	CancelMembership(context.Context, *CancelMembershipRequest) (*CancelMembershipResponse, error)
+	UserHasActiveStripeSubscription(context.Context, *UserHasActiveStripeSubscriptionRequest) (*UserHasActiveStripeSubscriptionResponse, error)
+	ListMembershipUserProjects(context.Context, *ListMembershipUserProjectsRequest) (*ListMembershipUserProjectsResponse, error)
+	RemoveMembershipUser(context.Context, *RemoveMembershipUserRequest) (*RemoveMembershipUserResponse, error)
+	// support
+	SendPrioritySupportEmail(context.Context, *PrioritySupportEmailRequest) (*PrioritySupportEmailResponse, error)
+	// webhook
+	HandleWebhook(context.Context, *HandleWebhookRequest) (*HandleWebhookResponse, error)
+	// pro features
+	IsProActiveForProject(context.Context, *IsProActiveForProjectRequest) (*IsProActiveForProjectResponse, error)
+	EvaluateEditorUserPrompt(context.Context, *EvaluateEditorUserPromptRequest) (*EvaluateEditorUserPromptResponse, error)
+	HandleEditorUserPrompt(context.Context, *HandleEditorUserPromptRequest) (*HandleEditorUserPromptResponse, error)
+	GetEditorUserPromptJob(context.Context, *GetEditorUserPromptJobRequest) (*GetEditorUserPromptJobResponse, error)
+	HandleFollowupEditorUserPrompt(context.Context, *HandleFollowupEditorUserPromptRequest) (*HandleFollowupEditorUserPromptResponse, error)
+	FinalizeEditorUserPrompt(context.Context, *FinalizeEditorUserPromptRequest) (*FinalizeEditorUserPromptResponse, error)
 	mustEmbedUnimplementedNuzurProductServer()
 }
 
@@ -1123,6 +1337,9 @@ func (UnimplementedNuzurProductServer) GetTokenUserRoleForProject(context.Contex
 }
 func (UnimplementedNuzurProductServer) GetTokenUserRoleForTeam(context.Context, *GetUserRoleForTeamRequest) (*GetUserRoleForTeamResponse, error) {
 	return nil, status.Errorf(codes.Unimplemented, "method GetTokenUserRoleForTeam not implemented")
+}
+func (UnimplementedNuzurProductServer) UpdateTokenUser(context.Context, *UpdateUserRequest) (*gen.User, error) {
+	return nil, status.Errorf(codes.Unimplemented, "method UpdateTokenUser not implemented")
 }
 func (UnimplementedNuzurProductServer) ListUsersForTeam(context.Context, *ListUsersForTeamRequest) (*ListUsersForTeamResponse, error) {
 	return nil, status.Errorf(codes.Unimplemented, "method ListUsersForTeam not implemented")
@@ -1247,6 +1464,9 @@ func (UnimplementedNuzurProductServer) GetExtensionExecutionFile(context.Context
 func (UnimplementedNuzurProductServer) UploadExtensionIcon(context.Context, *UploadExtensionIconRequest) (*UploadExtensionIconResponse, error) {
 	return nil, status.Errorf(codes.Unimplemented, "method UploadExtensionIcon not implemented")
 }
+func (UnimplementedNuzurProductServer) UploadUserAvatar(context.Context, *UploadUserAvatarRequest) (*UploadUserAvatarResponse, error) {
+	return nil, status.Errorf(codes.Unimplemented, "method UploadUserAvatar not implemented")
+}
 func (UnimplementedNuzurProductServer) UploadRecordFieldFile(context.Context, *UploadRecordFieldFileRequest) (*UploadRecordFieldFileResponse, error) {
 	return nil, status.Errorf(codes.Unimplemented, "method UploadRecordFieldFile not implemented")
 }
@@ -1345,6 +1565,48 @@ func (UnimplementedNuzurProductServer) MembershipForProject(context.Context, *Me
 }
 func (UnimplementedNuzurProductServer) MembershipForTeam(context.Context, *MembershipForTeamRequest) (*gen.Membership, error) {
 	return nil, status.Errorf(codes.Unimplemented, "method MembershipForTeam not implemented")
+}
+func (UnimplementedNuzurProductServer) CreateCheckoutSession(context.Context, *CreateCheckoutSessionRequest) (*CreateCheckoutSessionResponse, error) {
+	return nil, status.Errorf(codes.Unimplemented, "method CreateCheckoutSession not implemented")
+}
+func (UnimplementedNuzurProductServer) ListMembershipUsers(context.Context, *ListMembershipUsersRequest) (*ListMembershipUsersResponse, error) {
+	return nil, status.Errorf(codes.Unimplemented, "method ListMembershipUsers not implemented")
+}
+func (UnimplementedNuzurProductServer) CancelMembership(context.Context, *CancelMembershipRequest) (*CancelMembershipResponse, error) {
+	return nil, status.Errorf(codes.Unimplemented, "method CancelMembership not implemented")
+}
+func (UnimplementedNuzurProductServer) UserHasActiveStripeSubscription(context.Context, *UserHasActiveStripeSubscriptionRequest) (*UserHasActiveStripeSubscriptionResponse, error) {
+	return nil, status.Errorf(codes.Unimplemented, "method UserHasActiveStripeSubscription not implemented")
+}
+func (UnimplementedNuzurProductServer) ListMembershipUserProjects(context.Context, *ListMembershipUserProjectsRequest) (*ListMembershipUserProjectsResponse, error) {
+	return nil, status.Errorf(codes.Unimplemented, "method ListMembershipUserProjects not implemented")
+}
+func (UnimplementedNuzurProductServer) RemoveMembershipUser(context.Context, *RemoveMembershipUserRequest) (*RemoveMembershipUserResponse, error) {
+	return nil, status.Errorf(codes.Unimplemented, "method RemoveMembershipUser not implemented")
+}
+func (UnimplementedNuzurProductServer) SendPrioritySupportEmail(context.Context, *PrioritySupportEmailRequest) (*PrioritySupportEmailResponse, error) {
+	return nil, status.Errorf(codes.Unimplemented, "method SendPrioritySupportEmail not implemented")
+}
+func (UnimplementedNuzurProductServer) HandleWebhook(context.Context, *HandleWebhookRequest) (*HandleWebhookResponse, error) {
+	return nil, status.Errorf(codes.Unimplemented, "method HandleWebhook not implemented")
+}
+func (UnimplementedNuzurProductServer) IsProActiveForProject(context.Context, *IsProActiveForProjectRequest) (*IsProActiveForProjectResponse, error) {
+	return nil, status.Errorf(codes.Unimplemented, "method IsProActiveForProject not implemented")
+}
+func (UnimplementedNuzurProductServer) EvaluateEditorUserPrompt(context.Context, *EvaluateEditorUserPromptRequest) (*EvaluateEditorUserPromptResponse, error) {
+	return nil, status.Errorf(codes.Unimplemented, "method EvaluateEditorUserPrompt not implemented")
+}
+func (UnimplementedNuzurProductServer) HandleEditorUserPrompt(context.Context, *HandleEditorUserPromptRequest) (*HandleEditorUserPromptResponse, error) {
+	return nil, status.Errorf(codes.Unimplemented, "method HandleEditorUserPrompt not implemented")
+}
+func (UnimplementedNuzurProductServer) GetEditorUserPromptJob(context.Context, *GetEditorUserPromptJobRequest) (*GetEditorUserPromptJobResponse, error) {
+	return nil, status.Errorf(codes.Unimplemented, "method GetEditorUserPromptJob not implemented")
+}
+func (UnimplementedNuzurProductServer) HandleFollowupEditorUserPrompt(context.Context, *HandleFollowupEditorUserPromptRequest) (*HandleFollowupEditorUserPromptResponse, error) {
+	return nil, status.Errorf(codes.Unimplemented, "method HandleFollowupEditorUserPrompt not implemented")
+}
+func (UnimplementedNuzurProductServer) FinalizeEditorUserPrompt(context.Context, *FinalizeEditorUserPromptRequest) (*FinalizeEditorUserPromptResponse, error) {
+	return nil, status.Errorf(codes.Unimplemented, "method FinalizeEditorUserPrompt not implemented")
 }
 func (UnimplementedNuzurProductServer) mustEmbedUnimplementedNuzurProductServer() {}
 func (UnimplementedNuzurProductServer) testEmbeddedByValue()                      {}
@@ -1453,6 +1715,24 @@ func _NuzurProduct_GetTokenUserRoleForTeam_Handler(srv interface{}, ctx context.
 	}
 	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
 		return srv.(NuzurProductServer).GetTokenUserRoleForTeam(ctx, req.(*GetUserRoleForTeamRequest))
+	}
+	return interceptor(ctx, in, info, handler)
+}
+
+func _NuzurProduct_UpdateTokenUser_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
+	in := new(UpdateUserRequest)
+	if err := dec(in); err != nil {
+		return nil, err
+	}
+	if interceptor == nil {
+		return srv.(NuzurProductServer).UpdateTokenUser(ctx, in)
+	}
+	info := &grpc.UnaryServerInfo{
+		Server:     srv,
+		FullMethod: NuzurProduct_UpdateTokenUser_FullMethodName,
+	}
+	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
+		return srv.(NuzurProductServer).UpdateTokenUser(ctx, req.(*UpdateUserRequest))
 	}
 	return interceptor(ctx, in, info, handler)
 }
@@ -2195,6 +2475,24 @@ func _NuzurProduct_UploadExtensionIcon_Handler(srv interface{}, ctx context.Cont
 	return interceptor(ctx, in, info, handler)
 }
 
+func _NuzurProduct_UploadUserAvatar_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
+	in := new(UploadUserAvatarRequest)
+	if err := dec(in); err != nil {
+		return nil, err
+	}
+	if interceptor == nil {
+		return srv.(NuzurProductServer).UploadUserAvatar(ctx, in)
+	}
+	info := &grpc.UnaryServerInfo{
+		Server:     srv,
+		FullMethod: NuzurProduct_UploadUserAvatar_FullMethodName,
+	}
+	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
+		return srv.(NuzurProductServer).UploadUserAvatar(ctx, req.(*UploadUserAvatarRequest))
+	}
+	return interceptor(ctx, in, info, handler)
+}
+
 func _NuzurProduct_UploadRecordFieldFile_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
 	in := new(UploadRecordFieldFileRequest)
 	if err := dec(in); err != nil {
@@ -2789,6 +3087,258 @@ func _NuzurProduct_MembershipForTeam_Handler(srv interface{}, ctx context.Contex
 	return interceptor(ctx, in, info, handler)
 }
 
+func _NuzurProduct_CreateCheckoutSession_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
+	in := new(CreateCheckoutSessionRequest)
+	if err := dec(in); err != nil {
+		return nil, err
+	}
+	if interceptor == nil {
+		return srv.(NuzurProductServer).CreateCheckoutSession(ctx, in)
+	}
+	info := &grpc.UnaryServerInfo{
+		Server:     srv,
+		FullMethod: NuzurProduct_CreateCheckoutSession_FullMethodName,
+	}
+	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
+		return srv.(NuzurProductServer).CreateCheckoutSession(ctx, req.(*CreateCheckoutSessionRequest))
+	}
+	return interceptor(ctx, in, info, handler)
+}
+
+func _NuzurProduct_ListMembershipUsers_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
+	in := new(ListMembershipUsersRequest)
+	if err := dec(in); err != nil {
+		return nil, err
+	}
+	if interceptor == nil {
+		return srv.(NuzurProductServer).ListMembershipUsers(ctx, in)
+	}
+	info := &grpc.UnaryServerInfo{
+		Server:     srv,
+		FullMethod: NuzurProduct_ListMembershipUsers_FullMethodName,
+	}
+	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
+		return srv.(NuzurProductServer).ListMembershipUsers(ctx, req.(*ListMembershipUsersRequest))
+	}
+	return interceptor(ctx, in, info, handler)
+}
+
+func _NuzurProduct_CancelMembership_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
+	in := new(CancelMembershipRequest)
+	if err := dec(in); err != nil {
+		return nil, err
+	}
+	if interceptor == nil {
+		return srv.(NuzurProductServer).CancelMembership(ctx, in)
+	}
+	info := &grpc.UnaryServerInfo{
+		Server:     srv,
+		FullMethod: NuzurProduct_CancelMembership_FullMethodName,
+	}
+	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
+		return srv.(NuzurProductServer).CancelMembership(ctx, req.(*CancelMembershipRequest))
+	}
+	return interceptor(ctx, in, info, handler)
+}
+
+func _NuzurProduct_UserHasActiveStripeSubscription_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
+	in := new(UserHasActiveStripeSubscriptionRequest)
+	if err := dec(in); err != nil {
+		return nil, err
+	}
+	if interceptor == nil {
+		return srv.(NuzurProductServer).UserHasActiveStripeSubscription(ctx, in)
+	}
+	info := &grpc.UnaryServerInfo{
+		Server:     srv,
+		FullMethod: NuzurProduct_UserHasActiveStripeSubscription_FullMethodName,
+	}
+	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
+		return srv.(NuzurProductServer).UserHasActiveStripeSubscription(ctx, req.(*UserHasActiveStripeSubscriptionRequest))
+	}
+	return interceptor(ctx, in, info, handler)
+}
+
+func _NuzurProduct_ListMembershipUserProjects_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
+	in := new(ListMembershipUserProjectsRequest)
+	if err := dec(in); err != nil {
+		return nil, err
+	}
+	if interceptor == nil {
+		return srv.(NuzurProductServer).ListMembershipUserProjects(ctx, in)
+	}
+	info := &grpc.UnaryServerInfo{
+		Server:     srv,
+		FullMethod: NuzurProduct_ListMembershipUserProjects_FullMethodName,
+	}
+	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
+		return srv.(NuzurProductServer).ListMembershipUserProjects(ctx, req.(*ListMembershipUserProjectsRequest))
+	}
+	return interceptor(ctx, in, info, handler)
+}
+
+func _NuzurProduct_RemoveMembershipUser_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
+	in := new(RemoveMembershipUserRequest)
+	if err := dec(in); err != nil {
+		return nil, err
+	}
+	if interceptor == nil {
+		return srv.(NuzurProductServer).RemoveMembershipUser(ctx, in)
+	}
+	info := &grpc.UnaryServerInfo{
+		Server:     srv,
+		FullMethod: NuzurProduct_RemoveMembershipUser_FullMethodName,
+	}
+	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
+		return srv.(NuzurProductServer).RemoveMembershipUser(ctx, req.(*RemoveMembershipUserRequest))
+	}
+	return interceptor(ctx, in, info, handler)
+}
+
+func _NuzurProduct_SendPrioritySupportEmail_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
+	in := new(PrioritySupportEmailRequest)
+	if err := dec(in); err != nil {
+		return nil, err
+	}
+	if interceptor == nil {
+		return srv.(NuzurProductServer).SendPrioritySupportEmail(ctx, in)
+	}
+	info := &grpc.UnaryServerInfo{
+		Server:     srv,
+		FullMethod: NuzurProduct_SendPrioritySupportEmail_FullMethodName,
+	}
+	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
+		return srv.(NuzurProductServer).SendPrioritySupportEmail(ctx, req.(*PrioritySupportEmailRequest))
+	}
+	return interceptor(ctx, in, info, handler)
+}
+
+func _NuzurProduct_HandleWebhook_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
+	in := new(HandleWebhookRequest)
+	if err := dec(in); err != nil {
+		return nil, err
+	}
+	if interceptor == nil {
+		return srv.(NuzurProductServer).HandleWebhook(ctx, in)
+	}
+	info := &grpc.UnaryServerInfo{
+		Server:     srv,
+		FullMethod: NuzurProduct_HandleWebhook_FullMethodName,
+	}
+	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
+		return srv.(NuzurProductServer).HandleWebhook(ctx, req.(*HandleWebhookRequest))
+	}
+	return interceptor(ctx, in, info, handler)
+}
+
+func _NuzurProduct_IsProActiveForProject_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
+	in := new(IsProActiveForProjectRequest)
+	if err := dec(in); err != nil {
+		return nil, err
+	}
+	if interceptor == nil {
+		return srv.(NuzurProductServer).IsProActiveForProject(ctx, in)
+	}
+	info := &grpc.UnaryServerInfo{
+		Server:     srv,
+		FullMethod: NuzurProduct_IsProActiveForProject_FullMethodName,
+	}
+	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
+		return srv.(NuzurProductServer).IsProActiveForProject(ctx, req.(*IsProActiveForProjectRequest))
+	}
+	return interceptor(ctx, in, info, handler)
+}
+
+func _NuzurProduct_EvaluateEditorUserPrompt_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
+	in := new(EvaluateEditorUserPromptRequest)
+	if err := dec(in); err != nil {
+		return nil, err
+	}
+	if interceptor == nil {
+		return srv.(NuzurProductServer).EvaluateEditorUserPrompt(ctx, in)
+	}
+	info := &grpc.UnaryServerInfo{
+		Server:     srv,
+		FullMethod: NuzurProduct_EvaluateEditorUserPrompt_FullMethodName,
+	}
+	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
+		return srv.(NuzurProductServer).EvaluateEditorUserPrompt(ctx, req.(*EvaluateEditorUserPromptRequest))
+	}
+	return interceptor(ctx, in, info, handler)
+}
+
+func _NuzurProduct_HandleEditorUserPrompt_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
+	in := new(HandleEditorUserPromptRequest)
+	if err := dec(in); err != nil {
+		return nil, err
+	}
+	if interceptor == nil {
+		return srv.(NuzurProductServer).HandleEditorUserPrompt(ctx, in)
+	}
+	info := &grpc.UnaryServerInfo{
+		Server:     srv,
+		FullMethod: NuzurProduct_HandleEditorUserPrompt_FullMethodName,
+	}
+	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
+		return srv.(NuzurProductServer).HandleEditorUserPrompt(ctx, req.(*HandleEditorUserPromptRequest))
+	}
+	return interceptor(ctx, in, info, handler)
+}
+
+func _NuzurProduct_GetEditorUserPromptJob_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
+	in := new(GetEditorUserPromptJobRequest)
+	if err := dec(in); err != nil {
+		return nil, err
+	}
+	if interceptor == nil {
+		return srv.(NuzurProductServer).GetEditorUserPromptJob(ctx, in)
+	}
+	info := &grpc.UnaryServerInfo{
+		Server:     srv,
+		FullMethod: NuzurProduct_GetEditorUserPromptJob_FullMethodName,
+	}
+	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
+		return srv.(NuzurProductServer).GetEditorUserPromptJob(ctx, req.(*GetEditorUserPromptJobRequest))
+	}
+	return interceptor(ctx, in, info, handler)
+}
+
+func _NuzurProduct_HandleFollowupEditorUserPrompt_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
+	in := new(HandleFollowupEditorUserPromptRequest)
+	if err := dec(in); err != nil {
+		return nil, err
+	}
+	if interceptor == nil {
+		return srv.(NuzurProductServer).HandleFollowupEditorUserPrompt(ctx, in)
+	}
+	info := &grpc.UnaryServerInfo{
+		Server:     srv,
+		FullMethod: NuzurProduct_HandleFollowupEditorUserPrompt_FullMethodName,
+	}
+	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
+		return srv.(NuzurProductServer).HandleFollowupEditorUserPrompt(ctx, req.(*HandleFollowupEditorUserPromptRequest))
+	}
+	return interceptor(ctx, in, info, handler)
+}
+
+func _NuzurProduct_FinalizeEditorUserPrompt_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
+	in := new(FinalizeEditorUserPromptRequest)
+	if err := dec(in); err != nil {
+		return nil, err
+	}
+	if interceptor == nil {
+		return srv.(NuzurProductServer).FinalizeEditorUserPrompt(ctx, in)
+	}
+	info := &grpc.UnaryServerInfo{
+		Server:     srv,
+		FullMethod: NuzurProduct_FinalizeEditorUserPrompt_FullMethodName,
+	}
+	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
+		return srv.(NuzurProductServer).FinalizeEditorUserPrompt(ctx, req.(*FinalizeEditorUserPromptRequest))
+	}
+	return interceptor(ctx, in, info, handler)
+}
+
 // NuzurProduct_ServiceDesc is the grpc.ServiceDesc for NuzurProduct service.
 // It's only intended for direct use with grpc.RegisterService,
 // and not to be introspected or modified (even as a copy)
@@ -2815,6 +3365,10 @@ var NuzurProduct_ServiceDesc = grpc.ServiceDesc{
 		{
 			MethodName: "GetTokenUserRoleForTeam",
 			Handler:    _NuzurProduct_GetTokenUserRoleForTeam_Handler,
+		},
+		{
+			MethodName: "UpdateTokenUser",
+			Handler:    _NuzurProduct_UpdateTokenUser_Handler,
 		},
 		{
 			MethodName: "ListUsersForTeam",
@@ -2981,6 +3535,10 @@ var NuzurProduct_ServiceDesc = grpc.ServiceDesc{
 			Handler:    _NuzurProduct_UploadExtensionIcon_Handler,
 		},
 		{
+			MethodName: "UploadUserAvatar",
+			Handler:    _NuzurProduct_UploadUserAvatar_Handler,
+		},
+		{
 			MethodName: "UploadRecordFieldFile",
 			Handler:    _NuzurProduct_UploadRecordFieldFile_Handler,
 		},
@@ -3111,6 +3669,62 @@ var NuzurProduct_ServiceDesc = grpc.ServiceDesc{
 		{
 			MethodName: "MembershipForTeam",
 			Handler:    _NuzurProduct_MembershipForTeam_Handler,
+		},
+		{
+			MethodName: "CreateCheckoutSession",
+			Handler:    _NuzurProduct_CreateCheckoutSession_Handler,
+		},
+		{
+			MethodName: "ListMembershipUsers",
+			Handler:    _NuzurProduct_ListMembershipUsers_Handler,
+		},
+		{
+			MethodName: "CancelMembership",
+			Handler:    _NuzurProduct_CancelMembership_Handler,
+		},
+		{
+			MethodName: "UserHasActiveStripeSubscription",
+			Handler:    _NuzurProduct_UserHasActiveStripeSubscription_Handler,
+		},
+		{
+			MethodName: "ListMembershipUserProjects",
+			Handler:    _NuzurProduct_ListMembershipUserProjects_Handler,
+		},
+		{
+			MethodName: "RemoveMembershipUser",
+			Handler:    _NuzurProduct_RemoveMembershipUser_Handler,
+		},
+		{
+			MethodName: "SendPrioritySupportEmail",
+			Handler:    _NuzurProduct_SendPrioritySupportEmail_Handler,
+		},
+		{
+			MethodName: "HandleWebhook",
+			Handler:    _NuzurProduct_HandleWebhook_Handler,
+		},
+		{
+			MethodName: "IsProActiveForProject",
+			Handler:    _NuzurProduct_IsProActiveForProject_Handler,
+		},
+		{
+			MethodName: "EvaluateEditorUserPrompt",
+			Handler:    _NuzurProduct_EvaluateEditorUserPrompt_Handler,
+		},
+		{
+			MethodName: "HandleEditorUserPrompt",
+			Handler:    _NuzurProduct_HandleEditorUserPrompt_Handler,
+		},
+		{
+			MethodName: "GetEditorUserPromptJob",
+			Handler:    _NuzurProduct_GetEditorUserPromptJob_Handler,
+		},
+		{
+			MethodName: "HandleFollowupEditorUserPrompt",
+			Handler:    _NuzurProduct_HandleFollowupEditorUserPrompt_Handler,
+		},
+		{
+			MethodName: "FinalizeEditorUserPrompt",
+			Handler:    _NuzurProduct_FinalizeEditorUserPrompt_Handler,
 		},
 	},
 	Streams:  []grpc.StreamDesc{},
