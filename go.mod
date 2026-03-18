@@ -30,9 +30,9 @@ require (
 	github.com/gorilla/mux v1.8.1
 	github.com/iancoleman/strcase v0.3.0
 	github.com/nicksnyder/go-i18n/v2 v2.4.1
-	github.com/nuzur/extension-sdk v0.0.64
+	github.com/nuzur/extension-sdk v0.0.68
 	github.com/nuzur/filetools v0.0.3
-	github.com/nuzur/nem v1.0.38
+	github.com/nuzur/nem v1.0.43
 	github.com/urfave/cli v1.22.17
 	go.uber.org/multierr v1.11.0 // indirect
 	golang.org/x/lint v0.0.0-20201208152925-83fdc39ff7b5 // indirect
