@@ -23,7 +23,7 @@ func (i *Implementation) ExtensionUpdateConfigCommand() cli.Command {
 				return err
 			}
 
-			selectedExtension, err := i.SelectExtension(es)
+			selectedExtension, err := i.SelectUserExtension(es)
 			if err != nil {
 				return err
 			}

@@ -27,7 +27,7 @@ func (i *Implementation) ExtensionScaffoldCommand() cli.Command {
 				return err
 			}
 
-			selectedExtension, err := i.SelectExtension(es)
+			selectedExtension, err := i.SelectUserExtension(es)
 			if err != nil {
 				return err
 			}
@@ -65,7 +65,7 @@ func (i *Implementation) ExtensionScaffoldCommand() cli.Command {
 	}
 }
 
-func (i *Implementation) SelectExtension(es *extensionscaffold.Implementation) (*nemgen.Extension, error) {
+func (i *Implementation) SelectUserExtension(es *extensionscaffold.Implementation) (*nemgen.Extension, error) {
 	outputtools.PrintlnColored(i.localize.Localize("extension_scaffold_loading", ""), outputtools.Blue)
 	extensions, err := es.ListUserExtensions()
 	if err != nil {

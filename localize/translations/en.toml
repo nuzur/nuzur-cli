@@ -51,3 +51,9 @@ other = "Login Error"
 
 [extension_update_config_desc]
 other = "Update the configuration for an extension"
+
+[extension_run_desc]
+other = "Run an extension"
+
+[extension_run_path]
+other = "Specify the path to run the extension: (.)"

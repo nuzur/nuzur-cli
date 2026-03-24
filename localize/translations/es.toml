@@ -51,3 +51,9 @@ other = "Error"
 
 [extension_update_config_desc]
 other = "Actualiza la configuración de una extensión"
+
+[extension_run_desc]
+other = "Ejecutar una extensión"
+
+[extension_run_path]
+other = "Indica la ruta para ejecutar la extensión: (.)"

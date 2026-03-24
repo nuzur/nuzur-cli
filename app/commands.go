@@ -8,5 +8,6 @@ func (i *Implementation) Commands() []cli.Command {
 		i.LogoutCommand(),
 		i.ExtensionScaffoldCommand(),
 		i.ExtensionUpdateConfigCommand(),
+		i.ExtensionRunCommand(),
 	}
 }
