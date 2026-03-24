@@ -27,6 +27,31 @@ func (i *Implementation) ExtensionRunCommand() cli.Command {
 				return err
 			}
 
+			// select the project + project version to use first
+
+			// check the user role for the project, if the user is not admin or developer
+			// then show a message that the user does not have access to run the extension and return
+			// if the user is admin or developer, then show the list of extensions of type generator that are public and ask the user to select one
+
+			// then select the extension
+
+			// if the user selects a pro extension, check if the user has pro access for the project
+			// if the user does not have pro access, show a message that the user does not have access to run the extension and return
+
+			// if the user has access:
+			// try to fetch last used extension config and display it
+			// ask the user to confirm if they want to use the same config or update it
+
+			// if the user wants to update or the config does not exist,
+			// then show the config options and ask the user to select/enter the values
+
+			// then ask the user to enter the path to run the extension
+
+			// then run the extension, fetch the output and place it in the specified path
+
+			// if the extension run is successful, show a success message and return to the main menu
+			// if the extension run fails, show an error message and return to the main menu
+
 			extension, err := i.SelectPublicExtension(er)
 			if err != nil {
 				return err
