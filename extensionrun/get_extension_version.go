@@ -17,7 +17,7 @@ func (i *Implementation) GetLatestExtensionVersion(extensionUUID string) (*nemge
 	res, err := i.productClient.ProductClient.ListExtensionVersions(ctx, &gen.ListExtensionVersionsRequest{
 		ExtensionUuid: extensionUUID,
 		PageSize:      100,
-		OrderBy:       "updated_at",
+		OrderBy:       "updated_at desc",
 	})
 	if err != nil {
 		return nil, err

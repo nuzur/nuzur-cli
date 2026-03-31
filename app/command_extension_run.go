@@ -81,6 +81,8 @@ func (i *Implementation) ExtensionRunCommand() cli.Command {
 				return err
 			}
 
+			fmt.Printf("%s: %s (version %s)\n", i.localize.Localize("extension_run_selected", "Selected extension"), extension.DisplayName, extensionVersion.DisplayVersion)
+
 			// load config entity
 			configEntity, err := er.GetConfigEntity(extensionVersion)
 			if err != nil {
