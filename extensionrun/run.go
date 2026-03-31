@@ -137,7 +137,7 @@ func (i *Implementation) pollExtensionExecution(
 			}
 		}
 
-		time.Sleep(1 * time.Second)
+		time.Sleep(500 * time.Millisecond)
 
 		// re-read token in case it was refreshed
 		newToken, err := os.ReadFile(files.TokenFilePath())
