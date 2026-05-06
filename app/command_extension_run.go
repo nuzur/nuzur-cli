@@ -2,6 +2,8 @@ package app
 
 import (
 	"fmt"
+	"regexp"
+	"strings"
 
 	"github.com/manifoldco/promptui"
 	extensiongen "github.com/nuzur/extension-sdk/idl/gen"
@@ -289,7 +291,7 @@ func (i *Implementation) BuildConfigValues(
 					entities, err := er.GetStandaloneEntities(projectVersionUUID)
 					if err != nil || len(entities) == 0 {
 						// fall back to text prompt
-						val, err := runTextPrompt(label, configValueToDisplay(lastVal), field.Required)
+						val, err := runTextPrompt(label, configValueToDisplay(lastVal), field.Required, isIdentifierField(field.Identifier))
 						if err != nil {
 							return nil, err
 						}
@@ -325,7 +327,7 @@ func (i *Implementation) BuildConfigValues(
 				case extensiongen.EntityType_ENTITY_TYPE_DB_CONNECTION:
 					connections, err := er.GetTeamConnections(project.TeamUuid)
 					if err != nil || len(connections) == 0 {
-						val, err := runTextPrompt(label, configValueToDisplay(lastVal), field.Required)
+						val, err := runTextPrompt(label, configValueToDisplay(lastVal), field.Required, isIdentifierField(field.Identifier))
 						if err != nil {
 							return nil, err
 						}
@@ -361,7 +363,7 @@ func (i *Implementation) BuildConfigValues(
 				case extensiongen.EntityType_ENTITY_TYPE_DB_STORE:
 					stores, err := er.GetTeamObjectStores(project.TeamUuid)
 					if err != nil || len(stores) == 0 {
-						val, err := runTextPrompt(label, configValueToDisplay(lastVal), field.Required)
+						val, err := runTextPrompt(label, configValueToDisplay(lastVal), field.Required, isIdentifierField(field.Identifier))
 						if err != nil {
 							return nil, err
 						}
@@ -395,14 +397,14 @@ func (i *Implementation) BuildConfigValues(
 					}
 
 				default:
-					val, err := runTextPrompt(label, configValueToDisplay(lastVal), field.Required)
+					val, err := runTextPrompt(label, configValueToDisplay(lastVal), field.Required, isIdentifierField(field.Identifier))
 					if err != nil {
 						return nil, err
 					}
 					values[field.Identifier] = val
 				}
 			} else {
-				val, err := runTextPrompt(label, configValueToDisplay(lastVal), field.Required)
+				val, err := runTextPrompt(label, configValueToDisplay(lastVal), field.Required, isIdentifierField(field.Identifier))
 				if err != nil {
 					return nil, err
 				}
@@ -500,7 +502,7 @@ func (i *Implementation) BuildConfigValues(
 				}
 			} else {
 				// no options configured — fall back to text
-				val, err := runTextPrompt(label, configValueToDisplay(lastVal), field.Required)
+				val, err := runTextPrompt(label, configValueToDisplay(lastVal), field.Required, isIdentifierField(field.Identifier))
 				if err != nil {
 					return nil, err
 				}
@@ -649,7 +651,7 @@ func (i *Implementation) BuildConfigValues(
 
 		default:
 			// STRING, UUID, INTEGER, FLOAT, DATE, DATETIME — text prompt
-			val, err := runTextPrompt(label, configValueToDisplay(lastVal), field.Required)
+			val, err := runTextPrompt(label, configValueToDisplay(lastVal), field.Required, isIdentifierField(field.Identifier))
 			if err != nil {
 				return nil, err
 			}
@@ -686,18 +688,26 @@ func configValueToDisplay(v interface{}) string {
 	}
 }
 
-func runTextPrompt(label, defaultVal string, required bool) (string, error) {
+var identifierRe = regexp.MustCompile(`^[a-z0-9_]+$`)
+
+func isIdentifierField(fieldIdentifier string) bool {
+	return strings.Contains(strings.ToLower(fieldIdentifier), "identifier")
+}
+
+func runTextPrompt(label, defaultVal string, required bool, isIdentifier ...bool) (string, error) {
 	p := promptui.Prompt{
 		Label:   label,
 		Default: defaultVal,
 	}
-	if required {
-		p.Validate = func(s string) error {
-			if s == "" {
-				return fmt.Errorf("this field is required")
-			}
-			return nil
+	identifierMode := len(isIdentifier) > 0 && isIdentifier[0]
+	p.Validate = func(s string) error {
+		if required && s == "" {
+			return fmt.Errorf("this field is required")
 		}
+		if identifierMode && s != "" && !identifierRe.MatchString(s) {
+			return fmt.Errorf("only lowercase letters, numbers and underscores are allowed")
+		}
+		return nil
 	}
 	return p.Run()
 }
