@@ -14,6 +14,9 @@ import (
 	"path/filepath"
 	"time"
 
+	"google.golang.org/grpc/codes"
+	"google.golang.org/grpc/status"
+
 	extensiongen "github.com/nuzur/extension-sdk/idl/gen"
 	nemgen "github.com/nuzur/nem/idl/gen"
 	"github.com/nuzur/nuzur-cli/constants"
@@ -343,17 +346,17 @@ func (i *Implementation) SaveLastUsedConfig(projectVersionUUID string, configs m
 		return err
 	}
 
-	// fetch existing data to preserve other keys
+	// fetch existing data to preserve other keys; NotFound means no record yet, which is fine
 	res, err := i.productClient.ProductClient.GetUserProjectVersionData(ctx, &gen.GetUserProjectVersionDataRequest{
 		ProjectVersionUuid: projectVersionUUID,
 	})
-	if err != nil {
+	if err != nil && status.Code(err) != codes.NotFound {
 		return err
 	}
 
 	// unmarshal into a generic map so we don't clobber other top-level keys
 	raw := make(map[string]json.RawMessage)
-	if res.Data != "" {
+	if err == nil && res.Data != "" {
 		if err := json.Unmarshal([]byte(res.Data), &raw); err != nil {
 			raw = make(map[string]json.RawMessage)
 		}
