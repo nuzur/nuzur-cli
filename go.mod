@@ -1,11 +1,11 @@
 module github.com/nuzur/nuzur-cli
 
-go 1.24.0
+go 1.26.0
 
 require (
 	github.com/manifoldco/promptui v0.9.0
 	go.uber.org/config v1.4.0
-	google.golang.org/protobuf v1.36.8
+	google.golang.org/protobuf v1.36.11
 )
 
 require (
@@ -18,9 +18,9 @@ require (
 	github.com/pkg/errors v0.9.1 // indirect
 	github.com/russross/blackfriday/v2 v2.1.0 // indirect
 	github.com/segmentio/ksuid v1.0.4 // indirect
-	golang.org/x/net v0.41.0 // indirect
-	golang.org/x/sys v0.34.0 // indirect
-	google.golang.org/genproto/googleapis/rpc v0.0.0-20250707201910-8d1bb00bc6a7 // indirect
+	golang.org/x/net v0.54.0 // indirect
+	golang.org/x/sys v0.45.0 // indirect
+	google.golang.org/genproto/googleapis/rpc v0.0.0-20260120221211-b8f7ae30c516 // indirect
 )
 
 require (
@@ -32,12 +32,12 @@ require (
 	github.com/nicksnyder/go-i18n/v2 v2.4.1
 	github.com/nuzur/extension-sdk v0.0.68
 	github.com/nuzur/filetools v0.0.3
-	github.com/nuzur/nem v1.0.43
+	github.com/nuzur/nem v1.0.46
 	github.com/urfave/cli v1.22.17
 	go.uber.org/multierr v1.11.0 // indirect
 	golang.org/x/lint v0.0.0-20201208152925-83fdc39ff7b5 // indirect
-	golang.org/x/text v0.26.0
-	golang.org/x/tools v0.34.0 // indirect
-	google.golang.org/grpc v1.75.0
+	golang.org/x/text v0.37.0
+	golang.org/x/tools v0.45.0 // indirect
+	google.golang.org/grpc v1.80.0
 	gopkg.in/yaml.v2 v2.4.0 // indirect
 )
