@@ -5,6 +5,7 @@ import (
 	"os"
 	"path"
 	"runtime"
+	"strings"
 
 	"github.com/nuzur/nuzur-cli/constants"
 	"github.com/nuzur/nuzur-cli/files"
@@ -19,6 +20,7 @@ func (i *Implementation) AgentCommand() cli.Command {
 		Usage: i.localize.Localize("agent_desc", "Manage the local nuzur agent running on this machine"),
 		Subcommands: []cli.Command{
 			i.AgentPairCommand(),
+			i.AgentUnpairCommand(),
 			i.AgentListCommand(),
 			i.AgentRevokeCommand(),
 			i.AgentStartCommand(),
@@ -31,7 +33,25 @@ func (i *Implementation) AgentPairCommand() cli.Command {
 	return cli.Command{
 		Name:  "pair",
 		Usage: i.localize.Localize("agent_pair_desc", "Pair this machine as a local agent (registers with nuzur cloud)"),
+		Flags: []cli.Flag{
+			cli.BoolFlag{
+				Name:  "force, f",
+				Usage: "re-pair even if this machine is already paired (the previous pairing is NOT revoked; use `nuzur agent unpair` first if you want a clean rotate)",
+			},
+		},
 		Action: func(c *cli.Context) error {
+			// Refuse to silently overwrite an existing pairing — that creates
+			// orphan OFFLINE rows on the server with no way to clean them up
+			// from this machine. The user can opt in with --force.
+			if existing, _ := readExistingPairingUUID(); existing != "" && !c.Bool("force") {
+				return fmt.Errorf(
+					"this machine is already paired (uuid: %s)\n"+
+						"  to rotate credentials cleanly, run: nuzur agent unpair\n"+
+						"  or re-pair while keeping the old row: nuzur agent pair --force",
+					existing,
+				)
+			}
+
 			if err := i.Login(); err != nil {
 				return err
 			}
@@ -60,6 +80,16 @@ func (i *Implementation) AgentPairCommand() cli.Command {
 			return nil
 		},
 	}
+}
+
+// readExistingPairingUUID returns the uuid in the local creds file if any,
+// trimmed of whitespace. Empty string means "no pairing on disk".
+func readExistingPairingUUID() (string, error) {
+	b, err := os.ReadFile(files.LocalAgentUUIDFilePath())
+	if err != nil {
+		return "", err
+	}
+	return strings.TrimSpace(string(b)), nil
 }
 
 func (i *Implementation) AgentListCommand() cli.Command {
