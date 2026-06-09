@@ -247,15 +247,21 @@ func readTrimmedFile(p string) (string, error) {
 }
 
 // maskDSN returns a display-safe representation of a DSN with the password
-// hidden, regardless of driver dialect. Best-effort heuristic; never logs the
-// raw secret.
+// hidden, regardless of driver dialect. We distinguish "(empty)" from a real
+// hidden value so the user can spot a missing password at startup.
 func maskDSN(dsn string) string {
 	const mask = "***"
+	const empty = "(empty)"
 
 	// MySQL DSN form: user:pass@tcp(host:port)/db
 	if i := strings.Index(dsn, ":"); i > 0 {
 		if j := strings.Index(dsn[i+1:], "@"); j >= 0 {
-			return dsn[:i+1] + mask + dsn[i+1+j:]
+			pwd := dsn[i+1 : i+1+j]
+			placeholder := mask
+			if pwd == "" {
+				placeholder = empty
+			}
+			return dsn[:i+1] + placeholder + dsn[i+1+j:]
 		}
 	}
 
@@ -265,7 +271,11 @@ func maskDSN(dsn string) string {
 		fields := strings.Fields(dsn)
 		for idx, f := range fields {
 			if strings.HasPrefix(f, "password=") {
-				out = append(out, []rune("password="+mask)...)
+				placeholder := mask
+				if f == "password=" {
+					placeholder = empty
+				}
+				out = append(out, []rune("password="+placeholder)...)
 			} else {
 				out = append(out, []rune(f)...)
 			}
