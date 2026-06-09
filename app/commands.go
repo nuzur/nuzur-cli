@@ -9,5 +9,6 @@ func (i *Implementation) Commands() []cli.Command {
 		i.ExtensionScaffoldCommand(),
 		i.ExtensionUpdateConfigCommand(),
 		i.ExtensionRunCommand(),
+		i.AgentCommand(),
 	}
 }

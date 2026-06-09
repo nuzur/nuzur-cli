@@ -7,6 +7,7 @@ import (
 
 	"github.com/nuzur/nuzur-cli/auth"
 	nuzurconfig "github.com/nuzur/nuzur-cli/config"
+	"github.com/nuzur/nuzur-cli/constants"
 	"github.com/nuzur/nuzur-cli/localize"
 	"github.com/nuzur/nuzur-cli/productclient"
 	"github.com/urfave/cli"
@@ -64,7 +65,7 @@ func initCliApp(imp Implementation) *cli.App {
 	cliapp := cli.NewApp()
 	cliapp.Name = "Nuzur CLI"
 	cliapp.Usage = imp.localize.Localize("app_usage", "Manage your nuzur projects and extensions")
-	cliapp.Version = "0.0.11"
+	cliapp.Version = constants.CLI_VERSION
 	cliapp.Author = "nuzur"
 	cliapp.Description = imp.localize.Localize("app_desc", "Nuzur CLI tools for developers to manage projects and extensions")
 
