@@ -3,12 +3,16 @@ module github.com/nuzur/nuzur-cli
 go 1.26.0
 
 require (
+	github.com/go-sql-driver/mysql v1.9.3
+	github.com/jmoiron/sqlx v1.3.5
+	github.com/lib/pq v1.2.0
 	github.com/manifoldco/promptui v0.9.0
 	go.uber.org/config v1.4.0
 	google.golang.org/protobuf v1.36.11
 )
 
 require (
+	filippo.io/edwards25519 v1.1.1 // indirect
 	github.com/chzyer/readline v0.0.0-20180603132655-2972be24d48e // indirect
 	github.com/cpuguy83/go-md2man/v2 v2.0.7 // indirect
 	github.com/go-resty/resty/v2 v2.7.0 // indirect

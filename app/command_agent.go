@@ -21,6 +21,8 @@ func (i *Implementation) AgentCommand() cli.Command {
 			i.AgentPairCommand(),
 			i.AgentListCommand(),
 			i.AgentRevokeCommand(),
+			i.AgentStartCommand(),
+			i.AgentSelfTestCommand(),
 		},
 	}
 }
