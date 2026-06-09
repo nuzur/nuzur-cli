@@ -150,30 +150,74 @@ func promptDriver() (string, error) {
 	return val, nil
 }
 
+// promptDSN walks the user through field-by-field connection details and
+// assembles a driver-appropriate DSN. Typing a full mysql/postgres DSN string
+// by hand is brittle (escape rules, parseTime=true gotchas, sslmode); asking
+// for host / port / user / password / database with defaults is much friendlier.
 func promptDSN(driver string) (string, error) {
-	var example string
-	switch driver {
-	case "mysql":
-		example = "user:pass@tcp(127.0.0.1:3306)/dbname?parseTime=true"
-	case "postgres":
-		example = "host=127.0.0.1 port=5432 user=user password=pass dbname=db sslmode=disable"
+	defaultPort, defaultUser := "3306", "root"
+	if driver == "postgres" {
+		defaultPort, defaultUser = "5432", "postgres"
 	}
-	label := fmt.Sprintf("Enter the %s connection string (example: %s)", driver, example)
-	p := promptui.Prompt{
-		Label: label,
-		Mask:  '*',
-		Validate: func(s string) error {
-			if strings.TrimSpace(s) == "" {
-				return errors.New("DSN cannot be empty")
-			}
-			return nil
-		},
-	}
-	val, err := p.Run()
+
+	host, err := promptShort("Host", "127.0.0.1", false, requireNonEmpty)
 	if err != nil {
 		return "", err
 	}
-	return strings.TrimSpace(val), nil
+	port, err := promptShort("Port", defaultPort, false, requireNonEmpty)
+	if err != nil {
+		return "", err
+	}
+	user, err := promptShort("User", defaultUser, false, requireNonEmpty)
+	if err != nil {
+		return "", err
+	}
+	password, err := promptShort("Password", "", true, nil)
+	if err != nil {
+		return "", err
+	}
+	database, err := promptShort("Database", "", false, requireNonEmpty)
+	if err != nil {
+		return "", err
+	}
+
+	switch driver {
+	case "mysql":
+		// parseTime=true is effectively required when scanning Go time.Time
+		// values from MySQL; bake it in so users don't get bitten later.
+		return fmt.Sprintf("%s:%s@tcp(%s:%s)/%s?parseTime=true",
+			user, password, host, port, database), nil
+	case "postgres":
+		// sslmode=disable is the local-dev default; users can edit the saved
+		// file or re-run with --dsn for hosted PG that needs verify-full.
+		return fmt.Sprintf("host=%s port=%s user=%s password=%s dbname=%s sslmode=disable",
+			host, port, user, password, database), nil
+	default:
+		return "", fmt.Errorf("unsupported driver %q", driver)
+	}
+}
+
+func promptShort(label, defaultVal string, mask bool, validate promptui.ValidateFunc) (string, error) {
+	p := promptui.Prompt{
+		Label:    label,
+		Default:  defaultVal,
+		Validate: validate,
+	}
+	if mask {
+		p.Mask = '*'
+	}
+	v, err := p.Run()
+	if err != nil {
+		return "", err
+	}
+	return v, nil
+}
+
+func requireNonEmpty(s string) error {
+	if strings.TrimSpace(s) == "" {
+		return errors.New("required")
+	}
+	return nil
 }
 
 func isSupportedDriver(driver string) bool {

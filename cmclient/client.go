@@ -14,8 +14,9 @@ import (
 // Client is the CLI-side gRPC client for the connection-manager service.
 // Used by the agent daemon to dial LocalAgentChannel.
 type Client struct {
-	conn *grpc.ClientConn
-	CM   pb.NuzurConnectionManagerClient
+	conn    *grpc.ClientConn
+	CM      pb.NuzurConnectionManagerClient
+	Address string // the resolved target, for diagnostics
 }
 
 type Params struct {
@@ -50,8 +51,9 @@ func New(params Params) (*Client, error) {
 		return nil, err
 	}
 	return &Client{
-		conn: conn,
-		CM:   pb.NewNuzurConnectionManagerClient(conn),
+		conn:    conn,
+		CM:      pb.NewNuzurConnectionManagerClient(conn),
+		Address: address,
 	}, nil
 }
 

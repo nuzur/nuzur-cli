@@ -17,6 +17,7 @@ import (
 	"io"
 	"log"
 	"os"
+	"strings"
 	"time"
 
 	"github.com/jmoiron/sqlx"
@@ -68,6 +69,7 @@ func Run(ctx context.Context, opts DaemonOptions) error {
 		return fmt.Errorf("error building cm client: %w", err)
 	}
 	defer cm.Close()
+	log.Printf("dialing connection-manager at %s (tls=%t)", cm.Address, !opts.DisableTLS)
 
 	driver := opts.Driver
 	if driver == "" {
@@ -257,5 +259,7 @@ func loadCredentials() (string, string, error) {
 	if err != nil {
 		return "", "", err
 	}
-	return string(uuidBytes), string(tokenBytes), nil
+	// Trim whitespace: text editors and shell redirection sometimes append a
+	// trailing newline that would otherwise break the server-side filter match.
+	return strings.TrimSpace(string(uuidBytes)), strings.TrimSpace(string(tokenBytes)), nil
 }
