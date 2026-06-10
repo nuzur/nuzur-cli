@@ -54,19 +54,17 @@ func (i *Implementation) AgentConnectionAddCommand() cli.Command {
 				return err
 			}
 
-			// MySQL treats "database" and "schema" as synonyms — asking both
-			// is just confusing. The database from the DSN doubles as the
-			// catalog's default_schema. Postgres genuinely separates them
-			// (a database contains many schemas), so we still prompt there
-			// with the DB name as the default.
+			// MySQL LOCAL connections no longer pin a database in the DSN —
+			// the user picks the schema per query in the web. So default_schema
+			// stays empty for mysql and the picker forces a selection. Postgres
+			// still needs a default schema within the connected database, so we
+			// prompt for it (defaulting to `public`).
 			var defaultSchema string
 			if driver == "postgres" {
 				defaultSchema, err = promptShort("Default schema (within "+database+")", "public", false, requireNonEmpty)
 				if err != nil {
 					return err
 				}
-			} else {
-				defaultSchema = database
 			}
 
 			entry, err := reg.Add(connections.Entry{

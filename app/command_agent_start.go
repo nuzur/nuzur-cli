@@ -197,9 +197,15 @@ func promptDSN(driver string) (string, error) {
 	return dsn, err
 }
 
-// promptDSNDetails walks the same prompts as promptDSN and also returns the
-// database name separately so callers can reuse it (e.g. as the catalog's
-// default_schema for MySQL, where database == schema).
+// promptDSNDetails walks the user through host/port/user/password and,
+// for postgres only, a database. mysql LOCAL connections deliberately omit
+// the database from the DSN so a single connection can be reused across
+// schemas (the cm sends `USE <schema>` per-query); postgres still needs
+// a target database because schemas live within a database.
+//
+// `database` is returned for the postgres case so callers can seed the
+// catalog's default_schema; for mysql it's always "" and the user picks
+// a schema at query time in the web UI.
 func promptDSNDetails(driver string) (dsn string, database string, err error) {
 	defaultPort, defaultUser := "3306", "root"
 	if driver == "postgres" {
@@ -222,18 +228,20 @@ func promptDSNDetails(driver string) (dsn string, database string, err error) {
 	if err != nil {
 		return "", "", err
 	}
-	database, err = promptShort("Database", "", false, requireNonEmpty)
-	if err != nil {
-		return "", "", err
-	}
 
 	switch driver {
 	case "mysql":
-		// parseTime=true is effectively required when scanning Go time.Time
-		// values from MySQL; bake it in so users don't get bitten later.
-		return fmt.Sprintf("%s:%s@tcp(%s:%s)/%s?parseTime=true",
-			user, password, host, port, database), database, nil
+		// No database in the DSN — the user picks the schema per query in the
+		// web UI; the agent's handlers issue `USE` on each conn before the
+		// actual SQL runs. parseTime=true stays as it's needed for time.Time
+		// scans.
+		return fmt.Sprintf("%s:%s@tcp(%s:%s)/?parseTime=true",
+			user, password, host, port), "", nil
 	case "postgres":
+		database, err = promptShort("Database", "", false, requireNonEmpty)
+		if err != nil {
+			return "", "", err
+		}
 		// sslmode=disable is the local-dev default; users can edit the saved
 		// file or re-run with --dsn for hosted PG that needs verify-full.
 		return fmt.Sprintf("host=%s port=%s user=%s password=%s dbname=%s sslmode=disable",

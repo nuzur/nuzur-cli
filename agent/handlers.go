@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"reflect"
 	"strconv"
+	"strings"
 	"time"
 
 	"github.com/jmoiron/sqlx"
@@ -30,11 +31,12 @@ type queryer interface {
 // messages back as rows are scanned so the cloud can start consuming before
 // the agent has the full result in memory.
 func handleRunQuery(ctx context.Context, stream pb.NuzurConnectionManager_LocalAgentChannelClient, pool *dbPool, txs *txPool, req *pb.RunQueryRequest) {
-	q, err := resolveQueryer(pool, txs, req.GetLocalAgentConnectionUuid(), req.GetTxId())
+	q, release, err := resolveQueryerWithSchema(ctx, pool, txs, req.GetLocalAgentConnectionUuid(), req.GetTxId(), req.GetSchema())
 	if err != nil {
 		sendQueryError(stream, req.GetRequestId(), err.Error())
 		return
 	}
+	defer release()
 
 	args := stringArgsToAny(req.GetArgs())
 	rows, err := q.QueryxContext(ctx, req.GetSql(), args...)
@@ -93,11 +95,12 @@ func handleRunQuery(ctx context.Context, stream pb.NuzurConnectionManager_LocalA
 
 // handleExec runs non-row-returning SQL. INSERT / UPDATE / DELETE / DDL.
 func handleExec(ctx context.Context, stream pb.NuzurConnectionManager_LocalAgentChannelClient, pool *dbPool, txs *txPool, req *pb.ExecRequest) {
-	q, err := resolveQueryer(pool, txs, req.GetLocalAgentConnectionUuid(), req.GetTxId())
+	q, release, err := resolveQueryerWithSchema(ctx, pool, txs, req.GetLocalAgentConnectionUuid(), req.GetTxId(), req.GetSchema())
 	if err != nil {
 		sendQueryError(stream, req.GetRequestId(), err.Error())
 		return
 	}
+	defer release()
 
 	args := stringArgsToAny(req.GetArgs())
 	res, err := q.ExecContext(ctx, req.GetSql(), args...)
@@ -117,7 +120,9 @@ func handleExec(ctx context.Context, stream pb.NuzurConnectionManager_LocalAgent
 }
 
 // handleBeginTx opens a fresh *sqlx.Tx against the requested local connection
-// and stores it in the tx pool, returning the agent-side tx_id.
+// and stores it in the tx pool, returning the agent-side tx_id. If schema is
+// set, we apply it (USE / SET search_path) inside the tx so all subsequent
+// queries on this tx_id inherit the schema without each having to repeat it.
 func handleBeginTx(ctx context.Context, stream pb.NuzurConnectionManager_LocalAgentChannelClient, pool *dbPool, txs *txPool, req *pb.BeginTxRequest) {
 	db, err := pool.Get(req.GetLocalAgentConnectionUuid())
 	if err != nil {
@@ -128,6 +133,13 @@ func handleBeginTx(ctx context.Context, stream pb.NuzurConnectionManager_LocalAg
 	if err != nil {
 		sendQueryError(stream, req.GetRequestId(), err.Error())
 		return
+	}
+	if schema := req.GetSchema(); schema != "" {
+		if err := applySchemaToExecer(ctx, tx, db.DriverName(), schema); err != nil {
+			_ = tx.Rollback()
+			sendQueryError(stream, req.GetRequestId(), err.Error())
+			return
+		}
 	}
 	txID := txs.Add(tx)
 	_ = stream.Send(&pb.LocalAgentToServer{Message: &pb.LocalAgentToServer_BeginTxResponse{
@@ -172,17 +184,66 @@ func handleRollback(stream pb.NuzurConnectionManager_LocalAgentChannelClient, tx
 	}})
 }
 
-// resolveQueryer picks the right *sqlx.DB or *sqlx.Tx to run the SQL against.
-// tx_id wins when set; otherwise we use the configured connection pool.
-func resolveQueryer(pool *dbPool, txs *txPool, connUUID, txID string) (queryer, error) {
+// resolveQueryerWithSchema picks the right backend to run the SQL against,
+// applying the requested schema if any. Resolution:
+//   - tx_id non-empty: use the open *sqlx.Tx. Schema was already applied at
+//     BeginTx and persists for the whole tx — we ignore the schema param here
+//     to avoid stomping it (and to skip redundant USE work).
+//   - tx_id empty + schema empty: use the pool *sqlx.DB directly.
+//   - tx_id empty + schema set: acquire a single *sqlx.Conn from the pool,
+//     apply `USE <schema>` (mysql) or `SET search_path TO <schema>` (postgres),
+//     and run the actual SQL on that conn. The returned release closure
+//     hands the conn back to the pool when the caller is done.
+func resolveQueryerWithSchema(ctx context.Context, pool *dbPool, txs *txPool, connUUID, txID, schema string) (queryer, func(), error) {
+	noop := func() {}
 	if txID != "" {
 		tx, ok := txs.Get(txID)
 		if !ok {
-			return nil, &resolveErr{msg: "unknown tx_id (possibly idle-reaped)"}
+			return nil, noop, &resolveErr{msg: "unknown tx_id (possibly idle-reaped)"}
 		}
-		return tx, nil
+		return tx, noop, nil
 	}
-	return pool.Get(connUUID)
+	db, err := pool.Get(connUUID)
+	if err != nil {
+		return nil, noop, err
+	}
+	if schema == "" {
+		return db, noop, nil
+	}
+	conn, err := db.Connx(ctx)
+	if err != nil {
+		return nil, noop, fmt.Errorf("acquire conn for schema apply: %w", err)
+	}
+	if err := applySchemaToExecer(ctx, conn, db.DriverName(), schema); err != nil {
+		_ = conn.Close()
+		return nil, noop, err
+	}
+	return conn, func() { _ = conn.Close() }, nil
+}
+
+// applySchemaToExecer pins the active database/schema on the given conn or tx
+// for the duration of its lifetime. mysql uses `USE`; postgres uses
+// `SET search_path TO`. Identifiers are quoted to neutralize anything funky
+// in the schema name; we still error out if the underlying server rejects it.
+func applySchemaToExecer(ctx context.Context, e interface {
+	ExecContext(ctx context.Context, query string, args ...interface{}) (sql.Result, error)
+}, driver, schema string) error {
+	switch driver {
+	case "mysql":
+		quoted := "`" + strings.ReplaceAll(schema, "`", "``") + "`"
+		if _, err := e.ExecContext(ctx, "USE "+quoted); err != nil {
+			return fmt.Errorf("USE %s: %w", quoted, err)
+		}
+	case "postgres":
+		quoted := `"` + strings.ReplaceAll(schema, `"`, `""`) + `"`
+		if _, err := e.ExecContext(ctx, "SET search_path TO "+quoted); err != nil {
+			return fmt.Errorf("SET search_path TO %s: %w", quoted, err)
+		}
+	default:
+		// Unknown driver — skip silently. The query may still work if the
+		// SQL fully qualifies its table names.
+	}
+	return nil
 }
 
 type resolveErr struct{ msg string }
