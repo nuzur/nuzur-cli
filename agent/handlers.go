@@ -4,6 +4,7 @@ import (
 	"context"
 	"database/sql"
 	"fmt"
+	"reflect"
 	"strconv"
 	"time"
 
@@ -203,7 +204,7 @@ func buildColumnMetadata(cols []string, cts []*sql.ColumnType) []*pb.ColumnMetad
 		if i < len(cts) {
 			dbTypeName = cts[i].DatabaseTypeName()
 			if st := cts[i].ScanType(); st != nil {
-				scanHint = st.Kind().String()
+				scanHint = scanTypeHint(st)
 			}
 		}
 		out[i] = &pb.ColumnMetadata{
@@ -213,6 +214,29 @@ func buildColumnMetadata(cols []string, cts []*sql.ColumnType) []*pb.ColumnMetad
 		}
 	}
 	return out
+}
+
+// scanTypeHint produces the over-the-wire hint string for a column's Go scan
+// type. Plain Kind().String() works for the trivial cases (int64 / float64 /
+// string / bool / slice) but is useless for struct-shaped types like time.Time
+// or sql.NullXxx — they all collapse to "struct" and the cm side can't tell
+// them apart. We special-case the common shapes.
+func scanTypeHint(t reflect.Type) string {
+	switch t {
+	case reflect.TypeOf(time.Time{}):
+		return "time"
+	case reflect.TypeOf(sql.NullTime{}):
+		return "null_time"
+	case reflect.TypeOf(sql.NullString{}):
+		return "null_string"
+	case reflect.TypeOf(sql.NullInt64{}):
+		return "null_int64"
+	case reflect.TypeOf(sql.NullFloat64{}):
+		return "null_float64"
+	case reflect.TypeOf(sql.NullBool{}):
+		return "null_bool"
+	}
+	return t.Kind().String()
 }
 
 // encodeValue turns a Go value (whatever the SQL driver scanned) into a
