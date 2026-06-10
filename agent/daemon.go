@@ -95,11 +95,23 @@ func Run(ctx context.Context, opts DaemonOptions) error {
 
 	backoff := reconnectInitial
 	for {
-		if err := runOnce(ctx, cm, agentUUID, agentToken, pool, txs); err != nil {
+		err := runOnce(ctx, cm, agentUUID, agentToken, pool, txs)
+		if err != nil {
 			if ctx.Err() != nil {
 				return ctx.Err()
 			}
 			log.Printf("daemon stream ended: %v — reconnecting in %s", err, backoff)
+		}
+		// Whether the stream ended cleanly or with an error, the cloud side
+		// has dropped any tx_id state tied to the dead session. Rolling back
+		// the agent's open transactions here matches that — otherwise the
+		// next session inherits stale tx_ids that the cloud can't reference
+		// and the underlying DB connections stay pinned indefinitely.
+		txs.CloseAll()
+		// On a successful Hello/Welcome (no error), reset backoff so the
+		// next failure starts fresh at 1s instead of compounding.
+		if err == nil {
+			backoff = reconnectInitial
 		}
 		select {
 		case <-ctx.Done():
