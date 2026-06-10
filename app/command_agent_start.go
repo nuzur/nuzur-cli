@@ -193,6 +193,14 @@ func promptDriver() (string, error) {
 // by hand is brittle (escape rules, parseTime=true gotchas, sslmode); asking
 // for host / port / user / password / database with defaults is much friendlier.
 func promptDSN(driver string) (string, error) {
+	dsn, _, err := promptDSNDetails(driver)
+	return dsn, err
+}
+
+// promptDSNDetails walks the same prompts as promptDSN and also returns the
+// database name separately so callers can reuse it (e.g. as the catalog's
+// default_schema for MySQL, where database == schema).
+func promptDSNDetails(driver string) (dsn string, database string, err error) {
 	defaultPort, defaultUser := "3306", "root"
 	if driver == "postgres" {
 		defaultPort, defaultUser = "5432", "postgres"
@@ -200,23 +208,23 @@ func promptDSN(driver string) (string, error) {
 
 	host, err := promptShort("Host", "127.0.0.1", false, requireNonEmpty)
 	if err != nil {
-		return "", err
+		return "", "", err
 	}
 	port, err := promptShort("Port", defaultPort, false, requireNonEmpty)
 	if err != nil {
-		return "", err
+		return "", "", err
 	}
 	user, err := promptShort("User", defaultUser, false, requireNonEmpty)
 	if err != nil {
-		return "", err
+		return "", "", err
 	}
 	password, err := promptShort("Password", "", true, nil)
 	if err != nil {
-		return "", err
+		return "", "", err
 	}
-	database, err := promptShort("Database", "", false, requireNonEmpty)
+	database, err = promptShort("Database", "", false, requireNonEmpty)
 	if err != nil {
-		return "", err
+		return "", "", err
 	}
 
 	switch driver {
@@ -224,14 +232,14 @@ func promptDSN(driver string) (string, error) {
 		// parseTime=true is effectively required when scanning Go time.Time
 		// values from MySQL; bake it in so users don't get bitten later.
 		return fmt.Sprintf("%s:%s@tcp(%s:%s)/%s?parseTime=true",
-			user, password, host, port, database), nil
+			user, password, host, port, database), database, nil
 	case "postgres":
 		// sslmode=disable is the local-dev default; users can edit the saved
 		// file or re-run with --dsn for hosted PG that needs verify-full.
 		return fmt.Sprintf("host=%s port=%s user=%s password=%s dbname=%s sslmode=disable",
-			host, port, user, password, database), nil
+			host, port, user, password, database), database, nil
 	default:
-		return "", fmt.Errorf("unsupported driver %q", driver)
+		return "", "", fmt.Errorf("unsupported driver %q", driver)
 	}
 }
 

@@ -49,13 +49,24 @@ func (i *Implementation) AgentConnectionAddCommand() cli.Command {
 			if err != nil {
 				return err
 			}
-			dsn, err := promptDSN(driver)
+			dsn, database, err := promptDSNDetails(driver)
 			if err != nil {
 				return err
 			}
-			defaultSchema, err := promptShort("Default schema (optional, press Enter to skip)", "", false, nil)
-			if err != nil {
-				return err
+
+			// MySQL treats "database" and "schema" as synonyms — asking both
+			// is just confusing. The database from the DSN doubles as the
+			// catalog's default_schema. Postgres genuinely separates them
+			// (a database contains many schemas), so we still prompt there
+			// with the DB name as the default.
+			var defaultSchema string
+			if driver == "postgres" {
+				defaultSchema, err = promptShort("Default schema (within "+database+")", "public", false, requireNonEmpty)
+				if err != nil {
+					return err
+				}
+			} else {
+				defaultSchema = database
 			}
 
 			entry, err := reg.Add(connections.Entry{
