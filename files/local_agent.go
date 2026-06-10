@@ -29,3 +29,11 @@ func LocalAgentDSNFilePath() string {
 func LocalAgentDriverFilePath() string {
 	return path.Join("/tmp", "nuzur-cli", constants.LOCAL_AGENT_DRIVER_FILE)
 }
+
+// LocalAgentConnectionsFilePath stores the per-connection registry: a JSON
+// array of {uuid, name, driver, db_type, dsn, default_schema}. Phase 3 keeps
+// this in plaintext alongside the token; phase 3 follow-up moves DSNs to the
+// OS keychain (only metadata + keychain key in the file).
+func LocalAgentConnectionsFilePath() string {
+	return path.Join("/tmp", "nuzur-cli", constants.LOCAL_AGENT_CONNECTIONS_FILE)
+}

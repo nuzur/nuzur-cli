@@ -20,11 +20,7 @@ import (
 	"strings"
 	"time"
 
-	"github.com/jmoiron/sqlx"
-
-	_ "github.com/go-sql-driver/mysql"
-	_ "github.com/lib/pq"
-
+	"github.com/nuzur/nuzur-cli/agent/connections"
 	"github.com/nuzur/nuzur-cli/cmclient"
 	"github.com/nuzur/nuzur-cli/constants"
 	"github.com/nuzur/nuzur-cli/files"
@@ -71,27 +67,31 @@ func Run(ctx context.Context, opts DaemonOptions) error {
 	defer cm.Close()
 	log.Printf("dialing connection-manager at %s (tls=%t)", cm.Address, !opts.DisableTLS)
 
+	registry, err := connections.Load()
+	if err != nil {
+		log.Printf("warning: could not load connection registry: %v (continuing with fallback DSN only)", err)
+		registry = &connections.Registry{}
+	}
+	log.Printf("loaded %d registered local connection(s)", len(registry.Entries))
+
 	driver := opts.Driver
 	if driver == "" {
 		driver = "mysql"
 	}
-	if opts.DSN == "" {
-		log.Printf("warning: DSN is empty; RunQuery requests will fail until you re-run `nuzur agent start` and provide a DSN.")
+	fallback, err := openLocalDB(driver, opts.DSN)
+	if err != nil {
+		log.Printf("warning: failed to open fallback DSN (%s): %v — registered connections will still work", driver, err)
+	}
+	if fallback == nil && len(registry.Entries) == 0 {
+		log.Printf("warning: no registered connections and no NUZUR_AGENT_DSN; RunQuery requests will fail until you run `nuzur agent connection add` or pass --dsn.")
 	}
 
-	dbHandle, err := openLocalDB(driver, opts.DSN)
-	if err != nil {
-		log.Printf("warning: failed to open local DB (%s): %v — daemon will run but RunQuery will fail until fixed", driver, err)
-	}
-	defer func() {
-		if dbHandle != nil {
-			_ = dbHandle.Close()
-		}
-	}()
+	pool := newDBPool(registry, fallback)
+	defer pool.Close()
 
 	backoff := reconnectInitial
 	for {
-		if err := runOnce(ctx, cm, agentUUID, agentToken, dbHandle); err != nil {
+		if err := runOnce(ctx, cm, agentUUID, agentToken, pool); err != nil {
 			if ctx.Err() != nil {
 				return ctx.Err()
 			}
@@ -116,7 +116,7 @@ func nextBackoff(cur time.Duration) time.Duration {
 
 // runOnce opens a LocalAgentChannel, says Hello, waits for Welcome, and runs
 // the read loop until the stream terminates.
-func runOnce(ctx context.Context, cm *cmclient.Client, agentUUID, agentToken string, db *sqlx.DB) error {
+func runOnce(ctx context.Context, cm *cmclient.Client, agentUUID, agentToken string, pool *dbPool) error {
 	streamCtx, cancel := context.WithCancel(ctx)
 	defer cancel()
 
@@ -156,11 +156,11 @@ func runOnce(ctx context.Context, cm *cmclient.Client, agentUUID, agentToken str
 			}
 			return err
 		}
-		go handleReverseRPC(streamCtx, stream, db, msg)
+		go handleReverseRPC(streamCtx, stream, pool, msg)
 	}
 }
 
-func handleReverseRPC(ctx context.Context, stream pb.NuzurConnectionManager_LocalAgentChannelClient, db *sqlx.DB, msg *pb.ServerToLocalAgent) {
+func handleReverseRPC(ctx context.Context, stream pb.NuzurConnectionManager_LocalAgentChannelClient, pool *dbPool, msg *pb.ServerToLocalAgent) {
 	switch payload := msg.GetMessage().(type) {
 	case *pb.ServerToLocalAgent_Ping:
 		_ = stream.Send(&pb.LocalAgentToServer{Message: &pb.LocalAgentToServer_Pong{
@@ -168,16 +168,17 @@ func handleReverseRPC(ctx context.Context, stream pb.NuzurConnectionManager_Loca
 		}})
 
 	case *pb.ServerToLocalAgent_RunQuery:
-		handleRunQuery(ctx, stream, db, payload.RunQuery)
+		handleRunQuery(ctx, stream, pool, payload.RunQuery)
 
 	default:
 		log.Printf("unhandled reverse RPC: %T", payload)
 	}
 }
 
-func handleRunQuery(ctx context.Context, stream pb.NuzurConnectionManager_LocalAgentChannelClient, db *sqlx.DB, req *pb.RunQueryRequest) {
-	if db == nil {
-		sendQueryError(stream, req.GetRequestId(), "local DB not configured (NUZUR_AGENT_DSN unset or invalid)")
+func handleRunQuery(ctx context.Context, stream pb.NuzurConnectionManager_LocalAgentChannelClient, pool *dbPool, req *pb.RunQueryRequest) {
+	db, err := pool.Get(req.GetLocalAgentConnectionUuid())
+	if err != nil {
+		sendQueryError(stream, req.GetRequestId(), err.Error())
 		return
 	}
 
@@ -233,21 +234,6 @@ func sendQueryError(stream pb.NuzurConnectionManager_LocalAgentChannelClient, re
 	_ = stream.Send(&pb.LocalAgentToServer{Message: &pb.LocalAgentToServer_QueryError{
 		QueryError: &pb.QueryError{RequestId: reqID, Message: msg},
 	}})
-}
-
-func openLocalDB(driver, dsn string) (*sqlx.DB, error) {
-	if dsn == "" {
-		return nil, nil
-	}
-	db, err := sqlx.Open(driver, dsn)
-	if err != nil {
-		return nil, err
-	}
-	// Conservative pool — single dev DB, low concurrency.
-	db.SetMaxOpenConns(5)
-	db.SetMaxIdleConns(2)
-	db.SetConnMaxIdleTime(2 * time.Minute)
-	return db, nil
 }
 
 func loadCredentials() (string, string, error) {

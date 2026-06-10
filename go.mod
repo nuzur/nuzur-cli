@@ -4,6 +4,7 @@ go 1.26.0
 
 require (
 	github.com/go-sql-driver/mysql v1.9.3
+	github.com/gofrs/uuid v4.4.0+incompatible
 	github.com/jmoiron/sqlx v1.3.5
 	github.com/lib/pq v1.2.0
 	github.com/manifoldco/promptui v0.9.0
