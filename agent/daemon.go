@@ -89,9 +89,13 @@ func Run(ctx context.Context, opts DaemonOptions) error {
 	pool := newDBPool(registry, fallback)
 	defer pool.Close()
 
+	txs := newTxPool()
+	defer txs.CloseAll()
+	go runIdleTxReaper(ctx, txs)
+
 	backoff := reconnectInitial
 	for {
-		if err := runOnce(ctx, cm, agentUUID, agentToken, pool); err != nil {
+		if err := runOnce(ctx, cm, agentUUID, agentToken, pool, txs); err != nil {
 			if ctx.Err() != nil {
 				return ctx.Err()
 			}
@@ -116,7 +120,7 @@ func nextBackoff(cur time.Duration) time.Duration {
 
 // runOnce opens a LocalAgentChannel, says Hello, waits for Welcome, and runs
 // the read loop until the stream terminates.
-func runOnce(ctx context.Context, cm *cmclient.Client, agentUUID, agentToken string, pool *dbPool) error {
+func runOnce(ctx context.Context, cm *cmclient.Client, agentUUID, agentToken string, pool *dbPool, txs *txPool) error {
 	streamCtx, cancel := context.WithCancel(ctx)
 	defer cancel()
 
@@ -156,11 +160,11 @@ func runOnce(ctx context.Context, cm *cmclient.Client, agentUUID, agentToken str
 			}
 			return err
 		}
-		go handleReverseRPC(streamCtx, stream, pool, msg)
+		go handleReverseRPC(streamCtx, stream, pool, txs, msg)
 	}
 }
 
-func handleReverseRPC(ctx context.Context, stream pb.NuzurConnectionManager_LocalAgentChannelClient, pool *dbPool, msg *pb.ServerToLocalAgent) {
+func handleReverseRPC(ctx context.Context, stream pb.NuzurConnectionManager_LocalAgentChannelClient, pool *dbPool, txs *txPool, msg *pb.ServerToLocalAgent) {
 	switch payload := msg.GetMessage().(type) {
 	case *pb.ServerToLocalAgent_Ping:
 		_ = stream.Send(&pb.LocalAgentToServer{Message: &pb.LocalAgentToServer_Pong{
@@ -168,72 +172,45 @@ func handleReverseRPC(ctx context.Context, stream pb.NuzurConnectionManager_Loca
 		}})
 
 	case *pb.ServerToLocalAgent_RunQuery:
-		handleRunQuery(ctx, stream, pool, payload.RunQuery)
+		handleRunQuery(ctx, stream, pool, txs, payload.RunQuery)
+
+	case *pb.ServerToLocalAgent_Exec:
+		handleExec(ctx, stream, pool, txs, payload.Exec)
+
+	case *pb.ServerToLocalAgent_BeginTx:
+		handleBeginTx(ctx, stream, pool, txs, payload.BeginTx)
+
+	case *pb.ServerToLocalAgent_Commit:
+		handleCommit(stream, txs, payload.Commit)
+
+	case *pb.ServerToLocalAgent_Rollback:
+		handleRollback(stream, txs, payload.Rollback)
 
 	default:
 		log.Printf("unhandled reverse RPC: %T", payload)
 	}
 }
 
-func handleRunQuery(ctx context.Context, stream pb.NuzurConnectionManager_LocalAgentChannelClient, pool *dbPool, req *pb.RunQueryRequest) {
-	db, err := pool.Get(req.GetLocalAgentConnectionUuid())
-	if err != nil {
-		sendQueryError(stream, req.GetRequestId(), err.Error())
-		return
-	}
-
-	args := make([]interface{}, len(req.GetArgs()))
-	for i, a := range req.GetArgs() {
-		args[i] = a
-	}
-
-	rows, err := db.QueryxContext(ctx, req.GetSql(), args...)
-	if err != nil {
-		sendQueryError(stream, req.GetRequestId(), err.Error())
-		return
-	}
-	defer rows.Close()
-
-	cols, _ := rows.Columns()
-	cts, _ := rows.ColumnTypes()
-	columnMetadata := make([]*pb.ColumnMetadata, len(cols))
-	for i, c := range cols {
-		var dbTypeName, scanHint string
-		if i < len(cts) {
-			dbTypeName = cts[i].DatabaseTypeName()
-			if st := cts[i].ScanType(); st != nil {
-				scanHint = st.Kind().String()
-			}
-		}
-		columnMetadata[i] = &pb.ColumnMetadata{
-			Name:             c,
-			DatabaseTypeName: dbTypeName,
-			ScanTypeHint:     scanHint,
-		}
-	}
-
-	// Phase 2: we only count rows; row payloads stay empty. TestConnection on
-	// the server only calls Next() once, so a single chunk reflecting the row
-	// count is sufficient for the demo.
-	var rowCount int64
-	for rows.Next() {
-		rowCount++
-	}
-
-	_ = stream.Send(&pb.LocalAgentToServer{Message: &pb.LocalAgentToServer_RowsChunk{
-		RowsChunk: &pb.RowsChunk{
-			RequestId: req.GetRequestId(),
-			Columns:   columnMetadata,
-			RowCount:  rowCount,
-			More:      false,
-		},
-	}})
-}
-
 func sendQueryError(stream pb.NuzurConnectionManager_LocalAgentChannelClient, reqID uint64, msg string) {
 	_ = stream.Send(&pb.LocalAgentToServer{Message: &pb.LocalAgentToServer_QueryError{
 		QueryError: &pb.QueryError{RequestId: reqID, Message: msg},
 	}})
+}
+
+// runIdleTxReaper sweeps idle transactions every 15s. The pool's reapIdle
+// uses txIdleTimeout (60s) as the cutoff, so an unused tx survives for at
+// most ~75s before getting rolled back.
+func runIdleTxReaper(ctx context.Context, txs *txPool) {
+	t := time.NewTicker(15 * time.Second)
+	defer t.Stop()
+	for {
+		select {
+		case <-ctx.Done():
+			return
+		case <-t.C:
+			txs.reapIdle()
+		}
+	}
 }
 
 func loadCredentials() (string, string, error) {

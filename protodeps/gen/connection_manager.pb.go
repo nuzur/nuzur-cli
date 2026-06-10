@@ -9,6 +9,7 @@ package gen
 import (
 	protoreflect "google.golang.org/protobuf/reflect/protoreflect"
 	protoimpl "google.golang.org/protobuf/runtime/protoimpl"
+	timestamppb "google.golang.org/protobuf/types/known/timestamppb"
 	gen "github.com/nuzur/nem/idl/gen"
 	reflect "reflect"
 	sync "sync"
@@ -1647,6 +1648,10 @@ type LocalAgentToServer struct {
 	//	*LocalAgentToServer_Pong
 	//	*LocalAgentToServer_RowsChunk
 	//	*LocalAgentToServer_QueryError
+	//	*LocalAgentToServer_ExecResponse
+	//	*LocalAgentToServer_BeginTxResponse
+	//	*LocalAgentToServer_CommitResponse
+	//	*LocalAgentToServer_RollbackResponse
 	Message       isLocalAgentToServer_Message `protobuf_oneof:"message"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
@@ -1725,6 +1730,42 @@ func (x *LocalAgentToServer) GetQueryError() *QueryError {
 	return nil
 }
 
+func (x *LocalAgentToServer) GetExecResponse() *ExecResponse {
+	if x != nil {
+		if x, ok := x.Message.(*LocalAgentToServer_ExecResponse); ok {
+			return x.ExecResponse
+		}
+	}
+	return nil
+}
+
+func (x *LocalAgentToServer) GetBeginTxResponse() *BeginTxResponse {
+	if x != nil {
+		if x, ok := x.Message.(*LocalAgentToServer_BeginTxResponse); ok {
+			return x.BeginTxResponse
+		}
+	}
+	return nil
+}
+
+func (x *LocalAgentToServer) GetCommitResponse() *CommitResponse {
+	if x != nil {
+		if x, ok := x.Message.(*LocalAgentToServer_CommitResponse); ok {
+			return x.CommitResponse
+		}
+	}
+	return nil
+}
+
+func (x *LocalAgentToServer) GetRollbackResponse() *RollbackResponse {
+	if x != nil {
+		if x, ok := x.Message.(*LocalAgentToServer_RollbackResponse); ok {
+			return x.RollbackResponse
+		}
+	}
+	return nil
+}
+
 type isLocalAgentToServer_Message interface {
 	isLocalAgentToServer_Message()
 }
@@ -1745,6 +1786,22 @@ type LocalAgentToServer_QueryError struct {
 	QueryError *QueryError `protobuf:"bytes,4,opt,name=query_error,json=queryError,proto3,oneof"`
 }
 
+type LocalAgentToServer_ExecResponse struct {
+	ExecResponse *ExecResponse `protobuf:"bytes,5,opt,name=exec_response,json=execResponse,proto3,oneof"`
+}
+
+type LocalAgentToServer_BeginTxResponse struct {
+	BeginTxResponse *BeginTxResponse `protobuf:"bytes,6,opt,name=begin_tx_response,json=beginTxResponse,proto3,oneof"`
+}
+
+type LocalAgentToServer_CommitResponse struct {
+	CommitResponse *CommitResponse `protobuf:"bytes,7,opt,name=commit_response,json=commitResponse,proto3,oneof"`
+}
+
+type LocalAgentToServer_RollbackResponse struct {
+	RollbackResponse *RollbackResponse `protobuf:"bytes,8,opt,name=rollback_response,json=rollbackResponse,proto3,oneof"`
+}
+
 func (*LocalAgentToServer_Hello) isLocalAgentToServer_Message() {}
 
 func (*LocalAgentToServer_Pong) isLocalAgentToServer_Message() {}
@@ -1753,6 +1810,14 @@ func (*LocalAgentToServer_RowsChunk) isLocalAgentToServer_Message() {}
 
 func (*LocalAgentToServer_QueryError) isLocalAgentToServer_Message() {}
 
+func (*LocalAgentToServer_ExecResponse) isLocalAgentToServer_Message() {}
+
+func (*LocalAgentToServer_BeginTxResponse) isLocalAgentToServer_Message() {}
+
+func (*LocalAgentToServer_CommitResponse) isLocalAgentToServer_Message() {}
+
+func (*LocalAgentToServer_RollbackResponse) isLocalAgentToServer_Message() {}
+
 type ServerToLocalAgent struct {
 	state protoimpl.MessageState `protogen:"open.v1"`
 	// Types that are valid to be assigned to Message:
@@ -1760,6 +1825,10 @@ type ServerToLocalAgent struct {
 	//	*ServerToLocalAgent_Welcome
 	//	*ServerToLocalAgent_Ping
 	//	*ServerToLocalAgent_RunQuery
+	//	*ServerToLocalAgent_Exec
+	//	*ServerToLocalAgent_BeginTx
+	//	*ServerToLocalAgent_Commit
+	//	*ServerToLocalAgent_Rollback
 	Message       isServerToLocalAgent_Message `protobuf_oneof:"message"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
@@ -1829,6 +1898,42 @@ func (x *ServerToLocalAgent) GetRunQuery() *RunQueryRequest {
 	return nil
 }
 
+func (x *ServerToLocalAgent) GetExec() *ExecRequest {
+	if x != nil {
+		if x, ok := x.Message.(*ServerToLocalAgent_Exec); ok {
+			return x.Exec
+		}
+	}
+	return nil
+}
+
+func (x *ServerToLocalAgent) GetBeginTx() *BeginTxRequest {
+	if x != nil {
+		if x, ok := x.Message.(*ServerToLocalAgent_BeginTx); ok {
+			return x.BeginTx
+		}
+	}
+	return nil
+}
+
+func (x *ServerToLocalAgent) GetCommit() *CommitRequest {
+	if x != nil {
+		if x, ok := x.Message.(*ServerToLocalAgent_Commit); ok {
+			return x.Commit
+		}
+	}
+	return nil
+}
+
+func (x *ServerToLocalAgent) GetRollback() *RollbackRequest {
+	if x != nil {
+		if x, ok := x.Message.(*ServerToLocalAgent_Rollback); ok {
+			return x.Rollback
+		}
+	}
+	return nil
+}
+
 type isServerToLocalAgent_Message interface {
 	isServerToLocalAgent_Message()
 }
@@ -1845,11 +1950,35 @@ type ServerToLocalAgent_RunQuery struct {
 	RunQuery *RunQueryRequest `protobuf:"bytes,3,opt,name=run_query,json=runQuery,proto3,oneof"`
 }
 
+type ServerToLocalAgent_Exec struct {
+	Exec *ExecRequest `protobuf:"bytes,4,opt,name=exec,proto3,oneof"`
+}
+
+type ServerToLocalAgent_BeginTx struct {
+	BeginTx *BeginTxRequest `protobuf:"bytes,5,opt,name=begin_tx,json=beginTx,proto3,oneof"`
+}
+
+type ServerToLocalAgent_Commit struct {
+	Commit *CommitRequest `protobuf:"bytes,6,opt,name=commit,proto3,oneof"`
+}
+
+type ServerToLocalAgent_Rollback struct {
+	Rollback *RollbackRequest `protobuf:"bytes,7,opt,name=rollback,proto3,oneof"`
+}
+
 func (*ServerToLocalAgent_Welcome) isServerToLocalAgent_Message() {}
 
 func (*ServerToLocalAgent_Ping) isServerToLocalAgent_Message() {}
 
 func (*ServerToLocalAgent_RunQuery) isServerToLocalAgent_Message() {}
+
+func (*ServerToLocalAgent_Exec) isServerToLocalAgent_Message() {}
+
+func (*ServerToLocalAgent_BeginTx) isServerToLocalAgent_Message() {}
+
+func (*ServerToLocalAgent_Commit) isServerToLocalAgent_Message() {}
+
+func (*ServerToLocalAgent_Rollback) isServerToLocalAgent_Message() {}
 
 // Hello is the first message the agent must send after opening the stream.
 // The server validates the token (SHA-256 → lookup against local_agent.token_hash),
@@ -2068,14 +2197,17 @@ func (x *Pong) GetRequestId() uint64 {
 // RunQueryRequest is sent server→agent when the cloud needs the agent to execute
 // SQL against its local database. The agent runs it and replies with one or more
 // RowsChunk messages carrying the same request_id, or a single QueryError.
+// tx_id is set when this is the in-transaction variant — the agent looks up the
+// open Tx by tx_id and runs there instead of via the connection pool.
 type RunQueryRequest struct {
 	state                    protoimpl.MessageState `protogen:"open.v1"`
 	RequestId                uint64                 `protobuf:"varint,1,opt,name=request_id,json=requestId,proto3" json:"request_id,omitempty"`
 	LocalAgentConnectionUuid string                 `protobuf:"bytes,2,opt,name=local_agent_connection_uuid,json=localAgentConnectionUuid,proto3" json:"local_agent_connection_uuid,omitempty"`
 	Sql                      string                 `protobuf:"bytes,3,opt,name=sql,proto3" json:"sql,omitempty"`
-	// Args are sent as strings; the driver coerces them. Phase 2 doesn't
-	// exercise this path (TestConnection sends "SELECT 1" with no args).
+	// Args are sent as strings; the driver coerces them. Phase 4 keeps the
+	// string-only path; richer typing can come later if needed.
 	Args          []string `protobuf:"bytes,4,rep,name=args,proto3" json:"args,omitempty"`
+	TxId          string   `protobuf:"bytes,5,opt,name=tx_id,json=txId,proto3" json:"tx_id,omitempty"` // empty = no transaction
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
@@ -2138,6 +2270,452 @@ func (x *RunQueryRequest) GetArgs() []string {
 	return nil
 }
 
+func (x *RunQueryRequest) GetTxId() string {
+	if x != nil {
+		return x.TxId
+	}
+	return ""
+}
+
+// ExecRequest is the non-row-returning counterpart of RunQueryRequest. Used
+// for INSERT/UPDATE/DELETE/DDL. Reply is a single ExecResponse with
+// rows_affected + last_insert_id, or a QueryError on failure.
+type ExecRequest struct {
+	state                    protoimpl.MessageState `protogen:"open.v1"`
+	RequestId                uint64                 `protobuf:"varint,1,opt,name=request_id,json=requestId,proto3" json:"request_id,omitempty"`
+	LocalAgentConnectionUuid string                 `protobuf:"bytes,2,opt,name=local_agent_connection_uuid,json=localAgentConnectionUuid,proto3" json:"local_agent_connection_uuid,omitempty"`
+	Sql                      string                 `protobuf:"bytes,3,opt,name=sql,proto3" json:"sql,omitempty"`
+	Args                     []string               `protobuf:"bytes,4,rep,name=args,proto3" json:"args,omitempty"`
+	TxId                     string                 `protobuf:"bytes,5,opt,name=tx_id,json=txId,proto3" json:"tx_id,omitempty"` // empty = no transaction
+	unknownFields            protoimpl.UnknownFields
+	sizeCache                protoimpl.SizeCache
+}
+
+func (x *ExecRequest) Reset() {
+	*x = ExecRequest{}
+	mi := &file_connection_manager_proto_msgTypes[35]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *ExecRequest) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*ExecRequest) ProtoMessage() {}
+
+func (x *ExecRequest) ProtoReflect() protoreflect.Message {
+	mi := &file_connection_manager_proto_msgTypes[35]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use ExecRequest.ProtoReflect.Descriptor instead.
+func (*ExecRequest) Descriptor() ([]byte, []int) {
+	return file_connection_manager_proto_rawDescGZIP(), []int{35}
+}
+
+func (x *ExecRequest) GetRequestId() uint64 {
+	if x != nil {
+		return x.RequestId
+	}
+	return 0
+}
+
+func (x *ExecRequest) GetLocalAgentConnectionUuid() string {
+	if x != nil {
+		return x.LocalAgentConnectionUuid
+	}
+	return ""
+}
+
+func (x *ExecRequest) GetSql() string {
+	if x != nil {
+		return x.Sql
+	}
+	return ""
+}
+
+func (x *ExecRequest) GetArgs() []string {
+	if x != nil {
+		return x.Args
+	}
+	return nil
+}
+
+func (x *ExecRequest) GetTxId() string {
+	if x != nil {
+		return x.TxId
+	}
+	return ""
+}
+
+type ExecResponse struct {
+	state         protoimpl.MessageState `protogen:"open.v1"`
+	RequestId     uint64                 `protobuf:"varint,1,opt,name=request_id,json=requestId,proto3" json:"request_id,omitempty"`
+	RowsAffected  int64                  `protobuf:"varint,2,opt,name=rows_affected,json=rowsAffected,proto3" json:"rows_affected,omitempty"`
+	LastInsertId  int64                  `protobuf:"varint,3,opt,name=last_insert_id,json=lastInsertId,proto3" json:"last_insert_id,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *ExecResponse) Reset() {
+	*x = ExecResponse{}
+	mi := &file_connection_manager_proto_msgTypes[36]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *ExecResponse) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*ExecResponse) ProtoMessage() {}
+
+func (x *ExecResponse) ProtoReflect() protoreflect.Message {
+	mi := &file_connection_manager_proto_msgTypes[36]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use ExecResponse.ProtoReflect.Descriptor instead.
+func (*ExecResponse) Descriptor() ([]byte, []int) {
+	return file_connection_manager_proto_rawDescGZIP(), []int{36}
+}
+
+func (x *ExecResponse) GetRequestId() uint64 {
+	if x != nil {
+		return x.RequestId
+	}
+	return 0
+}
+
+func (x *ExecResponse) GetRowsAffected() int64 {
+	if x != nil {
+		return x.RowsAffected
+	}
+	return 0
+}
+
+func (x *ExecResponse) GetLastInsertId() int64 {
+	if x != nil {
+		return x.LastInsertId
+	}
+	return 0
+}
+
+// BeginTxRequest asks the agent to open a fresh DB transaction. The agent
+// generates a tx_id, registers the *sql.Tx under it, and replies with that id.
+// Idle transactions are auto-rolled-back after a server-configurable timeout
+// to keep underlying connections from leaking when the cloud caller bails.
+type BeginTxRequest struct {
+	state                    protoimpl.MessageState `protogen:"open.v1"`
+	RequestId                uint64                 `protobuf:"varint,1,opt,name=request_id,json=requestId,proto3" json:"request_id,omitempty"`
+	LocalAgentConnectionUuid string                 `protobuf:"bytes,2,opt,name=local_agent_connection_uuid,json=localAgentConnectionUuid,proto3" json:"local_agent_connection_uuid,omitempty"`
+	unknownFields            protoimpl.UnknownFields
+	sizeCache                protoimpl.SizeCache
+}
+
+func (x *BeginTxRequest) Reset() {
+	*x = BeginTxRequest{}
+	mi := &file_connection_manager_proto_msgTypes[37]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *BeginTxRequest) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*BeginTxRequest) ProtoMessage() {}
+
+func (x *BeginTxRequest) ProtoReflect() protoreflect.Message {
+	mi := &file_connection_manager_proto_msgTypes[37]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use BeginTxRequest.ProtoReflect.Descriptor instead.
+func (*BeginTxRequest) Descriptor() ([]byte, []int) {
+	return file_connection_manager_proto_rawDescGZIP(), []int{37}
+}
+
+func (x *BeginTxRequest) GetRequestId() uint64 {
+	if x != nil {
+		return x.RequestId
+	}
+	return 0
+}
+
+func (x *BeginTxRequest) GetLocalAgentConnectionUuid() string {
+	if x != nil {
+		return x.LocalAgentConnectionUuid
+	}
+	return ""
+}
+
+type BeginTxResponse struct {
+	state         protoimpl.MessageState `protogen:"open.v1"`
+	RequestId     uint64                 `protobuf:"varint,1,opt,name=request_id,json=requestId,proto3" json:"request_id,omitempty"`
+	TxId          string                 `protobuf:"bytes,2,opt,name=tx_id,json=txId,proto3" json:"tx_id,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *BeginTxResponse) Reset() {
+	*x = BeginTxResponse{}
+	mi := &file_connection_manager_proto_msgTypes[38]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *BeginTxResponse) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*BeginTxResponse) ProtoMessage() {}
+
+func (x *BeginTxResponse) ProtoReflect() protoreflect.Message {
+	mi := &file_connection_manager_proto_msgTypes[38]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use BeginTxResponse.ProtoReflect.Descriptor instead.
+func (*BeginTxResponse) Descriptor() ([]byte, []int) {
+	return file_connection_manager_proto_rawDescGZIP(), []int{38}
+}
+
+func (x *BeginTxResponse) GetRequestId() uint64 {
+	if x != nil {
+		return x.RequestId
+	}
+	return 0
+}
+
+func (x *BeginTxResponse) GetTxId() string {
+	if x != nil {
+		return x.TxId
+	}
+	return ""
+}
+
+type CommitRequest struct {
+	state         protoimpl.MessageState `protogen:"open.v1"`
+	RequestId     uint64                 `protobuf:"varint,1,opt,name=request_id,json=requestId,proto3" json:"request_id,omitempty"`
+	TxId          string                 `protobuf:"bytes,2,opt,name=tx_id,json=txId,proto3" json:"tx_id,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *CommitRequest) Reset() {
+	*x = CommitRequest{}
+	mi := &file_connection_manager_proto_msgTypes[39]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *CommitRequest) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*CommitRequest) ProtoMessage() {}
+
+func (x *CommitRequest) ProtoReflect() protoreflect.Message {
+	mi := &file_connection_manager_proto_msgTypes[39]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use CommitRequest.ProtoReflect.Descriptor instead.
+func (*CommitRequest) Descriptor() ([]byte, []int) {
+	return file_connection_manager_proto_rawDescGZIP(), []int{39}
+}
+
+func (x *CommitRequest) GetRequestId() uint64 {
+	if x != nil {
+		return x.RequestId
+	}
+	return 0
+}
+
+func (x *CommitRequest) GetTxId() string {
+	if x != nil {
+		return x.TxId
+	}
+	return ""
+}
+
+type CommitResponse struct {
+	state         protoimpl.MessageState `protogen:"open.v1"`
+	RequestId     uint64                 `protobuf:"varint,1,opt,name=request_id,json=requestId,proto3" json:"request_id,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *CommitResponse) Reset() {
+	*x = CommitResponse{}
+	mi := &file_connection_manager_proto_msgTypes[40]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *CommitResponse) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*CommitResponse) ProtoMessage() {}
+
+func (x *CommitResponse) ProtoReflect() protoreflect.Message {
+	mi := &file_connection_manager_proto_msgTypes[40]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use CommitResponse.ProtoReflect.Descriptor instead.
+func (*CommitResponse) Descriptor() ([]byte, []int) {
+	return file_connection_manager_proto_rawDescGZIP(), []int{40}
+}
+
+func (x *CommitResponse) GetRequestId() uint64 {
+	if x != nil {
+		return x.RequestId
+	}
+	return 0
+}
+
+type RollbackRequest struct {
+	state         protoimpl.MessageState `protogen:"open.v1"`
+	RequestId     uint64                 `protobuf:"varint,1,opt,name=request_id,json=requestId,proto3" json:"request_id,omitempty"`
+	TxId          string                 `protobuf:"bytes,2,opt,name=tx_id,json=txId,proto3" json:"tx_id,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *RollbackRequest) Reset() {
+	*x = RollbackRequest{}
+	mi := &file_connection_manager_proto_msgTypes[41]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *RollbackRequest) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*RollbackRequest) ProtoMessage() {}
+
+func (x *RollbackRequest) ProtoReflect() protoreflect.Message {
+	mi := &file_connection_manager_proto_msgTypes[41]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use RollbackRequest.ProtoReflect.Descriptor instead.
+func (*RollbackRequest) Descriptor() ([]byte, []int) {
+	return file_connection_manager_proto_rawDescGZIP(), []int{41}
+}
+
+func (x *RollbackRequest) GetRequestId() uint64 {
+	if x != nil {
+		return x.RequestId
+	}
+	return 0
+}
+
+func (x *RollbackRequest) GetTxId() string {
+	if x != nil {
+		return x.TxId
+	}
+	return ""
+}
+
+type RollbackResponse struct {
+	state         protoimpl.MessageState `protogen:"open.v1"`
+	RequestId     uint64                 `protobuf:"varint,1,opt,name=request_id,json=requestId,proto3" json:"request_id,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *RollbackResponse) Reset() {
+	*x = RollbackResponse{}
+	mi := &file_connection_manager_proto_msgTypes[42]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *RollbackResponse) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*RollbackResponse) ProtoMessage() {}
+
+func (x *RollbackResponse) ProtoReflect() protoreflect.Message {
+	mi := &file_connection_manager_proto_msgTypes[42]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use RollbackResponse.ProtoReflect.Descriptor instead.
+func (*RollbackResponse) Descriptor() ([]byte, []int) {
+	return file_connection_manager_proto_rawDescGZIP(), []int{42}
+}
+
+func (x *RollbackResponse) GetRequestId() uint64 {
+	if x != nil {
+		return x.RequestId
+	}
+	return 0
+}
+
 // ColumnMetadata is the over-the-wire shape of *sql.ColumnType-ish metadata.
 // scan_type_hint is a string the agent picks from a small known set
 // ("int64", "float64", "string", "time", "bytes", "bool", "null_string", etc.)
@@ -2153,7 +2731,7 @@ type ColumnMetadata struct {
 
 func (x *ColumnMetadata) Reset() {
 	*x = ColumnMetadata{}
-	mi := &file_connection_manager_proto_msgTypes[35]
+	mi := &file_connection_manager_proto_msgTypes[43]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -2165,7 +2743,7 @@ func (x *ColumnMetadata) String() string {
 func (*ColumnMetadata) ProtoMessage() {}
 
 func (x *ColumnMetadata) ProtoReflect() protoreflect.Message {
-	mi := &file_connection_manager_proto_msgTypes[35]
+	mi := &file_connection_manager_proto_msgTypes[43]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -2178,7 +2756,7 @@ func (x *ColumnMetadata) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use ColumnMetadata.ProtoReflect.Descriptor instead.
 func (*ColumnMetadata) Descriptor() ([]byte, []int) {
-	return file_connection_manager_proto_rawDescGZIP(), []int{35}
+	return file_connection_manager_proto_rawDescGZIP(), []int{43}
 }
 
 func (x *ColumnMetadata) GetName() string {
@@ -2206,9 +2784,9 @@ func (x *ColumnMetadata) GetScanTypeHint() string {
 // request_id includes columns; subsequent chunks may omit them. more=true
 // signals more chunks will follow; more=false closes the result.
 //
-// Phase 2: rows is empty; only row_count + columns + more are populated, which
-// is enough for the server's Rows.Next() to return the right number of times
-// for TestConnection. Phase 4 fills in the Row values.
+// Phase 4: rows is populated with typed Value entries. Chunk size is bounded
+// by the agent (~1000 rows or ~256KB per chunk) to keep memory predictable
+// and let the cloud start scanning before the full result is in flight.
 type RowsChunk struct {
 	state         protoimpl.MessageState `protogen:"open.v1"`
 	RequestId     uint64                 `protobuf:"varint,1,opt,name=request_id,json=requestId,proto3" json:"request_id,omitempty"`
@@ -2222,7 +2800,7 @@ type RowsChunk struct {
 
 func (x *RowsChunk) Reset() {
 	*x = RowsChunk{}
-	mi := &file_connection_manager_proto_msgTypes[36]
+	mi := &file_connection_manager_proto_msgTypes[44]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -2234,7 +2812,7 @@ func (x *RowsChunk) String() string {
 func (*RowsChunk) ProtoMessage() {}
 
 func (x *RowsChunk) ProtoReflect() protoreflect.Message {
-	mi := &file_connection_manager_proto_msgTypes[36]
+	mi := &file_connection_manager_proto_msgTypes[44]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -2247,7 +2825,7 @@ func (x *RowsChunk) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use RowsChunk.ProtoReflect.Descriptor instead.
 func (*RowsChunk) Descriptor() ([]byte, []int) {
-	return file_connection_manager_proto_rawDescGZIP(), []int{36}
+	return file_connection_manager_proto_rawDescGZIP(), []int{44}
 }
 
 func (x *RowsChunk) GetRequestId() uint64 {
@@ -2285,17 +2863,18 @@ func (x *RowsChunk) GetMore() bool {
 	return false
 }
 
-// Row is the value payload for a single result row. Phase 2 leaves this
-// unpopulated; phase 4 will add a Value oneof.
+// Row is the value payload for a single result row. values has the same
+// length and ordering as columns in the chunk's first appearance.
 type Row struct {
 	state         protoimpl.MessageState `protogen:"open.v1"`
+	Values        []*Value               `protobuf:"bytes,1,rep,name=values,proto3" json:"values,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
 
 func (x *Row) Reset() {
 	*x = Row{}
-	mi := &file_connection_manager_proto_msgTypes[37]
+	mi := &file_connection_manager_proto_msgTypes[45]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -2307,7 +2886,7 @@ func (x *Row) String() string {
 func (*Row) ProtoMessage() {}
 
 func (x *Row) ProtoReflect() protoreflect.Message {
-	mi := &file_connection_manager_proto_msgTypes[37]
+	mi := &file_connection_manager_proto_msgTypes[45]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -2320,8 +2899,180 @@ func (x *Row) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use Row.ProtoReflect.Descriptor instead.
 func (*Row) Descriptor() ([]byte, []int) {
-	return file_connection_manager_proto_rawDescGZIP(), []int{37}
+	return file_connection_manager_proto_rawDescGZIP(), []int{45}
 }
+
+func (x *Row) GetValues() []*Value {
+	if x != nil {
+		return x.Values
+	}
+	return nil
+}
+
+// Value is a typed SQL cell. Empty (no oneof case set) is treated as SQL NULL.
+// The agent picks the case based on the column's scan type; the cloud's Scan
+// converts back into the caller-provided dest pointer.
+type Value struct {
+	state protoimpl.MessageState `protogen:"open.v1"`
+	// Types that are valid to be assigned to Kind:
+	//
+	//	*Value_IsNull
+	//	*Value_StringVal
+	//	*Value_IntVal
+	//	*Value_DoubleVal
+	//	*Value_BoolVal
+	//	*Value_BytesVal
+	//	*Value_TimeVal
+	Kind          isValue_Kind `protobuf_oneof:"kind"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *Value) Reset() {
+	*x = Value{}
+	mi := &file_connection_manager_proto_msgTypes[46]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *Value) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*Value) ProtoMessage() {}
+
+func (x *Value) ProtoReflect() protoreflect.Message {
+	mi := &file_connection_manager_proto_msgTypes[46]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use Value.ProtoReflect.Descriptor instead.
+func (*Value) Descriptor() ([]byte, []int) {
+	return file_connection_manager_proto_rawDescGZIP(), []int{46}
+}
+
+func (x *Value) GetKind() isValue_Kind {
+	if x != nil {
+		return x.Kind
+	}
+	return nil
+}
+
+func (x *Value) GetIsNull() bool {
+	if x != nil {
+		if x, ok := x.Kind.(*Value_IsNull); ok {
+			return x.IsNull
+		}
+	}
+	return false
+}
+
+func (x *Value) GetStringVal() string {
+	if x != nil {
+		if x, ok := x.Kind.(*Value_StringVal); ok {
+			return x.StringVal
+		}
+	}
+	return ""
+}
+
+func (x *Value) GetIntVal() int64 {
+	if x != nil {
+		if x, ok := x.Kind.(*Value_IntVal); ok {
+			return x.IntVal
+		}
+	}
+	return 0
+}
+
+func (x *Value) GetDoubleVal() float64 {
+	if x != nil {
+		if x, ok := x.Kind.(*Value_DoubleVal); ok {
+			return x.DoubleVal
+		}
+	}
+	return 0
+}
+
+func (x *Value) GetBoolVal() bool {
+	if x != nil {
+		if x, ok := x.Kind.(*Value_BoolVal); ok {
+			return x.BoolVal
+		}
+	}
+	return false
+}
+
+func (x *Value) GetBytesVal() []byte {
+	if x != nil {
+		if x, ok := x.Kind.(*Value_BytesVal); ok {
+			return x.BytesVal
+		}
+	}
+	return nil
+}
+
+func (x *Value) GetTimeVal() *timestamppb.Timestamp {
+	if x != nil {
+		if x, ok := x.Kind.(*Value_TimeVal); ok {
+			return x.TimeVal
+		}
+	}
+	return nil
+}
+
+type isValue_Kind interface {
+	isValue_Kind()
+}
+
+type Value_IsNull struct {
+	IsNull bool `protobuf:"varint,1,opt,name=is_null,json=isNull,proto3,oneof"` // tombstone: true if SQL NULL
+}
+
+type Value_StringVal struct {
+	StringVal string `protobuf:"bytes,2,opt,name=string_val,json=stringVal,proto3,oneof"`
+}
+
+type Value_IntVal struct {
+	IntVal int64 `protobuf:"varint,3,opt,name=int_val,json=intVal,proto3,oneof"`
+}
+
+type Value_DoubleVal struct {
+	DoubleVal float64 `protobuf:"fixed64,4,opt,name=double_val,json=doubleVal,proto3,oneof"`
+}
+
+type Value_BoolVal struct {
+	BoolVal bool `protobuf:"varint,5,opt,name=bool_val,json=boolVal,proto3,oneof"`
+}
+
+type Value_BytesVal struct {
+	BytesVal []byte `protobuf:"bytes,6,opt,name=bytes_val,json=bytesVal,proto3,oneof"`
+}
+
+type Value_TimeVal struct {
+	TimeVal *timestamppb.Timestamp `protobuf:"bytes,7,opt,name=time_val,json=timeVal,proto3,oneof"`
+}
+
+func (*Value_IsNull) isValue_Kind() {}
+
+func (*Value_StringVal) isValue_Kind() {}
+
+func (*Value_IntVal) isValue_Kind() {}
+
+func (*Value_DoubleVal) isValue_Kind() {}
+
+func (*Value_BoolVal) isValue_Kind() {}
+
+func (*Value_BytesVal) isValue_Kind() {}
+
+func (*Value_TimeVal) isValue_Kind() {}
 
 // QueryError is the agent's response when SQL execution fails.
 type QueryError struct {
@@ -2334,7 +3085,7 @@ type QueryError struct {
 
 func (x *QueryError) Reset() {
 	*x = QueryError{}
-	mi := &file_connection_manager_proto_msgTypes[38]
+	mi := &file_connection_manager_proto_msgTypes[47]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -2346,7 +3097,7 @@ func (x *QueryError) String() string {
 func (*QueryError) ProtoMessage() {}
 
 func (x *QueryError) ProtoReflect() protoreflect.Message {
-	mi := &file_connection_manager_proto_msgTypes[38]
+	mi := &file_connection_manager_proto_msgTypes[47]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -2359,7 +3110,7 @@ func (x *QueryError) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use QueryError.ProtoReflect.Descriptor instead.
 func (*QueryError) Descriptor() ([]byte, []int) {
-	return file_connection_manager_proto_rawDescGZIP(), []int{38}
+	return file_connection_manager_proto_rawDescGZIP(), []int{47}
 }
 
 func (x *QueryError) GetRequestId() uint64 {
@@ -2380,7 +3131,7 @@ var File_connection_manager_proto protoreflect.FileDescriptor
 
 const file_connection_manager_proto_rawDesc = "" +
 	"\n" +
-	"\x18connection_manager.proto\x1a\x15user_connection.proto\x1a!user_connection_type_config.proto\x1a\x1fuser_connection_execution.proto\x1a\x15project_version.proto\"\x1b\n" +
+	"\x18connection_manager.proto\x1a\x15user_connection.proto\x1a!user_connection_type_config.proto\x1a\x1fuser_connection_execution.proto\x1a\x15project_version.proto\x1a\x1fgoogle/protobuf/timestamp.proto\"\x1b\n" +
 	"\x19GetUserConnectionsRequest\"S\n" +
 	"\x1aGetUserConnectionsResponse\x125\n" +
 	"\vconnections\x18\x01 \x03(\v2\x13.nem.UserConnectionR\vconnections\":\n" +
@@ -2482,7 +3233,7 @@ const file_connection_manager_proto_rawDesc = "" +
 	"\x06schema\x18\x03 \x01(\tR\x06schema\x12\x16\n" +
 	"\x06locale\x18\x04 \x01(\tR\x06locale\"g\n" +
 	"'GetProjectVersionFromConnectionResponse\x12<\n" +
-	"\x0fproject_version\x18\x01 \x01(\v2\x13.nem.ProjectVersionR\x0eprojectVersion\"\xb9\x01\n" +
+	"\x0fproject_version\x18\x01 \x01(\v2\x13.nem.ProjectVersionR\x0eprojectVersion\"\xad\x03\n" +
 	"\x12LocalAgentToServer\x12\x1e\n" +
 	"\x05hello\x18\x01 \x01(\v2\x06.HelloH\x00R\x05hello\x12\x1b\n" +
 	"\x04pong\x18\x02 \x01(\v2\x05.PongH\x00R\x04pong\x12+\n" +
@@ -2490,12 +3241,20 @@ const file_connection_manager_proto_rawDesc = "" +
 	"rows_chunk\x18\x03 \x01(\v2\n" +
 	".RowsChunkH\x00R\trowsChunk\x12.\n" +
 	"\vquery_error\x18\x04 \x01(\v2\v.QueryErrorH\x00R\n" +
-	"queryErrorB\t\n" +
-	"\amessage\"\x93\x01\n" +
+	"queryError\x124\n" +
+	"\rexec_response\x18\x05 \x01(\v2\r.ExecResponseH\x00R\fexecResponse\x12>\n" +
+	"\x11begin_tx_response\x18\x06 \x01(\v2\x10.BeginTxResponseH\x00R\x0fbeginTxResponse\x12:\n" +
+	"\x0fcommit_response\x18\a \x01(\v2\x0f.CommitResponseH\x00R\x0ecommitResponse\x12@\n" +
+	"\x11rollback_response\x18\b \x01(\v2\x11.RollbackResponseH\x00R\x10rollbackResponseB\t\n" +
+	"\amessage\"\xbf\x02\n" +
 	"\x12ServerToLocalAgent\x12$\n" +
 	"\awelcome\x18\x01 \x01(\v2\b.WelcomeH\x00R\awelcome\x12\x1b\n" +
 	"\x04ping\x18\x02 \x01(\v2\x05.PingH\x00R\x04ping\x12/\n" +
-	"\trun_query\x18\x03 \x01(\v2\x10.RunQueryRequestH\x00R\brunQueryB\t\n" +
+	"\trun_query\x18\x03 \x01(\v2\x10.RunQueryRequestH\x00R\brunQuery\x12\"\n" +
+	"\x04exec\x18\x04 \x01(\v2\f.ExecRequestH\x00R\x04exec\x12,\n" +
+	"\bbegin_tx\x18\x05 \x01(\v2\x0f.BeginTxRequestH\x00R\abeginTx\x12(\n" +
+	"\x06commit\x18\x06 \x01(\v2\x0e.CommitRequestH\x00R\x06commit\x12.\n" +
+	"\brollback\x18\a \x01(\v2\x10.RollbackRequestH\x00R\brollbackB\t\n" +
 	"\amessage\"~\n" +
 	"\x05Hello\x12*\n" +
 	"\x11local_agent_token\x18\x01 \x01(\tR\x0flocalAgentToken\x12(\n" +
@@ -2511,13 +3270,48 @@ const file_connection_manager_proto_rawDesc = "" +
 	"\x13server_time_unix_ms\x18\x02 \x01(\x03R\x10serverTimeUnixMs\"%\n" +
 	"\x04Pong\x12\x1d\n" +
 	"\n" +
-	"request_id\x18\x01 \x01(\x04R\trequestId\"\x95\x01\n" +
+	"request_id\x18\x01 \x01(\x04R\trequestId\"\xaa\x01\n" +
 	"\x0fRunQueryRequest\x12\x1d\n" +
 	"\n" +
 	"request_id\x18\x01 \x01(\x04R\trequestId\x12=\n" +
 	"\x1blocal_agent_connection_uuid\x18\x02 \x01(\tR\x18localAgentConnectionUuid\x12\x10\n" +
 	"\x03sql\x18\x03 \x01(\tR\x03sql\x12\x12\n" +
-	"\x04args\x18\x04 \x03(\tR\x04args\"x\n" +
+	"\x04args\x18\x04 \x03(\tR\x04args\x12\x13\n" +
+	"\x05tx_id\x18\x05 \x01(\tR\x04txId\"\xa6\x01\n" +
+	"\vExecRequest\x12\x1d\n" +
+	"\n" +
+	"request_id\x18\x01 \x01(\x04R\trequestId\x12=\n" +
+	"\x1blocal_agent_connection_uuid\x18\x02 \x01(\tR\x18localAgentConnectionUuid\x12\x10\n" +
+	"\x03sql\x18\x03 \x01(\tR\x03sql\x12\x12\n" +
+	"\x04args\x18\x04 \x03(\tR\x04args\x12\x13\n" +
+	"\x05tx_id\x18\x05 \x01(\tR\x04txId\"x\n" +
+	"\fExecResponse\x12\x1d\n" +
+	"\n" +
+	"request_id\x18\x01 \x01(\x04R\trequestId\x12#\n" +
+	"\rrows_affected\x18\x02 \x01(\x03R\frowsAffected\x12$\n" +
+	"\x0elast_insert_id\x18\x03 \x01(\x03R\flastInsertId\"n\n" +
+	"\x0eBeginTxRequest\x12\x1d\n" +
+	"\n" +
+	"request_id\x18\x01 \x01(\x04R\trequestId\x12=\n" +
+	"\x1blocal_agent_connection_uuid\x18\x02 \x01(\tR\x18localAgentConnectionUuid\"E\n" +
+	"\x0fBeginTxResponse\x12\x1d\n" +
+	"\n" +
+	"request_id\x18\x01 \x01(\x04R\trequestId\x12\x13\n" +
+	"\x05tx_id\x18\x02 \x01(\tR\x04txId\"C\n" +
+	"\rCommitRequest\x12\x1d\n" +
+	"\n" +
+	"request_id\x18\x01 \x01(\x04R\trequestId\x12\x13\n" +
+	"\x05tx_id\x18\x02 \x01(\tR\x04txId\"/\n" +
+	"\x0eCommitResponse\x12\x1d\n" +
+	"\n" +
+	"request_id\x18\x01 \x01(\x04R\trequestId\"E\n" +
+	"\x0fRollbackRequest\x12\x1d\n" +
+	"\n" +
+	"request_id\x18\x01 \x01(\x04R\trequestId\x12\x13\n" +
+	"\x05tx_id\x18\x02 \x01(\tR\x04txId\"1\n" +
+	"\x10RollbackResponse\x12\x1d\n" +
+	"\n" +
+	"request_id\x18\x01 \x01(\x04R\trequestId\"x\n" +
 	"\x0eColumnMetadata\x12\x12\n" +
 	"\x04name\x18\x01 \x01(\tR\x04name\x12,\n" +
 	"\x12database_type_name\x18\x02 \x01(\tR\x10databaseTypeName\x12$\n" +
@@ -2528,8 +3322,20 @@ const file_connection_manager_proto_rawDesc = "" +
 	"\acolumns\x18\x02 \x03(\v2\x0f.ColumnMetadataR\acolumns\x12\x1b\n" +
 	"\trow_count\x18\x03 \x01(\x03R\browCount\x12\x18\n" +
 	"\x04rows\x18\x04 \x03(\v2\x04.RowR\x04rows\x12\x12\n" +
-	"\x04more\x18\x05 \x01(\bR\x04more\"\x05\n" +
-	"\x03Row\"E\n" +
+	"\x04more\x18\x05 \x01(\bR\x04more\"%\n" +
+	"\x03Row\x12\x1e\n" +
+	"\x06values\x18\x01 \x03(\v2\x06.ValueR\x06values\"\xfc\x01\n" +
+	"\x05Value\x12\x19\n" +
+	"\ais_null\x18\x01 \x01(\bH\x00R\x06isNull\x12\x1f\n" +
+	"\n" +
+	"string_val\x18\x02 \x01(\tH\x00R\tstringVal\x12\x19\n" +
+	"\aint_val\x18\x03 \x01(\x03H\x00R\x06intVal\x12\x1f\n" +
+	"\n" +
+	"double_val\x18\x04 \x01(\x01H\x00R\tdoubleVal\x12\x1b\n" +
+	"\bbool_val\x18\x05 \x01(\bH\x00R\aboolVal\x12\x1d\n" +
+	"\tbytes_val\x18\x06 \x01(\fH\x00R\bbytesVal\x127\n" +
+	"\btime_val\x18\a \x01(\v2\x1a.google.protobuf.TimestampH\x00R\atimeValB\x06\n" +
+	"\x04kind\"E\n" +
 	"\n" +
 	"QueryError\x12\x1d\n" +
 	"\n" +
@@ -2579,7 +3385,7 @@ func file_connection_manager_proto_rawDescGZIP() []byte {
 }
 
 var file_connection_manager_proto_enumTypes = make([]protoimpl.EnumInfo, 2)
-var file_connection_manager_proto_msgTypes = make([]protoimpl.MessageInfo, 39)
+var file_connection_manager_proto_msgTypes = make([]protoimpl.MessageInfo, 48)
 var file_connection_manager_proto_goTypes = []any{
 	(QueryExecutionStatus)(0),                       // 0: QueryExecutionStatus
 	(ChangesDiffStatus)(0),                          // 1: ChangesDiffStatus
@@ -2618,83 +3424,103 @@ var file_connection_manager_proto_goTypes = []any{
 	(*Ping)(nil),                                    // 34: Ping
 	(*Pong)(nil),                                    // 35: Pong
 	(*RunQueryRequest)(nil),                         // 36: RunQueryRequest
-	(*ColumnMetadata)(nil),                          // 37: ColumnMetadata
-	(*RowsChunk)(nil),                               // 38: RowsChunk
-	(*Row)(nil),                                     // 39: Row
-	(*QueryError)(nil),                              // 40: QueryError
-	(*gen.UserConnection)(nil),                      // 41: nem.UserConnection
-	(gen.UserConnectionType)(0),                     // 42: nem.UserConnectionType
-	(*gen.UserConnectionTypeConfig)(nil),            // 43: nem.UserConnectionTypeConfig
-	(*gen.UserConnectionExecution)(nil),             // 44: nem.UserConnectionExecution
-	(*gen.ProjectVersion)(nil),                      // 45: nem.ProjectVersion
+	(*ExecRequest)(nil),                             // 37: ExecRequest
+	(*ExecResponse)(nil),                            // 38: ExecResponse
+	(*BeginTxRequest)(nil),                          // 39: BeginTxRequest
+	(*BeginTxResponse)(nil),                         // 40: BeginTxResponse
+	(*CommitRequest)(nil),                           // 41: CommitRequest
+	(*CommitResponse)(nil),                          // 42: CommitResponse
+	(*RollbackRequest)(nil),                         // 43: RollbackRequest
+	(*RollbackResponse)(nil),                        // 44: RollbackResponse
+	(*ColumnMetadata)(nil),                          // 45: ColumnMetadata
+	(*RowsChunk)(nil),                               // 46: RowsChunk
+	(*Row)(nil),                                     // 47: Row
+	(*Value)(nil),                                   // 48: Value
+	(*QueryError)(nil),                              // 49: QueryError
+	(*gen.UserConnection)(nil),                      // 50: nem.UserConnection
+	(gen.UserConnectionType)(0),                     // 51: nem.UserConnectionType
+	(*gen.UserConnectionTypeConfig)(nil),            // 52: nem.UserConnectionTypeConfig
+	(*gen.UserConnectionExecution)(nil),             // 53: nem.UserConnectionExecution
+	(*gen.ProjectVersion)(nil),                      // 54: nem.ProjectVersion
+	(*timestamppb.Timestamp)(nil),                   // 55: google.protobuf.Timestamp
 }
 var file_connection_manager_proto_depIdxs = []int32{
-	41, // 0: GetUserConnectionsResponse.connections:type_name -> nem.UserConnection
-	42, // 1: TestConnectionRequest.type:type_name -> nem.UserConnectionType
-	43, // 2: TestConnectionRequest.type_config:type_name -> nem.UserConnectionTypeConfig
-	42, // 3: GetSchemasRequest.type:type_name -> nem.UserConnectionType
-	43, // 4: GetSchemasRequest.type_config:type_name -> nem.UserConnectionTypeConfig
-	42, // 5: CreateSchemaRequest.type:type_name -> nem.UserConnectionType
-	43, // 6: CreateSchemaRequest.type_config:type_name -> nem.UserConnectionTypeConfig
-	42, // 7: ExecuteQueryRequest.type:type_name -> nem.UserConnectionType
-	43, // 8: ExecuteQueryRequest.type_config:type_name -> nem.UserConnectionTypeConfig
+	50, // 0: GetUserConnectionsResponse.connections:type_name -> nem.UserConnection
+	51, // 1: TestConnectionRequest.type:type_name -> nem.UserConnectionType
+	52, // 2: TestConnectionRequest.type_config:type_name -> nem.UserConnectionTypeConfig
+	51, // 3: GetSchemasRequest.type:type_name -> nem.UserConnectionType
+	52, // 4: GetSchemasRequest.type_config:type_name -> nem.UserConnectionTypeConfig
+	51, // 5: CreateSchemaRequest.type:type_name -> nem.UserConnectionType
+	52, // 6: CreateSchemaRequest.type_config:type_name -> nem.UserConnectionTypeConfig
+	51, // 7: ExecuteQueryRequest.type:type_name -> nem.UserConnectionType
+	52, // 8: ExecuteQueryRequest.type_config:type_name -> nem.UserConnectionTypeConfig
 	12, // 9: ExecuteQueryRequest.statements:type_name -> QueryStatement
 	0,  // 10: GetQueryExecutionResponse.status:type_name -> QueryExecutionStatus
-	44, // 11: GetQueryExecutionResponse.result:type_name -> nem.UserConnectionExecution
-	42, // 12: ApplyDataCRRequest.type:type_name -> nem.UserConnectionType
-	43, // 13: ApplyDataCRRequest.type_config:type_name -> nem.UserConnectionTypeConfig
+	53, // 11: GetQueryExecutionResponse.result:type_name -> nem.UserConnectionExecution
+	51, // 12: ApplyDataCRRequest.type:type_name -> nem.UserConnectionType
+	52, // 13: ApplyDataCRRequest.type_config:type_name -> nem.UserConnectionTypeConfig
 	0,  // 14: ExecuteQuerySyncResponse.status:type_name -> QueryExecutionStatus
-	44, // 15: ExecuteQuerySyncResponse.result:type_name -> nem.UserConnectionExecution
-	42, // 16: StartChangesDiffRequest.type:type_name -> nem.UserConnectionType
-	43, // 17: StartChangesDiffRequest.type_config:type_name -> nem.UserConnectionTypeConfig
+	53, // 15: ExecuteQuerySyncResponse.result:type_name -> nem.UserConnectionExecution
+	51, // 16: StartChangesDiffRequest.type:type_name -> nem.UserConnectionType
+	52, // 17: StartChangesDiffRequest.type_config:type_name -> nem.UserConnectionTypeConfig
 	1,  // 18: GetChangesDiffResponse.status:type_name -> ChangesDiffStatus
-	42, // 19: GetProjectVersionFromConnectionRequest.type:type_name -> nem.UserConnectionType
-	43, // 20: GetProjectVersionFromConnectionRequest.type_config:type_name -> nem.UserConnectionTypeConfig
-	45, // 21: GetProjectVersionFromConnectionResponse.project_version:type_name -> nem.ProjectVersion
+	51, // 19: GetProjectVersionFromConnectionRequest.type:type_name -> nem.UserConnectionType
+	52, // 20: GetProjectVersionFromConnectionRequest.type_config:type_name -> nem.UserConnectionTypeConfig
+	54, // 21: GetProjectVersionFromConnectionResponse.project_version:type_name -> nem.ProjectVersion
 	32, // 22: LocalAgentToServer.hello:type_name -> Hello
 	35, // 23: LocalAgentToServer.pong:type_name -> Pong
-	38, // 24: LocalAgentToServer.rows_chunk:type_name -> RowsChunk
-	40, // 25: LocalAgentToServer.query_error:type_name -> QueryError
-	33, // 26: ServerToLocalAgent.welcome:type_name -> Welcome
-	34, // 27: ServerToLocalAgent.ping:type_name -> Ping
-	36, // 28: ServerToLocalAgent.run_query:type_name -> RunQueryRequest
-	37, // 29: RowsChunk.columns:type_name -> ColumnMetadata
-	39, // 30: RowsChunk.rows:type_name -> Row
-	2,  // 31: NuzurConnectionManager.GetUserConnections:input_type -> GetUserConnectionsRequest
-	4,  // 32: NuzurConnectionManager.ClearUserConnections:input_type -> ClearUserConnectionsRequest
-	6,  // 33: NuzurConnectionManager.TestConnection:input_type -> TestConnectionRequest
-	8,  // 34: NuzurConnectionManager.GetSchemas:input_type -> GetSchemasRequest
-	10, // 35: NuzurConnectionManager.CreateSchema:input_type -> CreateSchemaRequest
-	13, // 36: NuzurConnectionManager.ExecuteQuery:input_type -> ExecuteQueryRequest
-	15, // 37: NuzurConnectionManager.GetQueryExecution:input_type -> GetQueryExecutionRequest
-	17, // 38: NuzurConnectionManager.CancelQueryExecution:input_type -> CancelQueryExecutionRequest
-	19, // 39: NuzurConnectionManager.ApplyDataCR:input_type -> ApplyDataCRRequest
-	13, // 40: NuzurConnectionManager.ExecuteQuerySync:input_type -> ExecuteQueryRequest
-	22, // 41: NuzurConnectionManager.StartChangesDiff:input_type -> StartChangesDiffRequest
-	24, // 42: NuzurConnectionManager.GetChangesDiff:input_type -> GetChangesDiffRequest
-	26, // 43: NuzurConnectionManager.CancelChangesDiff:input_type -> CancelChangesDiffRequest
-	28, // 44: NuzurConnectionManager.GetProjectVersionFromConnection:input_type -> GetProjectVersionFromConnectionRequest
-	30, // 45: NuzurConnectionManager.LocalAgentChannel:input_type -> LocalAgentToServer
-	3,  // 46: NuzurConnectionManager.GetUserConnections:output_type -> GetUserConnectionsResponse
-	5,  // 47: NuzurConnectionManager.ClearUserConnections:output_type -> ClearUserConnectionsResponse
-	7,  // 48: NuzurConnectionManager.TestConnection:output_type -> TestConnectionResponse
-	9,  // 49: NuzurConnectionManager.GetSchemas:output_type -> GetSchemasResponse
-	11, // 50: NuzurConnectionManager.CreateSchema:output_type -> CreateSchemaResponse
-	14, // 51: NuzurConnectionManager.ExecuteQuery:output_type -> ExecuteQueryResponse
-	16, // 52: NuzurConnectionManager.GetQueryExecution:output_type -> GetQueryExecutionResponse
-	18, // 53: NuzurConnectionManager.CancelQueryExecution:output_type -> CancelQueryExecutionResponse
-	20, // 54: NuzurConnectionManager.ApplyDataCR:output_type -> ApplyDataCRResponse
-	21, // 55: NuzurConnectionManager.ExecuteQuerySync:output_type -> ExecuteQuerySyncResponse
-	23, // 56: NuzurConnectionManager.StartChangesDiff:output_type -> StartChangesDiffResponse
-	25, // 57: NuzurConnectionManager.GetChangesDiff:output_type -> GetChangesDiffResponse
-	27, // 58: NuzurConnectionManager.CancelChangesDiff:output_type -> CancelChangesDiffResponse
-	29, // 59: NuzurConnectionManager.GetProjectVersionFromConnection:output_type -> GetProjectVersionFromConnectionResponse
-	31, // 60: NuzurConnectionManager.LocalAgentChannel:output_type -> ServerToLocalAgent
-	46, // [46:61] is the sub-list for method output_type
-	31, // [31:46] is the sub-list for method input_type
-	31, // [31:31] is the sub-list for extension type_name
-	31, // [31:31] is the sub-list for extension extendee
-	0,  // [0:31] is the sub-list for field type_name
+	46, // 24: LocalAgentToServer.rows_chunk:type_name -> RowsChunk
+	49, // 25: LocalAgentToServer.query_error:type_name -> QueryError
+	38, // 26: LocalAgentToServer.exec_response:type_name -> ExecResponse
+	40, // 27: LocalAgentToServer.begin_tx_response:type_name -> BeginTxResponse
+	42, // 28: LocalAgentToServer.commit_response:type_name -> CommitResponse
+	44, // 29: LocalAgentToServer.rollback_response:type_name -> RollbackResponse
+	33, // 30: ServerToLocalAgent.welcome:type_name -> Welcome
+	34, // 31: ServerToLocalAgent.ping:type_name -> Ping
+	36, // 32: ServerToLocalAgent.run_query:type_name -> RunQueryRequest
+	37, // 33: ServerToLocalAgent.exec:type_name -> ExecRequest
+	39, // 34: ServerToLocalAgent.begin_tx:type_name -> BeginTxRequest
+	41, // 35: ServerToLocalAgent.commit:type_name -> CommitRequest
+	43, // 36: ServerToLocalAgent.rollback:type_name -> RollbackRequest
+	45, // 37: RowsChunk.columns:type_name -> ColumnMetadata
+	47, // 38: RowsChunk.rows:type_name -> Row
+	48, // 39: Row.values:type_name -> Value
+	55, // 40: Value.time_val:type_name -> google.protobuf.Timestamp
+	2,  // 41: NuzurConnectionManager.GetUserConnections:input_type -> GetUserConnectionsRequest
+	4,  // 42: NuzurConnectionManager.ClearUserConnections:input_type -> ClearUserConnectionsRequest
+	6,  // 43: NuzurConnectionManager.TestConnection:input_type -> TestConnectionRequest
+	8,  // 44: NuzurConnectionManager.GetSchemas:input_type -> GetSchemasRequest
+	10, // 45: NuzurConnectionManager.CreateSchema:input_type -> CreateSchemaRequest
+	13, // 46: NuzurConnectionManager.ExecuteQuery:input_type -> ExecuteQueryRequest
+	15, // 47: NuzurConnectionManager.GetQueryExecution:input_type -> GetQueryExecutionRequest
+	17, // 48: NuzurConnectionManager.CancelQueryExecution:input_type -> CancelQueryExecutionRequest
+	19, // 49: NuzurConnectionManager.ApplyDataCR:input_type -> ApplyDataCRRequest
+	13, // 50: NuzurConnectionManager.ExecuteQuerySync:input_type -> ExecuteQueryRequest
+	22, // 51: NuzurConnectionManager.StartChangesDiff:input_type -> StartChangesDiffRequest
+	24, // 52: NuzurConnectionManager.GetChangesDiff:input_type -> GetChangesDiffRequest
+	26, // 53: NuzurConnectionManager.CancelChangesDiff:input_type -> CancelChangesDiffRequest
+	28, // 54: NuzurConnectionManager.GetProjectVersionFromConnection:input_type -> GetProjectVersionFromConnectionRequest
+	30, // 55: NuzurConnectionManager.LocalAgentChannel:input_type -> LocalAgentToServer
+	3,  // 56: NuzurConnectionManager.GetUserConnections:output_type -> GetUserConnectionsResponse
+	5,  // 57: NuzurConnectionManager.ClearUserConnections:output_type -> ClearUserConnectionsResponse
+	7,  // 58: NuzurConnectionManager.TestConnection:output_type -> TestConnectionResponse
+	9,  // 59: NuzurConnectionManager.GetSchemas:output_type -> GetSchemasResponse
+	11, // 60: NuzurConnectionManager.CreateSchema:output_type -> CreateSchemaResponse
+	14, // 61: NuzurConnectionManager.ExecuteQuery:output_type -> ExecuteQueryResponse
+	16, // 62: NuzurConnectionManager.GetQueryExecution:output_type -> GetQueryExecutionResponse
+	18, // 63: NuzurConnectionManager.CancelQueryExecution:output_type -> CancelQueryExecutionResponse
+	20, // 64: NuzurConnectionManager.ApplyDataCR:output_type -> ApplyDataCRResponse
+	21, // 65: NuzurConnectionManager.ExecuteQuerySync:output_type -> ExecuteQuerySyncResponse
+	23, // 66: NuzurConnectionManager.StartChangesDiff:output_type -> StartChangesDiffResponse
+	25, // 67: NuzurConnectionManager.GetChangesDiff:output_type -> GetChangesDiffResponse
+	27, // 68: NuzurConnectionManager.CancelChangesDiff:output_type -> CancelChangesDiffResponse
+	29, // 69: NuzurConnectionManager.GetProjectVersionFromConnection:output_type -> GetProjectVersionFromConnectionResponse
+	31, // 70: NuzurConnectionManager.LocalAgentChannel:output_type -> ServerToLocalAgent
+	56, // [56:71] is the sub-list for method output_type
+	41, // [41:56] is the sub-list for method input_type
+	41, // [41:41] is the sub-list for extension type_name
+	41, // [41:41] is the sub-list for extension extendee
+	0,  // [0:41] is the sub-list for field type_name
 }
 
 func init() { file_connection_manager_proto_init() }
@@ -2707,11 +3533,28 @@ func file_connection_manager_proto_init() {
 		(*LocalAgentToServer_Pong)(nil),
 		(*LocalAgentToServer_RowsChunk)(nil),
 		(*LocalAgentToServer_QueryError)(nil),
+		(*LocalAgentToServer_ExecResponse)(nil),
+		(*LocalAgentToServer_BeginTxResponse)(nil),
+		(*LocalAgentToServer_CommitResponse)(nil),
+		(*LocalAgentToServer_RollbackResponse)(nil),
 	}
 	file_connection_manager_proto_msgTypes[29].OneofWrappers = []any{
 		(*ServerToLocalAgent_Welcome)(nil),
 		(*ServerToLocalAgent_Ping)(nil),
 		(*ServerToLocalAgent_RunQuery)(nil),
+		(*ServerToLocalAgent_Exec)(nil),
+		(*ServerToLocalAgent_BeginTx)(nil),
+		(*ServerToLocalAgent_Commit)(nil),
+		(*ServerToLocalAgent_Rollback)(nil),
+	}
+	file_connection_manager_proto_msgTypes[46].OneofWrappers = []any{
+		(*Value_IsNull)(nil),
+		(*Value_StringVal)(nil),
+		(*Value_IntVal)(nil),
+		(*Value_DoubleVal)(nil),
+		(*Value_BoolVal)(nil),
+		(*Value_BytesVal)(nil),
+		(*Value_TimeVal)(nil),
 	}
 	type x struct{}
 	out := protoimpl.TypeBuilder{
@@ -2719,7 +3562,7 @@ func file_connection_manager_proto_init() {
 			GoPackagePath: reflect.TypeOf(x{}).PkgPath(),
 			RawDescriptor: unsafe.Slice(unsafe.StringData(file_connection_manager_proto_rawDesc), len(file_connection_manager_proto_rawDesc)),
 			NumEnums:      2,
-			NumMessages:   39,
+			NumMessages:   48,
 			NumExtensions: 0,
 			NumServices:   1,
 		},
