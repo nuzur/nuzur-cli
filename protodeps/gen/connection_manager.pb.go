@@ -1025,8 +1025,13 @@ type ApplyDataCRRequest struct {
 	TypeConfig        *gen.UserConnectionTypeConfig `protobuf:"bytes,3,opt,name=type_config,json=typeConfig,proto3" json:"type_config,omitempty"`
 	Schema            string                        `protobuf:"bytes,4,opt,name=schema,proto3" json:"schema,omitempty"`
 	Locale            string                        `protobuf:"bytes,5,opt,name=locale,proto3" json:"locale,omitempty"`
-	unknownFields     protoimpl.UnknownFields
-	sizeCache         protoimpl.SizeCache
+	// acknowledge_target_mismatch is a confirmation bit the client sets on the
+	// SECOND apply call when the server's first response flagged a REMOTE
+	// origin/target mismatch. It's not used (and ignored) for LOCAL CRs —
+	// those always require strict uuid match.
+	AcknowledgeTargetMismatch bool `protobuf:"varint,6,opt,name=acknowledge_target_mismatch,json=acknowledgeTargetMismatch,proto3" json:"acknowledge_target_mismatch,omitempty"`
+	unknownFields             protoimpl.UnknownFields
+	sizeCache                 protoimpl.SizeCache
 }
 
 func (x *ApplyDataCRRequest) Reset() {
@@ -1094,11 +1099,27 @@ func (x *ApplyDataCRRequest) GetLocale() string {
 	return ""
 }
 
+func (x *ApplyDataCRRequest) GetAcknowledgeTargetMismatch() bool {
+	if x != nil {
+		return x.AcknowledgeTargetMismatch
+	}
+	return false
+}
+
 type ApplyDataCRResponse struct {
-	state         protoimpl.MessageState `protogen:"open.v1"`
-	ExecutionUuid string                 `protobuf:"bytes,1,opt,name=execution_uuid,json=executionUuid,proto3" json:"execution_uuid,omitempty"`
-	unknownFields protoimpl.UnknownFields
-	sizeCache     protoimpl.SizeCache
+	state protoimpl.MessageState `protogen:"open.v1"`
+	// execution_uuid is populated when the apply proceeds. Empty when the
+	// server short-circuited due to a target mismatch awaiting confirmation.
+	ExecutionUuid string `protobuf:"bytes,1,opt,name=execution_uuid,json=executionUuid,proto3" json:"execution_uuid,omitempty"`
+	// target_mismatch is set to true when the REMOTE CR's recorded origin
+	// connection differs from the connection in this request AND the client
+	// didn't set acknowledge_target_mismatch. The apply did NOT happen; the
+	// client should show a confirm modal with target_mismatch_message and
+	// re-call ApplyDataCR with acknowledge_target_mismatch=true.
+	TargetMismatch        bool   `protobuf:"varint,2,opt,name=target_mismatch,json=targetMismatch,proto3" json:"target_mismatch,omitempty"`
+	TargetMismatchMessage string `protobuf:"bytes,3,opt,name=target_mismatch_message,json=targetMismatchMessage,proto3" json:"target_mismatch_message,omitempty"`
+	unknownFields         protoimpl.UnknownFields
+	sizeCache             protoimpl.SizeCache
 }
 
 func (x *ApplyDataCRResponse) Reset() {
@@ -1134,6 +1155,20 @@ func (*ApplyDataCRResponse) Descriptor() ([]byte, []int) {
 func (x *ApplyDataCRResponse) GetExecutionUuid() string {
 	if x != nil {
 		return x.ExecutionUuid
+	}
+	return ""
+}
+
+func (x *ApplyDataCRResponse) GetTargetMismatch() bool {
+	if x != nil {
+		return x.TargetMismatch
+	}
+	return false
+}
+
+func (x *ApplyDataCRResponse) GetTargetMismatchMessage() string {
+	if x != nil {
+		return x.TargetMismatchMessage
 	}
 	return ""
 }
@@ -3191,16 +3226,19 @@ const file_connection_manager_proto_rawDesc = "" +
 	"\fjson_results\x18\x04 \x01(\tR\vjsonResults\"D\n" +
 	"\x1bCancelQueryExecutionRequest\x12%\n" +
 	"\x0eexecution_uuid\x18\x01 \x01(\tR\rexecutionUuid\"\x1e\n" +
-	"\x1cCancelQueryExecutionResponse\"\xe1\x01\n" +
+	"\x1cCancelQueryExecutionResponse\"\xa1\x02\n" +
 	"\x12ApplyDataCRRequest\x12.\n" +
 	"\x13change_request_uuid\x18\x01 \x01(\tR\x11changeRequestUuid\x12+\n" +
 	"\x04type\x18\x02 \x01(\x0e2\x17.nem.UserConnectionTypeR\x04type\x12>\n" +
 	"\vtype_config\x18\x03 \x01(\v2\x1d.nem.UserConnectionTypeConfigR\n" +
 	"typeConfig\x12\x16\n" +
 	"\x06schema\x18\x04 \x01(\tR\x06schema\x12\x16\n" +
-	"\x06locale\x18\x05 \x01(\tR\x06locale\"<\n" +
+	"\x06locale\x18\x05 \x01(\tR\x06locale\x12>\n" +
+	"\x1backnowledge_target_mismatch\x18\x06 \x01(\bR\x19acknowledgeTargetMismatch\"\x9d\x01\n" +
 	"\x13ApplyDataCRResponse\x12%\n" +
-	"\x0eexecution_uuid\x18\x01 \x01(\tR\rexecutionUuid\"\xbc\x01\n" +
+	"\x0eexecution_uuid\x18\x01 \x01(\tR\rexecutionUuid\x12'\n" +
+	"\x0ftarget_mismatch\x18\x02 \x01(\bR\x0etargetMismatch\x126\n" +
+	"\x17target_mismatch_message\x18\x03 \x01(\tR\x15targetMismatchMessage\"\xbc\x01\n" +
 	"\x18ExecuteQuerySyncResponse\x12-\n" +
 	"\x06status\x18\x01 \x01(\x0e2\x15.QueryExecutionStatusR\x06status\x12\x18\n" +
 	"\amessage\x18\x02 \x01(\tR\amessage\x124\n" +
