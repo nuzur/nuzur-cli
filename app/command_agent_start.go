@@ -12,6 +12,7 @@ import (
 
 	"github.com/manifoldco/promptui"
 	"github.com/nuzur/nuzur-cli/agent"
+	"github.com/nuzur/nuzur-cli/agent/connections"
 	"github.com/nuzur/nuzur-cli/files"
 	"github.com/urfave/cli"
 )
@@ -52,12 +53,19 @@ func (i *Implementation) AgentStartCommand() cli.Command {
 				_ = os.Remove(files.LocalAgentDriverFilePath())
 			}
 
-			driver, dsn, err := resolveLocalDB(c.String("driver"), c.String("dsn"))
+			// Fallback DSN was the phase-2 way of giving the daemon a DB to
+			// talk to before the connection registry existed. With registered
+			// connections (`nuzur agent connection add`) it's optional. We
+			// only prompt for it when there's no registry AND no explicit
+			// flag/env value — otherwise we silently skip it.
+			driver, dsn, err := resolveFallbackDSN(c.String("driver"), c.String("dsn"))
 			if err != nil {
 				return err
 			}
 
-			fmt.Printf("Local DB: driver=%s dsn=%s\n", driver, maskDSN(dsn))
+			if dsn != "" {
+				fmt.Printf("Fallback DB: driver=%s dsn=%s\n", driver, maskDSN(dsn))
+			}
 
 			ctx, cancel := context.WithCancel(context.Background())
 			defer cancel()
@@ -82,6 +90,36 @@ func (i *Implementation) AgentStartCommand() cli.Command {
 			return agent.Run(ctx, opts)
 		},
 	}
+}
+
+// resolveFallbackDSN is the smarter wrapper around resolveLocalDB used by the
+// `agent start` command. Behavior:
+//
+//   - Explicit flag/env value → use it. (saved for next time)
+//   - Saved file exists       → use it. (no prompt)
+//   - Registry has connections → no fallback needed; return empty silently.
+//   - Nothing anywhere        → prompt the user (first-run setup).
+//
+// The fallback exists for self-test and for users running RunQuery against
+// an unknown connection_uuid (which still happens during the phase-2-era
+// self-test sentinel uuid).
+func resolveFallbackDSN(cliDriver, cliDSN string) (string, string, error) {
+	// Explicit input wins regardless of registry state.
+	if cliDriver != "" || cliDSN != "" {
+		return resolveLocalDB(cliDriver, cliDSN)
+	}
+	// Previously saved values? Use them silently.
+	savedDriver, _ := readTrimmedFile(files.LocalAgentDriverFilePath())
+	savedDSN, _ := readTrimmedFile(files.LocalAgentDSNFilePath())
+	if savedDriver != "" && savedDSN != "" {
+		return savedDriver, savedDSN, nil
+	}
+	// Registered connections? Skip the fallback entirely.
+	if reg, err := connections.Load(); err == nil && len(reg.Entries) > 0 {
+		return "", "", nil
+	}
+	// Nothing — first run with no connections registered. Walk the prompt.
+	return resolveLocalDB(cliDriver, cliDSN)
 }
 
 // resolveLocalDB returns (driver, dsn). Priority order:
