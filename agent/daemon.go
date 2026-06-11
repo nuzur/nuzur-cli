@@ -41,7 +41,29 @@ type DaemonOptions struct {
 	// every RunQuery returns an error.
 	Driver string
 	DSN    string
+
+	// MaxConcurrentQueries caps the number of DB-touching reverse RPCs the
+	// agent runs simultaneously. <=0 disables the cap. The default applied
+	// by Run() is DefaultMaxConcurrentQueries when the field is zero.
+	MaxConcurrentQueries int
 }
+
+// DefaultMaxConcurrentQueries is the safety cap that ships when neither the
+// flag nor env is set. It's well above the per-connection driver pool
+// (SetMaxOpenConns=5) so normal workloads never see it, but small enough
+// that a runaway client can't spawn thousands of waiting goroutines.
+const DefaultMaxConcurrentQueries = 32
+
+// queryAcquireTimeout is how long a single reverse RPC waits for a slot
+// before returning an "agent overloaded" error to the cloud. Trades a
+// possible retry for a definitive failure rather than indefinite hang.
+const queryAcquireTimeout = 30 * time.Second
+
+// ErrCLITooOld is returned by Run() when the server's Welcome carries a
+// min_cli_version higher than this CLI's CLI_VERSION. Callers should NOT
+// retry — the failure will repeat on every reconnect until the user
+// updates their CLI binary.
+var ErrCLITooOld = errors.New("nuzur CLI is too old; update and restart the agent")
 
 const (
 	reconnectInitial = time.Second
@@ -93,12 +115,39 @@ func Run(ctx context.Context, opts DaemonOptions) error {
 	defer txs.CloseAll()
 	go runIdleTxReaper(ctx, txs)
 
+	cap := opts.MaxConcurrentQueries
+	if cap == 0 {
+		cap = DefaultMaxConcurrentQueries
+	}
+	sem := newQuerySemaphore(cap)
+	if sem != nil {
+		log.Printf("query concurrency cap: %d", cap)
+	} else {
+		log.Printf("query concurrency cap: disabled")
+	}
+
 	backoff := reconnectInitial
 	for {
-		err := runOnce(ctx, cm, agentUUID, agentToken, pool, txs)
+		err := runOnce(ctx, cm, agentUUID, agentToken, pool, txs, sem)
 		if err != nil {
 			if ctx.Err() != nil {
 				return ctx.Err()
+			}
+			// Version mismatch is not retryable: every reconnect will fail
+			// the same way until the operator updates the binary. Exit
+			// loud so launchd/systemd surfaces the failure (and so the
+			// user sees the "please update" log without it scrolling away
+			// behind reconnect noise).
+			if errors.Is(err, ErrCLITooOld) {
+				return err
+			}
+			// Also exit non-retryable if the SERVER closed the stream with
+			// FailedPrecondition (its own version check fired) — the gRPC
+			// error wrapper looks for the status code below.
+			if isFailedPreconditionStream(err) {
+				log.Printf("server rejected the stream as failed precondition: %v", err)
+				log.Printf("This is non-retryable. Update the CLI and restart the agent.")
+				return err
 			}
 			log.Printf("daemon stream ended: %v — reconnecting in %s", err, backoff)
 		}
@@ -132,7 +181,7 @@ func nextBackoff(cur time.Duration) time.Duration {
 
 // runOnce opens a LocalAgentChannel, says Hello, waits for Welcome, and runs
 // the read loop until the stream terminates.
-func runOnce(ctx context.Context, cm *cmclient.Client, agentUUID, agentToken string, pool *dbPool, txs *txPool) error {
+func runOnce(ctx context.Context, cm *cmclient.Client, agentUUID, agentToken string, pool *dbPool, txs *txPool, sem *querySemaphore) error {
 	streamCtx, cancel := context.WithCancel(ctx)
 	defer cancel()
 
@@ -163,6 +212,17 @@ func runOnce(ctx context.Context, cm *cmclient.Client, agentUUID, agentToken str
 	}
 	log.Printf("paired and online. server_version=%s min_cli=%s", welcome.GetServerVersion(), welcome.GetMinCliVersion())
 
+	// Version skew check. The server ALSO checks this and closes the stream
+	// with FailedPrecondition if we're too old — but a self-check here lets
+	// the agent surface a clear "please update" message before any RPCs,
+	// without depending on the server's gRPC error text reaching the user.
+	if !cliVersionAtLeast(constants.CLI_VERSION, welcome.GetMinCliVersion()) {
+		log.Printf("ERROR: this nuzur CLI is too old (cli_version=%s, server requires >=%s).",
+			constants.CLI_VERSION, welcome.GetMinCliVersion())
+		log.Printf("Update via `nuzur update` (or download a fresh binary) and restart the agent.")
+		return ErrCLITooOld
+	}
+
 	// Read loop.
 	for {
 		msg, err := stream.Recv()
@@ -172,11 +232,11 @@ func runOnce(ctx context.Context, cm *cmclient.Client, agentUUID, agentToken str
 			}
 			return err
 		}
-		go handleReverseRPC(streamCtx, stream, pool, txs, msg)
+		go handleReverseRPC(streamCtx, stream, pool, txs, sem, msg)
 	}
 }
 
-func handleReverseRPC(ctx context.Context, stream pb.NuzurConnectionManager_LocalAgentChannelClient, pool *dbPool, txs *txPool, msg *pb.ServerToLocalAgent) {
+func handleReverseRPC(ctx context.Context, stream pb.NuzurConnectionManager_LocalAgentChannelClient, pool *dbPool, txs *txPool, sem *querySemaphore, msg *pb.ServerToLocalAgent) {
 	switch payload := msg.GetMessage().(type) {
 	case *pb.ServerToLocalAgent_Ping:
 		_ = stream.Send(&pb.LocalAgentToServer{Message: &pb.LocalAgentToServer_Pong{
@@ -184,15 +244,54 @@ func handleReverseRPC(ctx context.Context, stream pb.NuzurConnectionManager_Loca
 		}})
 
 	case *pb.ServerToLocalAgent_RunQuery:
+		// Tx-bound queries run on the conn already pinned at BeginTx, so
+		// they don't take a fresh slot — that would also deadlock against
+		// a tx whose BeginTx slot is still held.
+		if payload.RunQuery.GetTxId() != "" {
+			handleRunQuery(ctx, stream, pool, txs, payload.RunQuery)
+			return
+		}
+		acqCtx, cancel := context.WithTimeout(ctx, queryAcquireTimeout)
+		defer cancel()
+		if err := sem.Acquire(acqCtx); err != nil {
+			sendQueryError(stream, payload.RunQuery.GetRequestId(), err.Error())
+			return
+		}
+		defer sem.Release()
 		handleRunQuery(ctx, stream, pool, txs, payload.RunQuery)
 
 	case *pb.ServerToLocalAgent_Exec:
+		if payload.Exec.GetTxId() != "" {
+			handleExec(ctx, stream, pool, txs, payload.Exec)
+			return
+		}
+		acqCtx, cancel := context.WithTimeout(ctx, queryAcquireTimeout)
+		defer cancel()
+		if err := sem.Acquire(acqCtx); err != nil {
+			sendQueryError(stream, payload.Exec.GetRequestId(), err.Error())
+			return
+		}
+		defer sem.Release()
 		handleExec(ctx, stream, pool, txs, payload.Exec)
 
 	case *pb.ServerToLocalAgent_BeginTx:
+		// BeginTx opens a tx which pins a conn until Commit/Rollback. We
+		// take a slot for the BeginTx itself; release as soon as the agent
+		// replies (the tx now lives in txPool and its work is gated by
+		// txPool's own caps, not the query semaphore).
+		acqCtx, cancel := context.WithTimeout(ctx, queryAcquireTimeout)
+		defer cancel()
+		if err := sem.Acquire(acqCtx); err != nil {
+			sendQueryError(stream, payload.BeginTx.GetRequestId(), err.Error())
+			return
+		}
+		defer sem.Release()
 		handleBeginTx(ctx, stream, pool, txs, payload.BeginTx)
 
 	case *pb.ServerToLocalAgent_Commit:
+		// Commit / Rollback never take a slot. They're cheap, and gating
+		// them would deadlock under load: every slot held by a query
+		// waiting on a tx to commit, but commit can't get a slot.
 		handleCommit(stream, txs, payload.Commit)
 
 	case *pb.ServerToLocalAgent_Rollback:

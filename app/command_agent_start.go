@@ -46,6 +46,12 @@ func (i *Implementation) AgentStartCommand() cli.Command {
 				Name:  "reset-db",
 				Usage: "discard the previously saved DSN/driver and re-prompt",
 			},
+			cli.IntFlag{
+				Name:   "max-concurrent-queries",
+				Usage:  "cap the number of DB-touching reverse RPCs the agent runs simultaneously (0 = no cap; default 32)",
+				EnvVar: "NUZUR_AGENT_MAX_CONCURRENT_QUERIES",
+				Value:  agent.DefaultMaxConcurrentQueries,
+			},
 		},
 		Action: func(c *cli.Context) error {
 			if c.Bool("reset-db") {
@@ -79,9 +85,10 @@ func (i *Implementation) AgentStartCommand() cli.Command {
 			}()
 
 			opts := agent.DaemonOptions{
-				DisableTLS: c.Bool("insecure"),
-				Driver:     driver,
-				DSN:        dsn,
+				DisableTLS:           c.Bool("insecure"),
+				Driver:               driver,
+				DSN:                  dsn,
+				MaxConcurrentQueries: c.Int("max-concurrent-queries"),
 			}
 			if addr := c.String("address"); addr != "" {
 				opts.ConnectionManagerAddress = &addr
