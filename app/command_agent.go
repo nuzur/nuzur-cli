@@ -18,6 +18,15 @@ func (i *Implementation) AgentCommand() cli.Command {
 	return cli.Command{
 		Name:  "agent",
 		Usage: i.localize.Localize("agent_desc", "Manage the local nuzur agent running on this machine"),
+		// Best-effort migrate legacy /tmp-based config files into the new
+		// persistent location. Idempotent and never blocks subcommands —
+		// errors are logged so users notice but the command proceeds.
+		Before: func(c *cli.Context) error {
+			if err := files.MigrateLegacyAgentFiles(); err != nil {
+				fmt.Fprintf(os.Stderr, "warning: failed to migrate legacy agent files: %v\n", err)
+			}
+			return nil
+		},
 		Subcommands: []cli.Command{
 			i.AgentPairCommand(),
 			i.AgentUnpairCommand(),

@@ -52,6 +52,15 @@ func (p *dbPool) Get(connUUID string) (*sqlx.DB, error) {
 	p.mu.Unlock()
 
 	if entry, ok := p.registry.FindByUUID(connUUID); ok {
+		// Registry metadata exists but the keychain didn't have the DSN.
+		// Most common when restoring a registry file from another machine
+		// (the keychain doesn't roam with it) or if the user manually
+		// cleared a keychain entry.
+		if entry.DSN == "" {
+			return nil, fmt.Errorf(
+				"connection %q (%s) has no DSN in the OS keychain — re-register it with `nuzur agent connection remove %s` followed by `nuzur agent connection add %s`",
+				entry.Name, entry.UUID, entry.Name, entry.Name)
+		}
 		h, err := openLocalDB(entry.Driver, entry.DSN)
 		if err != nil {
 			return nil, fmt.Errorf("open connection %q (%s): %w", entry.Name, entry.UUID, err)
