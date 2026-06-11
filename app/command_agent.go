@@ -1,12 +1,14 @@
 package app
 
 import (
+	"context"
 	"fmt"
 	"os"
 	"path"
 	"runtime"
 	"strings"
 
+	nemgen "github.com/nuzur/nem/idl/gen"
 	"github.com/nuzur/nuzur-cli/constants"
 	"github.com/nuzur/nuzur-cli/files"
 	"github.com/nuzur/nuzur-cli/productclient"
@@ -72,6 +74,10 @@ func (i *Implementation) AgentPairCommand() cli.Command {
 			ctx, err := productclient.ClientContext()
 			if err != nil {
 				return fmt.Errorf("error building auth context: %v", err)
+			}
+
+			if err := requireProMembership(ctx, i); err != nil {
+				return err
 			}
 
 			hostname, _ := os.Hostname()
@@ -172,6 +178,19 @@ func (i *Implementation) AgentRevokeCommand() cli.Command {
 			return nil
 		},
 	}
+}
+
+// requireProMembership returns an error when the authenticated user does not
+// have an active Pro or Enterprise membership. Local agents are a Pro+ feature.
+func requireProMembership(ctx context.Context, i *Implementation) error {
+	membership, err := i.productClient.ProductClient.GetMembership(ctx, &pb.GetMembershipRequest{})
+	if err != nil {
+		return fmt.Errorf("error checking membership: %v", err)
+	}
+	if membership.GetType() != nemgen.MembershipType_MEMBERSHIP_TYPE_PRO {
+		return fmt.Errorf("local agents require a Pro or Enterprise plan\n  upgrade at https://nuzur.com/pricing")
+	}
+	return nil
 }
 
 func writeLocalAgentCreds(uuidStr, token string) error {
