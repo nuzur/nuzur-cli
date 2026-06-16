@@ -1,6 +1,8 @@
 package main
 
 import (
+	"time"
+
 	extensionsdk "github.com/nuzur/extension-sdk"
 	"{{.ModulePath}}/server"
 	"go.uber.org/fx"
@@ -8,6 +10,7 @@ import (
 
 func main() {
 	fx.New(
+		fx.StopTimeout(45 * time.Second),
 		extensionsdk.Module,
 		fx.Provide(
 			server.New,
