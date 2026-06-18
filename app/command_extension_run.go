@@ -62,19 +62,17 @@ func (i *Implementation) ExtensionRunCommand() cli.Command {
 				return err
 			}
 
-			// check pro access if the extension is pro
-			if extension.Pro {
-				isProActive, err := er.IsProActiveForProject(project.Uuid)
-				if err != nil {
-					return err
-				}
-				if !isProActive {
-					outputtools.PrintlnColored(
-						i.localize.Localize("extension_run_no_pro", "This is a Pro extension and your project does not have an active Pro subscription."),
-						outputtools.Red,
-					)
-					return nil
-				}
+			// Check monthly execution limits for Pro extensions
+			limitRes, err := er.CheckExtensionExecutionLimit(project.Uuid, extension.Uuid)
+			if err != nil {
+				return err
+			}
+			if limitRes.IsLimited {
+				outputtools.PrintlnColored(
+					i.localize.Localize("pro_execution_limit_reached", "Monthly limit of 5 Pro extension executions reached. Please upgrade to Pro for unlimited executions."),
+					outputtools.Red,
+				)
+				return nil
 			}
 
 			// get latest extension version

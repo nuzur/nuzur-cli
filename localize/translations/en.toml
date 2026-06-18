@@ -57,3 +57,6 @@ other = "Run an extension"
 
 [extension_run_path]
 other = "Specify the path to run the extension: (.)"
+
+[pro_execution_limit_reached]
+other = "Monthly limit of 5 Pro extension executions reached. Please upgrade to Pro for unlimited executions."

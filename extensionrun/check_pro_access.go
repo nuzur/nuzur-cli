@@ -5,18 +5,19 @@ import (
 	"github.com/nuzur/nuzur-cli/protodeps/gen"
 )
 
-func (i *Implementation) IsProActiveForProject(projectUUID string) (bool, error) {
+func (i *Implementation) CheckExtensionExecutionLimit(projectUUID string, extensionUUID string) (*gen.CheckExtensionExecutionLimitResponse, error) {
 	ctx, err := productclient.ClientContext()
 	if err != nil {
-		return false, err
+		return nil, err
 	}
 
-	res, err := i.productClient.ProductClient.IsProActiveForProject(ctx, &gen.IsProActiveForProjectRequest{
-		ProjectUuid: projectUUID,
+	res, err := i.productClient.ProductClient.CheckExtensionExecutionLimit(ctx, &gen.CheckExtensionExecutionLimitRequest{
+		ProjectUuid:   projectUUID,
+		ExtensionUuid: extensionUUID,
 	})
 	if err != nil {
-		return false, err
+		return nil, err
 	}
 
-	return res.IsProActive, nil
+	return res, nil
 }

@@ -1250,8 +1250,11 @@ type StartChangesDiffRequest struct {
 	TypeConfig         *gen.UserConnectionTypeConfig `protobuf:"bytes,4,opt,name=type_config,json=typeConfig,proto3" json:"type_config,omitempty"`
 	Schema             string                        `protobuf:"bytes,5,opt,name=schema,proto3" json:"schema,omitempty"`
 	Locale             string                        `protobuf:"bytes,6,opt,name=locale,proto3" json:"locale,omitempty"`
-	unknownFields      protoimpl.UnknownFields
-	sizeCache          protoimpl.SizeCache
+	// force bypasses the cached diff result and recomputes from scratch.
+	// When false (default), a result cached within the TTL is returned.
+	Force         bool `protobuf:"varint,7,opt,name=force,proto3" json:"force,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
 }
 
 func (x *StartChangesDiffRequest) Reset() {
@@ -1324,6 +1327,13 @@ func (x *StartChangesDiffRequest) GetLocale() string {
 		return x.Locale
 	}
 	return ""
+}
+
+func (x *StartChangesDiffRequest) GetForce() bool {
+	if x != nil {
+		return x.Force
+	}
+	return false
 }
 
 type StartChangesDiffResponse struct {
@@ -3274,7 +3284,7 @@ const file_connection_manager_proto_rawDesc = "" +
 	"\x06status\x18\x01 \x01(\x0e2\x15.QueryExecutionStatusR\x06status\x12\x18\n" +
 	"\amessage\x18\x02 \x01(\tR\amessage\x124\n" +
 	"\x06result\x18\x03 \x01(\v2\x1c.nem.UserConnectionExecutionR\x06result\x12!\n" +
-	"\fjson_results\x18\x04 \x01(\tR\vjsonResults\"\x8b\x02\n" +
+	"\fjson_results\x18\x04 \x01(\tR\vjsonResults\"\xa1\x02\n" +
 	"\x17StartChangesDiffRequest\x12!\n" +
 	"\fproject_uuid\x18\x01 \x01(\tR\vprojectUuid\x120\n" +
 	"\x14project_version_uuid\x18\x02 \x01(\tR\x12projectVersionUuid\x12+\n" +
@@ -3282,7 +3292,8 @@ const file_connection_manager_proto_rawDesc = "" +
 	"\vtype_config\x18\x04 \x01(\v2\x1d.nem.UserConnectionTypeConfigR\n" +
 	"typeConfig\x12\x16\n" +
 	"\x06schema\x18\x05 \x01(\tR\x06schema\x12\x16\n" +
-	"\x06locale\x18\x06 \x01(\tR\x06locale\"F\n" +
+	"\x06locale\x18\x06 \x01(\tR\x06locale\x12\x14\n" +
+	"\x05force\x18\a \x01(\bR\x05force\"F\n" +
 	"\x18StartChangesDiffResponse\x12*\n" +
 	"\x11changes_diff_uuid\x18\x01 \x01(\tR\x0fchangesDiffUuid\"C\n" +
 	"\x15GetChangesDiffRequest\x12*\n" +

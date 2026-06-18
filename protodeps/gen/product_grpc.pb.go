@@ -87,6 +87,7 @@ const (
 	NuzurProduct_GetExtensionExecution_FullMethodName                       = "/NuzurProduct/GetExtensionExecution"
 	NuzurProduct_CreateExtensionExecution_FullMethodName                    = "/NuzurProduct/CreateExtensionExecution"
 	NuzurProduct_UpdateExtensionExecution_FullMethodName                    = "/NuzurProduct/UpdateExtensionExecution"
+	NuzurProduct_CheckExtensionExecutionLimit_FullMethodName                = "/NuzurProduct/CheckExtensionExecutionLimit"
 	NuzurProduct_ListUserChangeRequests_FullMethodName                      = "/NuzurProduct/ListUserChangeRequests"
 	NuzurProduct_GetChangeRequest_FullMethodName                            = "/NuzurProduct/GetChangeRequest"
 	NuzurProduct_CreateChangeRequest_FullMethodName                         = "/NuzurProduct/CreateChangeRequest"
@@ -113,9 +114,11 @@ const (
 	NuzurProduct_ListMembershipUserProjects_FullMethodName                  = "/NuzurProduct/ListMembershipUserProjects"
 	NuzurProduct_RemoveMembershipUser_FullMethodName                        = "/NuzurProduct/RemoveMembershipUser"
 	NuzurProduct_ListMembershipsForUser_FullMethodName                      = "/NuzurProduct/ListMembershipsForUser"
+	NuzurProduct_ChangeMembershipPlan_FullMethodName                        = "/NuzurProduct/ChangeMembershipPlan"
 	NuzurProduct_SendPrioritySupportEmail_FullMethodName                    = "/NuzurProduct/SendPrioritySupportEmail"
 	NuzurProduct_HandleWebhook_FullMethodName                               = "/NuzurProduct/HandleWebhook"
 	NuzurProduct_IsProActiveForProject_FullMethodName                       = "/NuzurProduct/IsProActiveForProject"
+	NuzurProduct_GetMembershipTierForProject_FullMethodName                 = "/NuzurProduct/GetMembershipTierForProject"
 	NuzurProduct_EvaluateUserPrompt_FullMethodName                          = "/NuzurProduct/EvaluateUserPrompt"
 	NuzurProduct_HandleUserPrompt_FullMethodName                            = "/NuzurProduct/HandleUserPrompt"
 	NuzurProduct_GetUserPromptJob_FullMethodName                            = "/NuzurProduct/GetUserPromptJob"
@@ -212,6 +215,7 @@ type NuzurProductClient interface {
 	GetExtensionExecution(ctx context.Context, in *GetExtensionExecutionRequest, opts ...grpc.CallOption) (*gen.ExtensionExecution, error)
 	CreateExtensionExecution(ctx context.Context, in *CreateExtensionExecutionRequest, opts ...grpc.CallOption) (*gen.ExtensionExecution, error)
 	UpdateExtensionExecution(ctx context.Context, in *UpdateExtensionExecutionRequest, opts ...grpc.CallOption) (*gen.ExtensionExecution, error)
+	CheckExtensionExecutionLimit(ctx context.Context, in *CheckExtensionExecutionLimitRequest, opts ...grpc.CallOption) (*CheckExtensionExecutionLimitResponse, error)
 	// change request
 	ListUserChangeRequests(ctx context.Context, in *ListUserChangeRequestsRequest, opts ...grpc.CallOption) (*ListUserChangeRequestsResponse, error)
 	GetChangeRequest(ctx context.Context, in *GetChangeRequestRequest, opts ...grpc.CallOption) (*gen.ChangeRequest, error)
@@ -243,12 +247,14 @@ type NuzurProductClient interface {
 	ListMembershipUserProjects(ctx context.Context, in *ListMembershipUserProjectsRequest, opts ...grpc.CallOption) (*ListMembershipUserProjectsResponse, error)
 	RemoveMembershipUser(ctx context.Context, in *RemoveMembershipUserRequest, opts ...grpc.CallOption) (*RemoveMembershipUserResponse, error)
 	ListMembershipsForUser(ctx context.Context, in *ListMembershipsForUserRequest, opts ...grpc.CallOption) (*ListMembershipsForUserResponse, error)
+	ChangeMembershipPlan(ctx context.Context, in *ChangeMembershipPlanRequest, opts ...grpc.CallOption) (*ChangeMembershipPlanResponse, error)
 	// support
 	SendPrioritySupportEmail(ctx context.Context, in *PrioritySupportEmailRequest, opts ...grpc.CallOption) (*PrioritySupportEmailResponse, error)
 	// webhook
 	HandleWebhook(ctx context.Context, in *HandleWebhookRequest, opts ...grpc.CallOption) (*HandleWebhookResponse, error)
 	// pro features
 	IsProActiveForProject(ctx context.Context, in *IsProActiveForProjectRequest, opts ...grpc.CallOption) (*IsProActiveForProjectResponse, error)
+	GetMembershipTierForProject(ctx context.Context, in *GetMembershipTierForProjectRequest, opts ...grpc.CallOption) (*GetMembershipTierForProjectResponse, error)
 	EvaluateUserPrompt(ctx context.Context, in *EvaluateUserPromptRequest, opts ...grpc.CallOption) (*EvaluateUserPromptResponse, error)
 	HandleUserPrompt(ctx context.Context, in *HandleUserPromptRequest, opts ...grpc.CallOption) (*HandleUserPromptResponse, error)
 	GetUserPromptJob(ctx context.Context, in *GetUserPromptJobRequest, opts ...grpc.CallOption) (*GetUserPromptJobResponse, error)
@@ -942,6 +948,16 @@ func (c *nuzurProductClient) UpdateExtensionExecution(ctx context.Context, in *U
 	return out, nil
 }
 
+func (c *nuzurProductClient) CheckExtensionExecutionLimit(ctx context.Context, in *CheckExtensionExecutionLimitRequest, opts ...grpc.CallOption) (*CheckExtensionExecutionLimitResponse, error) {
+	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
+	out := new(CheckExtensionExecutionLimitResponse)
+	err := c.cc.Invoke(ctx, NuzurProduct_CheckExtensionExecutionLimit_FullMethodName, in, out, cOpts...)
+	if err != nil {
+		return nil, err
+	}
+	return out, nil
+}
+
 func (c *nuzurProductClient) ListUserChangeRequests(ctx context.Context, in *ListUserChangeRequestsRequest, opts ...grpc.CallOption) (*ListUserChangeRequestsResponse, error) {
 	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
 	out := new(ListUserChangeRequestsResponse)
@@ -1202,6 +1218,16 @@ func (c *nuzurProductClient) ListMembershipsForUser(ctx context.Context, in *Lis
 	return out, nil
 }
 
+func (c *nuzurProductClient) ChangeMembershipPlan(ctx context.Context, in *ChangeMembershipPlanRequest, opts ...grpc.CallOption) (*ChangeMembershipPlanResponse, error) {
+	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
+	out := new(ChangeMembershipPlanResponse)
+	err := c.cc.Invoke(ctx, NuzurProduct_ChangeMembershipPlan_FullMethodName, in, out, cOpts...)
+	if err != nil {
+		return nil, err
+	}
+	return out, nil
+}
+
 func (c *nuzurProductClient) SendPrioritySupportEmail(ctx context.Context, in *PrioritySupportEmailRequest, opts ...grpc.CallOption) (*PrioritySupportEmailResponse, error) {
 	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
 	out := new(PrioritySupportEmailResponse)
@@ -1226,6 +1252,16 @@ func (c *nuzurProductClient) IsProActiveForProject(ctx context.Context, in *IsPr
 	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
 	out := new(IsProActiveForProjectResponse)
 	err := c.cc.Invoke(ctx, NuzurProduct_IsProActiveForProject_FullMethodName, in, out, cOpts...)
+	if err != nil {
+		return nil, err
+	}
+	return out, nil
+}
+
+func (c *nuzurProductClient) GetMembershipTierForProject(ctx context.Context, in *GetMembershipTierForProjectRequest, opts ...grpc.CallOption) (*GetMembershipTierForProjectResponse, error) {
+	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
+	out := new(GetMembershipTierForProjectResponse)
+	err := c.cc.Invoke(ctx, NuzurProduct_GetMembershipTierForProject_FullMethodName, in, out, cOpts...)
 	if err != nil {
 		return nil, err
 	}
@@ -1434,6 +1470,7 @@ type NuzurProductServer interface {
 	GetExtensionExecution(context.Context, *GetExtensionExecutionRequest) (*gen.ExtensionExecution, error)
 	CreateExtensionExecution(context.Context, *CreateExtensionExecutionRequest) (*gen.ExtensionExecution, error)
 	UpdateExtensionExecution(context.Context, *UpdateExtensionExecutionRequest) (*gen.ExtensionExecution, error)
+	CheckExtensionExecutionLimit(context.Context, *CheckExtensionExecutionLimitRequest) (*CheckExtensionExecutionLimitResponse, error)
 	// change request
 	ListUserChangeRequests(context.Context, *ListUserChangeRequestsRequest) (*ListUserChangeRequestsResponse, error)
 	GetChangeRequest(context.Context, *GetChangeRequestRequest) (*gen.ChangeRequest, error)
@@ -1465,12 +1502,14 @@ type NuzurProductServer interface {
 	ListMembershipUserProjects(context.Context, *ListMembershipUserProjectsRequest) (*ListMembershipUserProjectsResponse, error)
 	RemoveMembershipUser(context.Context, *RemoveMembershipUserRequest) (*RemoveMembershipUserResponse, error)
 	ListMembershipsForUser(context.Context, *ListMembershipsForUserRequest) (*ListMembershipsForUserResponse, error)
+	ChangeMembershipPlan(context.Context, *ChangeMembershipPlanRequest) (*ChangeMembershipPlanResponse, error)
 	// support
 	SendPrioritySupportEmail(context.Context, *PrioritySupportEmailRequest) (*PrioritySupportEmailResponse, error)
 	// webhook
 	HandleWebhook(context.Context, *HandleWebhookRequest) (*HandleWebhookResponse, error)
 	// pro features
 	IsProActiveForProject(context.Context, *IsProActiveForProjectRequest) (*IsProActiveForProjectResponse, error)
+	GetMembershipTierForProject(context.Context, *GetMembershipTierForProjectRequest) (*GetMembershipTierForProjectResponse, error)
 	EvaluateUserPrompt(context.Context, *EvaluateUserPromptRequest) (*EvaluateUserPromptResponse, error)
 	HandleUserPrompt(context.Context, *HandleUserPromptRequest) (*HandleUserPromptResponse, error)
 	GetUserPromptJob(context.Context, *GetUserPromptJobRequest) (*GetUserPromptJobResponse, error)
@@ -1695,6 +1734,9 @@ func (UnimplementedNuzurProductServer) CreateExtensionExecution(context.Context,
 func (UnimplementedNuzurProductServer) UpdateExtensionExecution(context.Context, *UpdateExtensionExecutionRequest) (*gen.ExtensionExecution, error) {
 	return nil, status.Error(codes.Unimplemented, "method UpdateExtensionExecution not implemented")
 }
+func (UnimplementedNuzurProductServer) CheckExtensionExecutionLimit(context.Context, *CheckExtensionExecutionLimitRequest) (*CheckExtensionExecutionLimitResponse, error) {
+	return nil, status.Error(codes.Unimplemented, "method CheckExtensionExecutionLimit not implemented")
+}
 func (UnimplementedNuzurProductServer) ListUserChangeRequests(context.Context, *ListUserChangeRequestsRequest) (*ListUserChangeRequestsResponse, error) {
 	return nil, status.Error(codes.Unimplemented, "method ListUserChangeRequests not implemented")
 }
@@ -1773,6 +1815,9 @@ func (UnimplementedNuzurProductServer) RemoveMembershipUser(context.Context, *Re
 func (UnimplementedNuzurProductServer) ListMembershipsForUser(context.Context, *ListMembershipsForUserRequest) (*ListMembershipsForUserResponse, error) {
 	return nil, status.Error(codes.Unimplemented, "method ListMembershipsForUser not implemented")
 }
+func (UnimplementedNuzurProductServer) ChangeMembershipPlan(context.Context, *ChangeMembershipPlanRequest) (*ChangeMembershipPlanResponse, error) {
+	return nil, status.Error(codes.Unimplemented, "method ChangeMembershipPlan not implemented")
+}
 func (UnimplementedNuzurProductServer) SendPrioritySupportEmail(context.Context, *PrioritySupportEmailRequest) (*PrioritySupportEmailResponse, error) {
 	return nil, status.Error(codes.Unimplemented, "method SendPrioritySupportEmail not implemented")
 }
@@ -1781,6 +1826,9 @@ func (UnimplementedNuzurProductServer) HandleWebhook(context.Context, *HandleWeb
 }
 func (UnimplementedNuzurProductServer) IsProActiveForProject(context.Context, *IsProActiveForProjectRequest) (*IsProActiveForProjectResponse, error) {
 	return nil, status.Error(codes.Unimplemented, "method IsProActiveForProject not implemented")
+}
+func (UnimplementedNuzurProductServer) GetMembershipTierForProject(context.Context, *GetMembershipTierForProjectRequest) (*GetMembershipTierForProjectResponse, error) {
+	return nil, status.Error(codes.Unimplemented, "method GetMembershipTierForProject not implemented")
 }
 func (UnimplementedNuzurProductServer) EvaluateUserPrompt(context.Context, *EvaluateUserPromptRequest) (*EvaluateUserPromptResponse, error) {
 	return nil, status.Error(codes.Unimplemented, "method EvaluateUserPrompt not implemented")
@@ -3045,6 +3093,24 @@ func _NuzurProduct_UpdateExtensionExecution_Handler(srv interface{}, ctx context
 	return interceptor(ctx, in, info, handler)
 }
 
+func _NuzurProduct_CheckExtensionExecutionLimit_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
+	in := new(CheckExtensionExecutionLimitRequest)
+	if err := dec(in); err != nil {
+		return nil, err
+	}
+	if interceptor == nil {
+		return srv.(NuzurProductServer).CheckExtensionExecutionLimit(ctx, in)
+	}
+	info := &grpc.UnaryServerInfo{
+		Server:     srv,
+		FullMethod: NuzurProduct_CheckExtensionExecutionLimit_FullMethodName,
+	}
+	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
+		return srv.(NuzurProductServer).CheckExtensionExecutionLimit(ctx, req.(*CheckExtensionExecutionLimitRequest))
+	}
+	return interceptor(ctx, in, info, handler)
+}
+
 func _NuzurProduct_ListUserChangeRequests_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
 	in := new(ListUserChangeRequestsRequest)
 	if err := dec(in); err != nil {
@@ -3513,6 +3579,24 @@ func _NuzurProduct_ListMembershipsForUser_Handler(srv interface{}, ctx context.C
 	return interceptor(ctx, in, info, handler)
 }
 
+func _NuzurProduct_ChangeMembershipPlan_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
+	in := new(ChangeMembershipPlanRequest)
+	if err := dec(in); err != nil {
+		return nil, err
+	}
+	if interceptor == nil {
+		return srv.(NuzurProductServer).ChangeMembershipPlan(ctx, in)
+	}
+	info := &grpc.UnaryServerInfo{
+		Server:     srv,
+		FullMethod: NuzurProduct_ChangeMembershipPlan_FullMethodName,
+	}
+	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
+		return srv.(NuzurProductServer).ChangeMembershipPlan(ctx, req.(*ChangeMembershipPlanRequest))
+	}
+	return interceptor(ctx, in, info, handler)
+}
+
 func _NuzurProduct_SendPrioritySupportEmail_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
 	in := new(PrioritySupportEmailRequest)
 	if err := dec(in); err != nil {
@@ -3563,6 +3647,24 @@ func _NuzurProduct_IsProActiveForProject_Handler(srv interface{}, ctx context.Co
 	}
 	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
 		return srv.(NuzurProductServer).IsProActiveForProject(ctx, req.(*IsProActiveForProjectRequest))
+	}
+	return interceptor(ctx, in, info, handler)
+}
+
+func _NuzurProduct_GetMembershipTierForProject_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
+	in := new(GetMembershipTierForProjectRequest)
+	if err := dec(in); err != nil {
+		return nil, err
+	}
+	if interceptor == nil {
+		return srv.(NuzurProductServer).GetMembershipTierForProject(ctx, in)
+	}
+	info := &grpc.UnaryServerInfo{
+		Server:     srv,
+		FullMethod: NuzurProduct_GetMembershipTierForProject_FullMethodName,
+	}
+	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
+		return srv.(NuzurProductServer).GetMembershipTierForProject(ctx, req.(*GetMembershipTierForProjectRequest))
 	}
 	return interceptor(ctx, in, info, handler)
 }
@@ -4059,6 +4161,10 @@ var NuzurProduct_ServiceDesc = grpc.ServiceDesc{
 			Handler:    _NuzurProduct_UpdateExtensionExecution_Handler,
 		},
 		{
+			MethodName: "CheckExtensionExecutionLimit",
+			Handler:    _NuzurProduct_CheckExtensionExecutionLimit_Handler,
+		},
+		{
 			MethodName: "ListUserChangeRequests",
 			Handler:    _NuzurProduct_ListUserChangeRequests_Handler,
 		},
@@ -4163,6 +4269,10 @@ var NuzurProduct_ServiceDesc = grpc.ServiceDesc{
 			Handler:    _NuzurProduct_ListMembershipsForUser_Handler,
 		},
 		{
+			MethodName: "ChangeMembershipPlan",
+			Handler:    _NuzurProduct_ChangeMembershipPlan_Handler,
+		},
+		{
 			MethodName: "SendPrioritySupportEmail",
 			Handler:    _NuzurProduct_SendPrioritySupportEmail_Handler,
 		},
@@ -4173,6 +4283,10 @@ var NuzurProduct_ServiceDesc = grpc.ServiceDesc{
 		{
 			MethodName: "IsProActiveForProject",
 			Handler:    _NuzurProduct_IsProActiveForProject_Handler,
+		},
+		{
+			MethodName: "GetMembershipTierForProject",
+			Handler:    _NuzurProduct_GetMembershipTierForProject_Handler,
 		},
 		{
 			MethodName: "EvaluateUserPrompt",

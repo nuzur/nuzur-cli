@@ -57,3 +57,6 @@ other = "Ejecutar una extensión"
 
 [extension_run_path]
 other = "Indica la ruta para ejecutar la extensión: (.)"
+
+[pro_execution_limit_reached]
+other = "Límite mensual de 5 ejecuciones de extensiones Pro alcanzado. Por favor, actualiza a Pro para ejecuciones ilimitadas."
