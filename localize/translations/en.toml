@@ -60,3 +60,21 @@ other = "Specify the path to run the extension: (.)"
 
 [pro_execution_limit_reached]
 other = "Monthly limit of 5 Pro extension executions reached. Please upgrade to Pro for unlimited executions."
+
+[extension_check_limit_desc]
+other = "Check monthly execution limits for a Pro extension"
+
+[extension_check_limit_loading]
+other = "Checking execution limit..."
+
+[extension_check_limit_unlimited]
+other = "You have unlimited executions for this extension."
+
+[extension_check_limit_status]
+other = "Monthly usage: {{.current}} / {{.limit}} executions (Limit reached: {{.isLimited}})"
+
+[yes]
+other = "Yes"
+
+[no]
+other = "No"

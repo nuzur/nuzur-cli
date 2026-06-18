@@ -60,3 +60,21 @@ other = "Indica la ruta para ejecutar la extensión: (.)"
 
 [pro_execution_limit_reached]
 other = "Límite mensual de 5 ejecuciones de extensiones Pro alcanzado. Por favor, actualiza a Pro para ejecuciones ilimitadas."
+
+[extension_check_limit_desc]
+other = "Comprueba los límites de ejecución mensual para una extensión Pro"
+
+[extension_check_limit_loading]
+other = "Comprobando el límite de ejecución..."
+
+[extension_check_limit_unlimited]
+other = "Tienes ejecuciones ilimitadas para esta extensión."
+
+[extension_check_limit_status]
+other = "Uso mensual: {{.current}} / {{.limit}} ejecuciones (Límite alcanzado: {{.isLimited}})"
+
+[yes]
+other = "Sí"
+
+[no]
+other = "No"
