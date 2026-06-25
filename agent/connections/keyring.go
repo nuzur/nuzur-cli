@@ -181,7 +181,11 @@ func DeleteDSN(connUUID string) error {
 	if err != nil {
 		return fmt.Errorf("open keyring: %w", err)
 	}
-	if err := kr.Remove(dsnKey(connUUID)); err != nil && !errors.Is(err, keyring.ErrKeyNotFound) {
+	// Idempotent: a missing secret is fine. The keychain/wincred backends report
+	// this as keyring.ErrKeyNotFound, but the file backend (used on CGO-less
+	// builds) returns the raw os.Remove error, so we accept os.ErrNotExist too.
+	if err := kr.Remove(dsnKey(connUUID)); err != nil &&
+		!errors.Is(err, keyring.ErrKeyNotFound) && !errors.Is(err, os.ErrNotExist) {
 		return fmt.Errorf("delete keyring: %w", err)
 	}
 	return nil
