@@ -42,6 +42,12 @@ archives:
       - goos: windows
         formats: [ zip ]
 
+# Replace existing release artifacts on re-run so a release that failed partway
+# (e.g. after the GitHub upload but before the scoop/brew step) can be safely
+# re-run without hitting "asset already_exists" 422 errors.
+release:
+  mode: replace
+
 changelog:
   sort: asc
   filters:
