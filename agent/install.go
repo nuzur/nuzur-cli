@@ -13,12 +13,21 @@ import (
 )
 
 const (
-	launchdLabel   = "com.nuzur.agent"
-	systemdUnitID  = "nuzur-agent"
-	logDir         = "/tmp/nuzur-cli"
-	stdoutLogName  = "agent.log"
-	stderrLogName  = "agent.err"
+	launchdLabel  = "com.nuzur.agent"
+	systemdUnitID = "nuzur-agent"
+	stdoutLogName = "agent.log"
+	stderrLogName = "agent.err"
 )
+
+// agentLogDir returns the per-user directory for the auto-start service's
+// stdout/err logs. Uses the persistent config dir so logs survive reboots and
+// resolve correctly on Windows, falling back to the OS temp dir.
+func agentLogDir() string {
+	if d, err := os.UserConfigDir(); err == nil {
+		return filepath.Join(d, "nuzur", "logs")
+	}
+	return filepath.Join(os.TempDir(), "nuzur-cli")
+}
 
 // InstallResult describes where the service file landed so the caller (the
 // `nuzur agent install` command) can print something useful.
@@ -40,7 +49,7 @@ func Install() (*InstallResult, error) {
 	if real, err := filepath.EvalSymlinks(execPath); err == nil {
 		execPath = real
 	}
-	if err := os.MkdirAll(logDir, 0o700); err != nil {
+	if err := os.MkdirAll(agentLogDir(), 0o700); err != nil {
 		return nil, err
 	}
 
@@ -112,8 +121,8 @@ func installMacOS(execPath string) (*InstallResult, error) {
 `,
 		launchdLabel,
 		execPath,
-		filepath.Join(logDir, stdoutLogName),
-		filepath.Join(logDir, stderrLogName),
+		filepath.Join(agentLogDir(), stdoutLogName),
+		filepath.Join(agentLogDir(), stderrLogName),
 	)
 	if err := os.WriteFile(plistPath, []byte(plist), 0o644); err != nil {
 		return nil, fmt.Errorf("write plist: %w", err)

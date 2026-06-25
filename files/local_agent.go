@@ -9,9 +9,23 @@ import (
 	"github.com/nuzur/nuzur-cli/constants"
 )
 
-// agentDir returns the persistent per-user directory for agent metadata. On
-// macOS this is ~/Library/Application Support/nuzur/agent, on Linux it's
-// $XDG_CONFIG_HOME/nuzur/agent (defaulting to ~/.config/nuzur/agent).
+// configBaseDir returns the persistent per-user base directory for all nuzur
+// CLI state. On macOS this is ~/Library/Application Support/nuzur, on Linux
+// $XDG_CONFIG_HOME/nuzur (defaulting to ~/.config/nuzur), on Windows
+// %AppData%\nuzur.
+//
+// Falls back to /tmp/nuzur-cli/ when UserConfigDir fails — preserves the
+// pre-keychain behavior so a misconfigured environment still functions, at
+// the cost of losing data across reboots.
+func configBaseDir() string {
+	if d, err := os.UserConfigDir(); err == nil {
+		return filepath.Join(d, "nuzur")
+	}
+	return path.Join("/tmp", "nuzur-cli")
+}
+
+// agentDir returns the persistent per-user directory for agent metadata,
+// nested under configBaseDir (e.g. ~/Library/Application Support/nuzur/agent).
 //
 // Falls back to /tmp/nuzur-cli/ when UserConfigDir fails — preserves the
 // pre-keychain behavior so a misconfigured environment still functions, at
@@ -111,4 +125,28 @@ func MigrateLegacyAgentFiles() error {
 		}
 	}
 	return nil
+}
+
+// MigrateLegacyTokenFile relocates the user's auth token from the old
+// /tmp/nuzur-cli/ location to the persistent per-user config dir so an upgrade
+// doesn't force a re-login. Best-effort and idempotent: no legacy token, an
+// already-migrated token, or the /tmp fallback being active are all no-ops.
+func MigrateLegacyTokenFile() error {
+	legacy := path.Join("/tmp", "nuzur-cli", constants.TOKEN_FILE)
+	dst := TokenFilePath()
+	if legacy == dst {
+		// UserConfigDir fell back to /tmp; source and destination are the same.
+		return nil
+	}
+	if _, err := os.Stat(dst); err == nil {
+		return nil // already migrated
+	}
+	b, err := os.ReadFile(legacy)
+	if err != nil {
+		return nil // no legacy token (or unreadable) — nothing to migrate
+	}
+	if err := os.MkdirAll(filepath.Dir(dst), 0o700); err != nil {
+		return err
+	}
+	return os.WriteFile(dst, b, 0o600)
 }

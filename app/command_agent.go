@@ -65,34 +65,51 @@ func (i *Implementation) AgentPairCommand() cli.Command {
 				)
 			}
 
-			if err := i.Login(); err != nil {
-				return err
-			}
-
-			ctx, err := productclient.ClientContext()
-			if err != nil {
-				return fmt.Errorf("error building auth context: %v", err)
-			}
-
-			hostname, _ := os.Hostname()
-			res, err := i.productClient.ProductClient.RegisterLocalAgent(ctx, &pb.RegisterLocalAgentRequest{
-				MachineName: hostname,
-				Os:          runtime.GOOS,
-				CliVersion:  constants.CLI_VERSION,
-			})
-			if err != nil {
-				return fmt.Errorf("error registering local agent: %v", err)
-			}
-
-			if err := writeLocalAgentCreds(res.GetLocalAgentUuid(), res.GetLocalAgentToken()); err != nil {
-				return fmt.Errorf("error writing local agent credentials: %v", err)
-			}
-
-			fmt.Printf("Paired local agent.\n  uuid: %s\n  machine: %s (%s)\n  credentials stored at: %s\n",
-				res.GetLocalAgentUuid(), hostname, runtime.GOOS, path.Dir(files.LocalAgentTokenFilePath()))
-			return nil
+			_, err := i.pairLocalAgent()
+			return err
 		},
 	}
+}
+
+// ensureLocalAgentPaired returns this machine's local agent uuid, pairing it
+// on first use. An existing pairing on disk is reused. This lets connection
+// commands work without a separate `nuzur agent pair` step.
+func (i *Implementation) ensureLocalAgentPaired() (string, error) {
+	if existing, _ := readExistingPairingUUID(); existing != "" {
+		return existing, nil
+	}
+	return i.pairLocalAgent()
+}
+
+// pairLocalAgent registers this machine as a local agent with nuzur cloud,
+// persists the returned credentials, and returns the new agent uuid.
+func (i *Implementation) pairLocalAgent() (string, error) {
+	if err := i.Login(); err != nil {
+		return "", err
+	}
+
+	ctx, err := productclient.ClientContext()
+	if err != nil {
+		return "", fmt.Errorf("error building auth context: %v", err)
+	}
+
+	hostname, _ := os.Hostname()
+	res, err := i.productClient.ProductClient.RegisterLocalAgent(ctx, &pb.RegisterLocalAgentRequest{
+		MachineName: hostname,
+		Os:          runtime.GOOS,
+		CliVersion:  constants.CLI_VERSION,
+	})
+	if err != nil {
+		return "", fmt.Errorf("error registering local agent: %v", err)
+	}
+
+	if err := writeLocalAgentCreds(res.GetLocalAgentUuid(), res.GetLocalAgentToken()); err != nil {
+		return "", fmt.Errorf("error writing local agent credentials: %v", err)
+	}
+
+	fmt.Printf("Paired local agent.\n  uuid: %s\n  machine: %s (%s)\n  credentials stored at: %s\n",
+		res.GetLocalAgentUuid(), hostname, runtime.GOOS, path.Dir(files.LocalAgentTokenFilePath()))
+	return res.GetLocalAgentUuid(), nil
 }
 
 // readExistingPairingUUID returns the uuid in the local creds file if any,

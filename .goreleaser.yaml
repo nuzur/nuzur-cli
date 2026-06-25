@@ -16,14 +16,19 @@ before:
     - go generate ./...
 
 builds:
+  # CGO stays off so the whole matrix cross-compiles on a free linux runner.
+  # The macOS Keychain backend needs cgo + the Apple SDK (can't be built off a
+  # Mac), so on darwin the CLI falls back to the encrypted file backend — see
+  # allowedBackends() in agent/connections/keyring.go.
   - env:
       - CGO_ENABLED=0
     goos:
-      - linux      
-      - darwin      
+      - linux
+      - darwin
+      - windows
 
 archives:
-  - format: tar.gz
+  - formats: [ tar.gz ]
     # this name template makes the OS and Arch compatible with the results of `uname`.
     name_template: >-
       {{ .ProjectName }}_
@@ -35,7 +40,7 @@ archives:
     # use zip for windows archives
     format_overrides:
       - goos: windows
-        format: zip
+        formats: [ zip ]
 
 changelog:
   sort: asc
@@ -216,5 +221,27 @@ brews:
       # provided to GoReleaser
       #
       # Templates: allowed.
+      token: "{{ .Env.GR_GITHUB_TOKEN }}"
+
+# Windows distribution via Scoop — the Windows analog of the Homebrew tap above.
+# GoReleaser commits a manifest to the bucket repo on each release; users then:
+#   scoop bucket add nuzur https://github.com/nuzur/scoop-bucket
+#   scoop install nuzur-cli
+scoops:
+  - name: nuzur-cli
+    # Points at the windows .zip archive produced above.
+    url_template: "https://github.com/nuzur/nuzur-cli/releases/download/{{ .Tag }}/{{ .ArtifactName }}"
+    commit_author:
+      name: mklfarha
+      email: mklfarha@gmail.com
+    commit_msg_template: "Scoop manifest update for {{ .ProjectName }} version {{ .Tag }}"
+    homepage: "https://nuzur.com/"
+    description: "nuzur cli tool"
+    license: "MIT"
+    # Bucket repository the manifest is pushed to (create nuzur/scoop-bucket).
+    repository:
+      owner: nuzur
+      name: scoop-bucket
+      branch: main
       token: "{{ .Env.GR_GITHUB_TOKEN }}"
 

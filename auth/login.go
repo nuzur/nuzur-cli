@@ -15,6 +15,10 @@ type LoginParams struct {
 }
 
 func (c *AuthClientImplementation) Login(params LoginParams) error {
+	// Move any token left at the legacy /tmp path into the persistent config
+	// dir before checking for it, so upgrading users aren't forced to re-login.
+	_ = files.MigrateLegacyTokenFile()
+
 	if filetools.FileExists(files.TokenFilePath()) {
 		err := c.LoginStatus(params)
 		if err == nil {

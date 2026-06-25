@@ -7,7 +7,6 @@ import (
 
 	nemgen "github.com/nuzur/nem/idl/gen"
 	"github.com/nuzur/nuzur-cli/agent/connections"
-	"github.com/nuzur/nuzur-cli/files"
 	"github.com/nuzur/nuzur-cli/productclient"
 	pb "github.com/nuzur/nuzur-cli/protodeps/gen"
 	"github.com/urfave/cli"
@@ -32,7 +31,7 @@ func (i *Implementation) AgentConnectionCommand() cli.Command {
 func (i *Implementation) AgentConnectionAddCommand() cli.Command {
 	return cli.Command{
 		Name:      "add",
-		Usage:     "Add a new local DB connection (prompts for name + connection details, persists locally, publishes the catalog to nuzur)",
+		Usage:     "Add a new local DB connection (prompts for name + connection details, persists locally, pairs this machine if needed, and publishes the catalog to nuzur)",
 		ArgsUsage: "[name]",
 		Action: func(c *cli.Context) error {
 			reg, err := connections.Load()
@@ -156,17 +155,15 @@ func (i *Implementation) AgentConnectionRemoveCommand() cli.Command {
 // metadata to nuzur via UpdateLocalAgentConnections. DSNs never leave the
 // machine.
 func (i *Implementation) publishCatalog(reg *connections.Registry) error {
-	if err := i.Login(); err != nil {
+	// Pair this machine automatically on first publish so users don't need a
+	// separate `nuzur agent pair` step. ensureLocalAgentPaired also logs in.
+	agentUUID, err := i.ensureLocalAgentPaired()
+	if err != nil {
 		return err
 	}
 	ctx, err := productclient.ClientContext()
 	if err != nil {
 		return fmt.Errorf("auth ctx: %w", err)
-	}
-
-	uuidBytes, err := os.ReadFile(files.LocalAgentUUIDFilePath())
-	if err != nil {
-		return fmt.Errorf("read local_agent uuid (run `nuzur agent pair` first): %w", err)
 	}
 
 	protos := make([]*nemgen.LocalAgentConnection, 0, len(reg.Entries))
@@ -180,7 +177,7 @@ func (i *Implementation) publishCatalog(reg *connections.Registry) error {
 	}
 
 	_, err = i.productClient.ProductClient.UpdateLocalAgentConnections(ctx, &pb.UpdateLocalAgentConnectionsRequest{
-		LocalAgentUuid: string(uuidBytes),
+		LocalAgentUuid: agentUUID,
 		Connections:    protos,
 	})
 	return err

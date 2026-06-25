@@ -4,7 +4,10 @@
 // database password — lives here.
 //
 // Backend selection:
-//   - macOS:   the user's login Keychain.
+//   - macOS:   the user's login Keychain when available (cgo builds), falling
+//              back to a passphrase-encrypted file under the agent's config
+//              directory — the Keychain backend is gated on `darwin && cgo`,
+//              so a CGO_ENABLED=0 binary would otherwise have no backend.
 //   - Linux:   Secret Service (gnome-keyring / kwallet) when available,
 //              falling back to a passphrase-encrypted file under the agent's
 //              config directory for headless servers.
@@ -83,7 +86,14 @@ func openKeyring() (keyring.Keyring, error) {
 func allowedBackends() []keyring.BackendType {
 	switch runtime.GOOS {
 	case "darwin":
-		return []keyring.BackendType{keyring.KeychainBackend}
+		// Keychain is preferred, but it's only compiled in for cgo builds
+		// (the backend is gated on `darwin && cgo`). A CGO_ENABLED=0 binary —
+		// or a headless/SSH session with no Keychain access — falls back to
+		// the passphrase-encrypted file backend so secret storage still works.
+		return []keyring.BackendType{
+			keyring.KeychainBackend,
+			keyring.FileBackend,
+		}
 	case "linux":
 		return []keyring.BackendType{
 			keyring.SecretServiceBackend,
