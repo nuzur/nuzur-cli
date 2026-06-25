@@ -10,6 +10,8 @@ import (
 	"github.com/nuzur/nuzur-cli/productclient"
 	pb "github.com/nuzur/nuzur-cli/protodeps/gen"
 	"github.com/urfave/cli"
+	"google.golang.org/grpc/codes"
+	"google.golang.org/grpc/status"
 )
 
 // AgentConnectionCommand adds the `nuzur agent connection ...` subcommand
@@ -161,10 +163,6 @@ func (i *Implementation) publishCatalog(reg *connections.Registry) error {
 	if err != nil {
 		return err
 	}
-	ctx, err := productclient.ClientContext()
-	if err != nil {
-		return fmt.Errorf("auth ctx: %w", err)
-	}
 
 	protos := make([]*nemgen.LocalAgentConnection, 0, len(reg.Entries))
 	for _, e := range reg.Entries {
@@ -176,6 +174,25 @@ func (i *Implementation) publishCatalog(reg *connections.Registry) error {
 		})
 	}
 
+	err = i.updateConnections(agentUUID, protos)
+	if status.Code(err) == codes.NotFound {
+		// The pairing stored on this machine no longer exists on the server
+		// (e.g. the agent was revoked or deleted). Re-pair and retry once.
+		newUUID, perr := i.pairLocalAgent()
+		if perr != nil {
+			return perr
+		}
+		err = i.updateConnections(newUUID, protos)
+	}
+	return err
+}
+
+// updateConnections publishes the connection catalog for the given agent uuid.
+func (i *Implementation) updateConnections(agentUUID string, protos []*nemgen.LocalAgentConnection) error {
+	ctx, err := productclient.ClientContext()
+	if err != nil {
+		return fmt.Errorf("auth ctx: %w", err)
+	}
 	_, err = i.productClient.ProductClient.UpdateLocalAgentConnections(ctx, &pb.UpdateLocalAgentConnectionsRequest{
 		LocalAgentUuid: agentUUID,
 		Connections:    protos,
