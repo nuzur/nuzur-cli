@@ -155,7 +155,7 @@ that tells the agent how to run it locally, since the remote server can't:
   "execution": {
     "runner": "nuzur-cli",
     "note": "This server cannot run the extension — generation writes files to your local machine…",
-    "install": "See https://github.com/nuzur/nuzur-cli …, then `nuzur-cli login`.",
+    "install": "Install the nuzur CLI from https://nuzur.com/cli …, then `nuzur-cli login`.",
     "describe_command": "nuzur-cli run-extension describe --project … --version … --extension go-code-gen",
     "run_command": "nuzur-cli run-extension --project … --version … --extension go-code-gen --config '<json>' --output ./out --json"
   }
