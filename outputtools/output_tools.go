@@ -2,6 +2,7 @@ package outputtools
 
 import (
 	"fmt"
+	"os"
 )
 
 type OutputColor int32
@@ -21,4 +22,11 @@ const (
 func PrintlnColored(text string, color OutputColor) {
 	colored := fmt.Sprintf("\x1b[%dm%s\x1b[0m", color, text)
 	fmt.Println(colored)
+}
+
+// PrintlnColoredErr writes a colored line to stderr. Use it for progress/status
+// messages so that stdout stays clean for machine-readable (--json) output.
+func PrintlnColoredErr(text string, color OutputColor) {
+	colored := fmt.Sprintf("\x1b[%dm%s\x1b[0m", color, text)
+	fmt.Fprintln(os.Stderr, colored)
 }

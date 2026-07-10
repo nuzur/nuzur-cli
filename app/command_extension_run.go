@@ -22,6 +22,9 @@ func (i *Implementation) ExtensionRunCommand() cli.Command {
 		Name:  "run-extension",
 		Usage: i.localize.Localize("extension_run_desc", "Run an extension"),
 		Flags: extensionRunFlags(),
+		Subcommands: []cli.Command{
+			i.describeSubcommand(""),
+		},
 		Action: func(c *cli.Context) error {
 			return i.runExtensionFlow("", extRunFlagsFromContext(c))
 		},
@@ -35,6 +38,9 @@ func (i *Implementation) GoCodeGenCommand() cli.Command {
 		Name:  goCodeGenExtensionIdentifier,
 		Usage: i.localize.Localize("go_code_gen_desc", "Run the go-code-gen extension directly (skips extension selection)"),
 		Flags: extensionRunFlags(),
+		Subcommands: []cli.Command{
+			i.describeSubcommand(goCodeGenExtensionIdentifier),
+		},
 		Action: func(c *cli.Context) error {
 			return i.runExtensionFlow(goCodeGenExtensionIdentifier, extRunFlagsFromContext(c))
 		},
@@ -42,12 +48,28 @@ func (i *Implementation) GoCodeGenCommand() cli.Command {
 }
 
 // extRunFlags holds optional overrides that skip the corresponding interactive
-// prompt when provided, enabling scripted / non-interactive runs.
+// prompt when provided, enabling scripted / non-interactive (agent) runs.
 type extRunFlags struct {
-	project     string
-	version     string
-	output      string
-	reuseConfig bool
+	project        string
+	version        string
+	output         string
+	extension      string // which generator to run (run-extension only; go-code-gen presets it)
+	config         string // inline JSON config, or "-" to read JSON from stdin
+	configFile     string // path to a JSON config file
+	reuseConfig    bool
+	nonInteractive bool
+	jsonOutput     bool
+}
+
+// hasConfigInput reports whether the caller supplied a config non-interactively.
+func (f extRunFlags) hasConfigInput() bool {
+	return f.config != "" || f.configFile != ""
+}
+
+// isNonInteractive is true when the caller opted out of prompts, either
+// explicitly or implicitly by supplying a config or JSON output.
+func (f extRunFlags) isNonInteractive() bool {
+	return f.nonInteractive || f.jsonOutput || f.hasConfigInput()
 }
 
 func extensionRunFlags() []cli.Flag {
@@ -55,16 +77,26 @@ func extensionRunFlags() []cli.Flag {
 		cli.StringFlag{Name: "project, p", Usage: "Project name or UUID (skips the project selection prompt)"},
 		cli.StringFlag{Name: "version", Usage: "Project version identifier or UUID (skips the version selection prompt)"},
 		cli.StringFlag{Name: "output, o", Usage: "Output path for generated code (skips the output path prompt)"},
+		cli.StringFlag{Name: "extension, e", Usage: "Extension identifier to run (skips the extension selection prompt)"},
+		cli.StringFlag{Name: "config", Usage: "Full config as a JSON object; use '-' to read JSON from stdin. Implies non-interactive."},
+		cli.StringFlag{Name: "config-file", Usage: "Path to a JSON file with the full config. Implies non-interactive."},
 		cli.BoolFlag{Name: "reuse-config", Usage: "Reuse the last-used config for this extension without prompting"},
+		cli.BoolFlag{Name: "non-interactive", Usage: "Never prompt; fail if required input is missing (for scripts and AI agents)"},
+		cli.BoolFlag{Name: "json", Usage: "Emit machine-readable JSON output (implies non-interactive)"},
 	}
 }
 
 func extRunFlagsFromContext(c *cli.Context) extRunFlags {
 	return extRunFlags{
-		project:     c.String("project"),
-		version:     c.String("version"),
-		reuseConfig: c.Bool("reuse-config"),
-		output:      c.String("output"),
+		project:        c.String("project"),
+		version:        c.String("version"),
+		output:         c.String("output"),
+		extension:      c.String("extension"),
+		config:         c.String("config"),
+		configFile:     c.String("config-file"),
+		reuseConfig:    c.Bool("reuse-config"),
+		nonInteractive: c.Bool("non-interactive"),
+		jsonOutput:     c.Bool("json"),
 	}
 }
 
@@ -73,152 +105,85 @@ func extRunFlagsFromContext(c *cli.Context) extRunFlags {
 // the interactive extension-selection step is skipped (used by shortcuts like
 // `nuzur-cli go-code-gen`).
 func (i *Implementation) runExtensionFlow(extensionIdentifier string, flags extRunFlags) error {
-	err := i.Login()
-	if err != nil {
-		return err
-	}
+	interactive := !flags.isNonInteractive()
 
-	er, err := extensionrun.New(extensionrun.Params{
-		Auth: i.auth,
+	targets, err := i.resolveRunTargets(flags, resolveOptions{
+		extensionIdentifier: extensionIdentifier,
+		interactive:         interactive,
+		checkAccess:         true,
+		checkLimit:          true,
 	})
 	if err != nil {
-		return err
+		return i.failRun(flags, err)
 	}
 
-	// select project, or resolve from --project
-	var project *nemgen.Project
-	if flags.project != "" {
-		project, err = i.resolveProject(er, flags.project)
+	if !flags.jsonOutput {
+		fmt.Printf("%s: %s (version %s)\n", i.localize.Localize("extension_run_selected", "Selected extension"), targets.extension.DisplayName, targets.extensionVersion.DisplayVersion)
+	}
+
+	// build config: interactively prompt, or apply the supplied JSON config
+	var configValues map[string]interface{}
+	if interactive {
+		configValues, err = i.BuildConfigValues(targets.er, targets.project, targets.projectVersion.Uuid, targets.configEntity, targets.lastConfig, flags.reuseConfig)
 	} else {
-		project, err = i.SelectProject(er)
+		var provided map[string]interface{}
+		provided, err = loadProvidedConfig(flags)
+		if err == nil {
+			configValues, err = targets.er.BuildConfigFromJSON(targets.project, targets.projectVersion.Uuid, targets.configEntity, provided, targets.lastConfig)
+		}
 	}
 	if err != nil {
-		return err
-	}
-
-	// check user role
-	role, err := er.GetUserRoleForProject(project.Uuid)
-	if err != nil {
-		return err
-	}
-	if role != nemgen.UserProjectRole_USER_PROJECT_ROLE_ADMIN &&
-		role != nemgen.UserProjectRole_USER_PROJECT_ROLE_DEVELOPER {
-		outputtools.PrintlnColored(
-			i.localize.Localize("extension_run_no_access", "You do not have access to run extensions for this project."),
-			outputtools.Red,
-		)
-		return nil
-	}
-
-	// select project version, or resolve from --version
-	var projectVersion *nemgen.ProjectVersion
-	if flags.version != "" {
-		projectVersion, err = i.resolveProjectVersion(er, project.Uuid, flags.version)
-	} else {
-		projectVersion, err = i.SelectProjectVersion(er, project.Uuid)
-	}
-	if err != nil {
-		return err
-	}
-
-	// select extension, or resolve the requested one directly for shortcuts
-	var extension *nemgen.Extension
-	if extensionIdentifier == "" {
-		extension, err = i.SelectPublicExtension(er)
-	} else {
-		extension, err = i.FindGeneratorExtension(er, extensionIdentifier)
-	}
-	if err != nil {
-		return err
-	}
-
-	// Check monthly execution limits for Pro extensions
-	limitRes, err := er.CheckExtensionExecutionLimit(project.Uuid, extension.Uuid)
-	if err != nil {
-		return err
-	}
-	if limitRes.IsLimited {
-		outputtools.PrintlnColored(
-			i.localize.Localize("pro_execution_limit_reached", "Monthly limit of 5 Pro extension executions reached. Please upgrade to Pro for unlimited executions."),
-			outputtools.Red,
-		)
-		return nil
-	}
-
-	// get latest extension version
-	extensionVersion, err := er.GetLatestExtensionVersion(extension.Uuid)
-	if err != nil {
-		return err
-	}
-
-	fmt.Printf("%s: %s (version %s)\n", i.localize.Localize("extension_run_selected", "Selected extension"), extension.DisplayName, extensionVersion.DisplayVersion)
-
-	// load config entity
-	configEntity, err := er.GetConfigEntity(extensionVersion)
-	if err != nil {
-		return err
-	}
-
-	// fetch last used config for this project version
-	allLastConfigs, err := er.GetLastUsedConfig(projectVersion.Uuid)
-	if err != nil {
-		allLastConfigs = nil
-	}
-
-	var lastConfig map[string]interface{}
-	if allLastConfigs != nil {
-		lastConfig = allLastConfigs[extension.Identifier]
-	}
-
-	// build config values
-	configValues, err := i.BuildConfigValues(er, project, projectVersion.Uuid, configEntity, lastConfig, flags.reuseConfig)
-	if err != nil {
-		return err
+		return i.failRun(flags, err)
 	}
 
 	// save config for next time
+	allLastConfigs := targets.allLastConfigs
 	if allLastConfigs == nil {
 		allLastConfigs = make(map[string]map[string]interface{})
 	}
-	allLastConfigs[extension.Identifier] = configValues
-	if saveErr := er.SaveLastUsedConfig(projectVersion.Uuid, allLastConfigs); saveErr != nil {
+	allLastConfigs[targets.extension.Identifier] = configValues
+	if saveErr := targets.er.SaveLastUsedConfig(targets.projectVersion.Uuid, allLastConfigs); saveErr != nil {
 		// non-fatal: just log and continue
-		fmt.Printf("warning: could not save config: %v\n", saveErr)
+		outputtools.PrintlnColoredErr(fmt.Sprintf("warning: could not save config: %v", saveErr), outputtools.Yellow)
 	}
 
-	// output path: use --output if provided, otherwise prompt
+	// output path: use --output if provided, prompt interactively, else default to "."
 	outputPath := flags.output
 	if outputPath == "" {
-		pathPrompt := promptui.Prompt{
-			Label:   i.localize.Localize("extension_run_path", "Output path"),
-			Default: ".",
-		}
-		outputPath, err = pathPrompt.Run()
-		if err != nil {
-			return err
+		if interactive {
+			pathPrompt := promptui.Prompt{
+				Label:   i.localize.Localize("extension_run_path", "Output path"),
+				Default: ".",
+			}
+			outputPath, err = pathPrompt.Run()
+			if err != nil {
+				return err
+			}
+		} else {
+			outputPath = "."
 		}
 	}
 
 	// run the extension
-	outputtools.PrintlnColored(
+	outputtools.PrintlnColoredErr(
 		i.localize.Localize("extension_run_running", "Running extension..."),
 		outputtools.Blue,
 	)
 
-	err = er.Run(extensionrun.RunParams{
-		Extension:          extension,
-		ExtensionVersion:   extensionVersion,
-		ProjectUUID:        project.Uuid,
-		ProjectVersionUUID: projectVersion.Uuid,
+	result, err := targets.er.Run(extensionrun.RunParams{
+		Extension:          targets.extension,
+		ExtensionVersion:   targets.extensionVersion,
+		ProjectUUID:        targets.project.Uuid,
+		ProjectVersionUUID: targets.projectVersion.Uuid,
 		ConfigValues:       configValues,
 		OutputPath:         outputPath,
 	})
 	if err != nil {
-		outputtools.PrintlnColored(
-			fmt.Sprintf("%s: %v", i.localize.Localize("extension_run_error", "Extension run failed"), err),
-			outputtools.Red,
-		)
-		return nil
+		return i.failRun(flags, err)
+	}
+
+	if flags.jsonOutput {
+		return printJSONValue(result)
 	}
 
 	outputtools.PrintlnColored(
@@ -229,7 +194,7 @@ func (i *Implementation) runExtensionFlow(extensionIdentifier string, flags extR
 }
 
 func (i *Implementation) SelectProject(er *extensionrun.Implementation) (*nemgen.Project, error) {
-	outputtools.PrintlnColored(i.localize.Localize("extension_run_loading_projects", "Loading projects..."), outputtools.Blue)
+	outputtools.PrintlnColoredErr(i.localize.Localize("extension_run_loading_projects", "Loading projects..."), outputtools.Blue)
 	projects, err := er.ListUserProjects()
 	if err != nil {
 		return nil, err
@@ -258,7 +223,7 @@ func (i *Implementation) SelectProject(er *extensionrun.Implementation) (*nemgen
 // resolveProject finds one of the user's projects by name or UUID, for the
 // non-interactive --project flag.
 func (i *Implementation) resolveProject(er *extensionrun.Implementation, ref string) (*nemgen.Project, error) {
-	outputtools.PrintlnColored(i.localize.Localize("extension_run_loading_projects", "Loading projects..."), outputtools.Blue)
+	outputtools.PrintlnColoredErr(i.localize.Localize("extension_run_loading_projects", "Loading projects..."), outputtools.Blue)
 	projects, err := er.ListUserProjects()
 	if err != nil {
 		return nil, err
@@ -272,7 +237,7 @@ func (i *Implementation) resolveProject(er *extensionrun.Implementation, ref str
 }
 
 func (i *Implementation) SelectProjectVersion(er *extensionrun.Implementation, projectUUID string) (*nemgen.ProjectVersion, error) {
-	outputtools.PrintlnColored(i.localize.Localize("extension_run_loading_versions", "Loading project versions..."), outputtools.Blue)
+	outputtools.PrintlnColoredErr(i.localize.Localize("extension_run_loading_versions", "Loading project versions..."), outputtools.Blue)
 	versions, err := er.ListProjectVersions(projectUUID)
 	if err != nil {
 		return nil, err
@@ -301,7 +266,7 @@ func (i *Implementation) SelectProjectVersion(er *extensionrun.Implementation, p
 // resolveProjectVersion finds a version of the given project by identifier or
 // UUID, for the non-interactive --version flag.
 func (i *Implementation) resolveProjectVersion(er *extensionrun.Implementation, projectUUID, ref string) (*nemgen.ProjectVersion, error) {
-	outputtools.PrintlnColored(i.localize.Localize("extension_run_loading_versions", "Loading project versions..."), outputtools.Blue)
+	outputtools.PrintlnColoredErr(i.localize.Localize("extension_run_loading_versions", "Loading project versions..."), outputtools.Blue)
 	versions, err := er.ListProjectVersions(projectUUID)
 	if err != nil {
 		return nil, err
@@ -864,7 +829,7 @@ func trimSpace(s string) string {
 }
 
 func (i *Implementation) SelectPublicExtension(er *extensionrun.Implementation) (*nemgen.Extension, error) {
-	outputtools.PrintlnColored(i.localize.Localize("extension_scaffold_loading", ""), outputtools.Blue)
+	outputtools.PrintlnColoredErr(i.localize.Localize("extension_scaffold_loading", ""), outputtools.Blue)
 	extensions, err := er.ListGeneratorExtensions()
 	if err != nil {
 		return nil, err
@@ -894,7 +859,7 @@ func (i *Implementation) SelectPublicExtension(er *extensionrun.Implementation) 
 // identifier, used by shortcut commands (e.g. `nuzur-cli go-code-gen`) that
 // skip interactive selection.
 func (i *Implementation) FindGeneratorExtension(er *extensionrun.Implementation, identifier string) (*nemgen.Extension, error) {
-	outputtools.PrintlnColored(i.localize.Localize("extension_scaffold_loading", ""), outputtools.Blue)
+	outputtools.PrintlnColoredErr(i.localize.Localize("extension_scaffold_loading", ""), outputtools.Blue)
 	extensions, err := er.ListGeneratorExtensions()
 	if err != nil {
 		return nil, err

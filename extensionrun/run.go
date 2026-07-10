@@ -38,24 +38,34 @@ type RunParams struct {
 	OutputPath         string
 }
 
-func (i *Implementation) Run(params RunParams) error {
+// RunResult is the structured outcome of an extension run, suitable for
+// machine-readable (--json) output consumed by agents / MCP tooling.
+type RunResult struct {
+	Status        string   `json:"status"` // "succeeded"
+	ExecutionUUID string   `json:"execution_uuid,omitempty"`
+	OutputPath    string   `json:"output_path"`
+	FilesWritten  []string `json:"files_written"`
+	FilesRemoved  []string `json:"files_removed"`
+}
+
+func (i *Implementation) Run(params RunParams) (*RunResult, error) {
 	// serialize config values as JSON string (the format extensions expect)
 	configValuesBytes, err := json.Marshal(params.ConfigValues)
 	if err != nil {
-		return fmt.Errorf("failed to marshal config values: %w", err)
+		return nil, fmt.Errorf("failed to marshal config values: %w", err)
 	}
 
 	// build a gRPC client pointing at the extensions proxy
 	extClient, conn, err := buildExtensionClient()
 	if err != nil {
-		return fmt.Errorf("failed to connect to extension: %w", err)
+		return nil, fmt.Errorf("failed to connect to extension: %w", err)
 	}
 	defer conn.Close()
 
 	// build context with the bearer token and extension identifier
 	tokenBytes, err := os.ReadFile(files.TokenFilePath())
 	if err != nil {
-		return fmt.Errorf("failed to read auth token: %w", err)
+		return nil, fmt.Errorf("failed to read auth token: %w", err)
 	}
 	ctx := metadata.NewOutgoingContext(
 		contextWithTimeout(30),
@@ -65,32 +75,32 @@ func (i *Implementation) Run(params RunParams) error {
 		}),
 	)
 
-	fmt.Println("Starting extension execution...")
+	fmt.Fprintln(os.Stderr, "Starting extension execution...")
 	resp, err := extClient.StartExecution(ctx, &extensiongen.StartExecutionRequest{
 		ProjectUuid:        params.ProjectUUID,
 		ProjectVersionUuid: params.ProjectVersionUUID,
 		ConfigValues:       string(configValuesBytes),
 	})
 	if err != nil {
-		return fmt.Errorf("failed to start extension execution: %w", err)
+		return nil, fmt.Errorf("failed to start extension execution: %w", err)
 	}
 
-	fmt.Printf("Extension execution started (uuid: %s)\n", resp.ExecutionUuid)
+	fmt.Fprintf(os.Stderr, "Extension execution started (uuid: %s)\n", resp.ExecutionUuid)
 
 	switch resp.Type {
 	case extensiongen.ExecutionResponseType_EXECUTION_RESPONSE_TYPE_FINAL:
 		// synchronous — result is already available
-		return i.handleFinalResponse(resp.Data.Final, params.OutputPath)
+		return i.handleFinalResponse(resp.Data.Final, params.OutputPath, resp.ExecutionUuid)
 
 	case extensiongen.ExecutionResponseType_EXECUTION_RESPONSE_TYPE_ASYNC:
 		// async — poll the extension server until done
 		if resp.Data != nil && resp.Data.Async != nil && resp.Data.Async.StatusMessage != "" {
-			fmt.Printf("Async execution: %s\n", resp.Data.Async.StatusMessage)
+			fmt.Fprintf(os.Stderr, "Async execution: %s\n", resp.Data.Async.StatusMessage)
 		}
 		return i.pollExtensionExecution(extClient, tokenBytes, params.Extension.Identifier, resp.ExecutionUuid, params.OutputPath)
 
 	default:
-		return fmt.Errorf("unsupported execution response type: %v", resp.Type)
+		return nil, fmt.Errorf("unsupported execution response type: %v", resp.Type)
 	}
 }
 
@@ -100,7 +110,7 @@ func (i *Implementation) pollExtensionExecution(
 	extensionIdentifier string,
 	executionUUID string,
 	outputPath string,
-) error {
+) (*RunResult, error) {
 	lastStatus := ""
 	for {
 		ctx := metadata.NewOutgoingContext(
@@ -115,27 +125,27 @@ func (i *Implementation) pollExtensionExecution(
 			ExecutionUuid: executionUUID,
 		})
 		if err != nil {
-			return fmt.Errorf("failed to poll execution status: %w", err)
+			return nil, fmt.Errorf("failed to poll execution status: %w", err)
 		}
 
 		switch exec.Status {
 		case extensiongen.ExecutionStatus_EXECUTION_STATUS_SUCCEEDED:
-			fmt.Println("Extension execution succeeded, fetching output...")
+			fmt.Fprintln(os.Stderr, "Extension execution succeeded, fetching output...")
 			if exec.Data != nil && exec.Data.Final != nil {
-				return i.handleFinalResponse(exec.Data.Final, outputPath)
+				return i.handleFinalResponse(exec.Data.Final, outputPath, executionUUID)
 			}
-			return errors.New("execution succeeded but no final data returned")
+			return nil, errors.New("execution succeeded but no final data returned")
 		case extensiongen.ExecutionStatus_EXECUTION_STATUS_FAILED:
-			return fmt.Errorf("extension execution failed: %s", exec.StatusMsg)
+			return nil, fmt.Errorf("extension execution failed: %s", exec.StatusMsg)
 		case extensiongen.ExecutionStatus_EXECUTION_STATUS_CANCELLED:
-			return errors.New("extension execution was cancelled")
+			return nil, errors.New("execution was cancelled")
 		case extensiongen.ExecutionStatus_EXECUTION_STATUS_INPROGRESS:
 			msg := exec.StatusMsg
 			if exec.CurrentStepIdentifier != "" {
 				msg = fmt.Sprintf("%s (step: %s)", msg, exec.CurrentStepIdentifier)
 			}
 			if msg != lastStatus {
-				fmt.Printf("Execution in progress: %s\n", msg)
+				fmt.Fprintf(os.Stderr, "Execution in progress: %s\n", msg)
 				lastStatus = msg
 			}
 		}
@@ -150,29 +160,39 @@ func (i *Implementation) pollExtensionExecution(
 	}
 }
 
-func (i *Implementation) handleFinalResponse(final *extensiongen.ExecutionResponseTypeFinalData, outputPath string) error {
+func (i *Implementation) handleFinalResponse(final *extensiongen.ExecutionResponseTypeFinalData, outputPath, executionUUID string) (*RunResult, error) {
 	if final == nil {
-		return errors.New("no final data in execution response")
+		return nil, errors.New("no final data in execution response")
 	}
 	if final.Status != extensiongen.ExecutionStatus_EXECUTION_STATUS_SUCCEEDED {
-		return fmt.Errorf("execution failed: %s", final.StatusMessage)
+		return nil, fmt.Errorf("execution failed: %s", final.StatusMessage)
 	}
 	if final.FileDownloadUrl == "" {
-		return errors.New("execution succeeded but no download URL provided")
+		return nil, errors.New("execution succeeded but no download URL provided")
 	}
 
 	ctx, err := productclient.ClientContext()
 	if err != nil {
-		return fmt.Errorf("failed to build product client context: %w", err)
+		return nil, fmt.Errorf("failed to build product client context: %w", err)
 	}
 	signedRes, err := i.productClient.ProductClient.GetSignedFileURL(ctx, &gen.GetSignedFileURLRequest{
 		Url: final.FileDownloadUrl,
 	})
 	if err != nil {
-		return fmt.Errorf("failed to get signed file URL: %w", err)
+		return nil, fmt.Errorf("failed to get signed file URL: %w", err)
 	}
 
-	return i.downloadAndExtract(signedRes.Url, outputPath)
+	written, removed, err := i.downloadAndExtract(signedRes.Url, outputPath)
+	if err != nil {
+		return nil, err
+	}
+	return &RunResult{
+		Status:        "succeeded",
+		ExecutionUUID: executionUUID,
+		OutputPath:    outputPath,
+		FilesWritten:  written,
+		FilesRemoved:  removed,
+	}, nil
 }
 
 func buildExtensionClient() (extensiongen.NuzurExtensionClient, *grpc.ClientConn, error) {
@@ -188,69 +208,73 @@ func buildExtensionClient() (extensiongen.NuzurExtensionClient, *grpc.ClientConn
 	return extensiongen.NewNuzurExtensionClient(conn), conn, nil
 }
 
-func (i *Implementation) downloadAndExtract(signedURL string, outputPath string) error {
+// downloadAndExtract fetches the generated zip and writes it under outputPath,
+// returning the relative paths written and any stale files removed.
+func (i *Implementation) downloadAndExtract(signedURL string, outputPath string) ([]string, []string, error) {
 	resp, err := http.Get(signedURL) // #nosec G107 - URL comes from trusted extension server
 	if err != nil {
-		return fmt.Errorf("failed to download execution file: %w", err)
+		return nil, nil, fmt.Errorf("failed to download execution file: %w", err)
 	}
 	defer resp.Body.Close()
 
 	if resp.StatusCode != http.StatusOK {
-		return fmt.Errorf("failed to download execution file: HTTP %d", resp.StatusCode)
+		return nil, nil, fmt.Errorf("failed to download execution file: HTTP %d", resp.StatusCode)
 	}
 
 	data, err := io.ReadAll(resp.Body)
 	if err != nil {
-		return fmt.Errorf("failed to read execution file: %w", err)
+		return nil, nil, fmt.Errorf("failed to read execution file: %w", err)
 	}
 
 	if err := os.MkdirAll(outputPath, 0750); err != nil {
-		return fmt.Errorf("failed to create output directory: %w", err)
+		return nil, nil, fmt.Errorf("failed to create output directory: %w", err)
 	}
 
 	// Capture the previous generation's manifest before the new output overwrites
 	// it, so we can detect files that are no longer produced.
 	previousManifest, hadPrevious, err := files.ReadGeneratedManifest(outputPath)
 	if err != nil {
-		fmt.Printf("Warning: could not read previous generation manifest: %v\n", err)
+		fmt.Fprintf(os.Stderr, "Warning: could not read previous generation manifest: %v\n", err)
 	}
 
-	if err := extractZip(data, outputPath); err != nil {
-		return err
+	written, err := extractZip(data, outputPath)
+	if err != nil {
+		return nil, nil, err
 	}
 
-	cleanupOrphanedGeneratedFiles(outputPath, previousManifest, hadPrevious)
-	return nil
+	removed := cleanupOrphanedGeneratedFiles(outputPath, previousManifest, hadPrevious)
+	return written, removed, nil
 }
 
 // cleanupOrphanedGeneratedFiles removes files generated by a previous run that
 // the current run no longer produces, leaving user-added files untouched. It is
 // driven by the presence of a generation manifest, so any extension that emits
 // one benefits; extensions that don't are unaffected.
-func cleanupOrphanedGeneratedFiles(outputPath string, previousManifest files.GeneratedManifest, hadPrevious bool) {
+func cleanupOrphanedGeneratedFiles(outputPath string, previousManifest files.GeneratedManifest, hadPrevious bool) []string {
 	if !hadPrevious {
-		return // first run with a manifest (or generator without one): nothing to compare against
+		return nil // first run with a manifest (or generator without one): nothing to compare against
 	}
 
 	currentManifest, hasCurrent, err := files.ReadGeneratedManifest(outputPath)
 	if err != nil {
-		fmt.Printf("Warning: could not read current generation manifest: %v\n", err)
-		return
+		fmt.Fprintf(os.Stderr, "Warning: could not read current generation manifest: %v\n", err)
+		return nil
 	}
 	if !hasCurrent {
-		return // current run did not emit a manifest; do not delete anything
+		return nil // current run did not emit a manifest; do not delete anything
 	}
 
 	removed, err := files.CleanupOrphanedGeneratedFiles(outputPath, previousManifest, currentManifest)
 	if err != nil {
-		fmt.Printf("Warning: failed to clean up stale generated files: %v\n", err)
+		fmt.Fprintf(os.Stderr, "Warning: failed to clean up stale generated files: %v\n", err)
 	}
 	if len(removed) > 0 {
-		fmt.Printf("Removed %d stale generated file(s):\n", len(removed))
+		fmt.Fprintf(os.Stderr, "Removed %d stale generated file(s):\n", len(removed))
 		for _, r := range removed {
-			fmt.Printf("  - %s\n", r)
+			fmt.Fprintf(os.Stderr, "  - %s\n", r)
 		}
 	}
+	return removed
 }
 
 func contextWithTimeout(seconds int) context.Context {
@@ -259,35 +283,39 @@ func contextWithTimeout(seconds int) context.Context {
 	return ctx
 }
 
-func extractZip(data []byte, outputPath string) error {
+// extractZip writes every file in the archive under outputPath and returns the
+// slash-separated relative paths written, in archive order.
+func extractZip(data []byte, outputPath string) ([]string, error) {
 	r, err := zip.NewReader(bytes.NewReader(data), int64(len(data)))
 	if err != nil {
-		return fmt.Errorf("failed to open zip archive: %w", err)
+		return nil, fmt.Errorf("failed to open zip archive: %w", err)
 	}
 
+	var written []string
 	for _, f := range r.File {
 		destPath, err := sanitizeZipPath(outputPath, f.Name)
 		if err != nil {
-			return err
+			return nil, err
 		}
 
 		if f.FileInfo().IsDir() {
 			if err := os.MkdirAll(destPath, 0750); err != nil {
-				return fmt.Errorf("failed to create directory %s: %w", destPath, err)
+				return nil, fmt.Errorf("failed to create directory %s: %w", destPath, err)
 			}
 			continue
 		}
 
 		if err := os.MkdirAll(filepath.Dir(destPath), 0750); err != nil {
-			return fmt.Errorf("failed to create parent directory: %w", err)
+			return nil, fmt.Errorf("failed to create parent directory: %w", err)
 		}
 
 		if err := writeZipFile(f, destPath); err != nil {
-			return err
+			return nil, err
 		}
+		written = append(written, filepath.ToSlash(filepath.Clean(f.Name)))
 	}
 
-	return nil
+	return written, nil
 }
 
 // sanitizeZipPath prevents zip-slip path traversal attacks
