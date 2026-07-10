@@ -24,7 +24,7 @@ func (i *Implementation) ListGeneratorExtensions() ([]*nemgen.Extension, error) 
 
 	var generators []*nemgen.Extension
 	for _, ext := range res.Extensions {
-		if ext.GetExtensionType() == nemgen.ExtensionExtensionType_EXTENSION_EXTENSION_TYPE_GENERATOR {
+		if ext.GetExtensionType() == nemgen.ExtensionType_EXTENSION_TYPE_GENERATOR {
 			generators = append(generators, ext)
 		}
 	}

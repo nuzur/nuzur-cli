@@ -299,6 +299,7 @@ type TestConnectionRequest struct {
 	Type          gen.UserConnectionType        `protobuf:"varint,3,opt,name=type,proto3,enum=nem.UserConnectionType" json:"type,omitempty"`
 	TypeConfig    *gen.UserConnectionTypeConfig `protobuf:"bytes,4,opt,name=type_config,json=typeConfig,proto3" json:"type_config,omitempty"`
 	Schema        string                        `protobuf:"bytes,5,opt,name=schema,proto3" json:"schema,omitempty"`
+	RawConnection *gen.Connection               `protobuf:"bytes,6,opt,name=raw_connection,json=rawConnection,proto3" json:"raw_connection,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
@@ -352,6 +353,13 @@ func (x *TestConnectionRequest) GetSchema() string {
 		return x.Schema
 	}
 	return ""
+}
+
+func (x *TestConnectionRequest) GetRawConnection() *gen.Connection {
+	if x != nil {
+		return x.RawConnection
+	}
+	return nil
 }
 
 type TestConnectionResponse struct {
@@ -1572,6 +1580,342 @@ func (*CancelChangesDiffResponse) Descriptor() ([]byte, []int) {
 	return file_connection_manager_proto_rawDescGZIP(), []int{25}
 }
 
+type StartProjectVersionSQLDiffRequest struct {
+	state                     protoimpl.MessageState        `protogen:"open.v1"`
+	ProjectUuid               string                        `protobuf:"bytes,1,opt,name=project_uuid,json=projectUuid,proto3" json:"project_uuid,omitempty"`
+	ProjectVersionUuid        string                        `protobuf:"bytes,2,opt,name=project_version_uuid,json=projectVersionUuid,proto3" json:"project_version_uuid,omitempty"`                        // target version
+	CompareProjectVersionUuid string                        `protobuf:"bytes,3,opt,name=compare_project_version_uuid,json=compareProjectVersionUuid,proto3" json:"compare_project_version_uuid,omitempty"` // source version
+	Type                      gen.UserConnectionType        `protobuf:"varint,4,opt,name=type,proto3,enum=nem.UserConnectionType" json:"type,omitempty"`
+	TypeConfig                *gen.UserConnectionTypeConfig `protobuf:"bytes,5,opt,name=type_config,json=typeConfig,proto3" json:"type_config,omitempty"`
+	Schema                    string                        `protobuf:"bytes,6,opt,name=schema,proto3" json:"schema,omitempty"`
+	Locale                    string                        `protobuf:"bytes,7,opt,name=locale,proto3" json:"locale,omitempty"`
+	Force                     bool                          `protobuf:"varint,8,opt,name=force,proto3" json:"force,omitempty"`
+	unknownFields             protoimpl.UnknownFields
+	sizeCache                 protoimpl.SizeCache
+}
+
+func (x *StartProjectVersionSQLDiffRequest) Reset() {
+	*x = StartProjectVersionSQLDiffRequest{}
+	mi := &file_connection_manager_proto_msgTypes[26]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *StartProjectVersionSQLDiffRequest) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*StartProjectVersionSQLDiffRequest) ProtoMessage() {}
+
+func (x *StartProjectVersionSQLDiffRequest) ProtoReflect() protoreflect.Message {
+	mi := &file_connection_manager_proto_msgTypes[26]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use StartProjectVersionSQLDiffRequest.ProtoReflect.Descriptor instead.
+func (*StartProjectVersionSQLDiffRequest) Descriptor() ([]byte, []int) {
+	return file_connection_manager_proto_rawDescGZIP(), []int{26}
+}
+
+func (x *StartProjectVersionSQLDiffRequest) GetProjectUuid() string {
+	if x != nil {
+		return x.ProjectUuid
+	}
+	return ""
+}
+
+func (x *StartProjectVersionSQLDiffRequest) GetProjectVersionUuid() string {
+	if x != nil {
+		return x.ProjectVersionUuid
+	}
+	return ""
+}
+
+func (x *StartProjectVersionSQLDiffRequest) GetCompareProjectVersionUuid() string {
+	if x != nil {
+		return x.CompareProjectVersionUuid
+	}
+	return ""
+}
+
+func (x *StartProjectVersionSQLDiffRequest) GetType() gen.UserConnectionType {
+	if x != nil {
+		return x.Type
+	}
+	return gen.UserConnectionType(0)
+}
+
+func (x *StartProjectVersionSQLDiffRequest) GetTypeConfig() *gen.UserConnectionTypeConfig {
+	if x != nil {
+		return x.TypeConfig
+	}
+	return nil
+}
+
+func (x *StartProjectVersionSQLDiffRequest) GetSchema() string {
+	if x != nil {
+		return x.Schema
+	}
+	return ""
+}
+
+func (x *StartProjectVersionSQLDiffRequest) GetLocale() string {
+	if x != nil {
+		return x.Locale
+	}
+	return ""
+}
+
+func (x *StartProjectVersionSQLDiffRequest) GetForce() bool {
+	if x != nil {
+		return x.Force
+	}
+	return false
+}
+
+type StartProjectVersionSQLDiffResponse struct {
+	state                     protoimpl.MessageState `protogen:"open.v1"`
+	ProjectVersionSqlDiffUuid string                 `protobuf:"bytes,1,opt,name=project_version_sql_diff_uuid,json=projectVersionSqlDiffUuid,proto3" json:"project_version_sql_diff_uuid,omitempty"`
+	unknownFields             protoimpl.UnknownFields
+	sizeCache                 protoimpl.SizeCache
+}
+
+func (x *StartProjectVersionSQLDiffResponse) Reset() {
+	*x = StartProjectVersionSQLDiffResponse{}
+	mi := &file_connection_manager_proto_msgTypes[27]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *StartProjectVersionSQLDiffResponse) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*StartProjectVersionSQLDiffResponse) ProtoMessage() {}
+
+func (x *StartProjectVersionSQLDiffResponse) ProtoReflect() protoreflect.Message {
+	mi := &file_connection_manager_proto_msgTypes[27]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use StartProjectVersionSQLDiffResponse.ProtoReflect.Descriptor instead.
+func (*StartProjectVersionSQLDiffResponse) Descriptor() ([]byte, []int) {
+	return file_connection_manager_proto_rawDescGZIP(), []int{27}
+}
+
+func (x *StartProjectVersionSQLDiffResponse) GetProjectVersionSqlDiffUuid() string {
+	if x != nil {
+		return x.ProjectVersionSqlDiffUuid
+	}
+	return ""
+}
+
+type GetProjectVersionSQLDiffRequest struct {
+	state                     protoimpl.MessageState `protogen:"open.v1"`
+	ProjectVersionSqlDiffUuid string                 `protobuf:"bytes,1,opt,name=project_version_sql_diff_uuid,json=projectVersionSqlDiffUuid,proto3" json:"project_version_sql_diff_uuid,omitempty"`
+	unknownFields             protoimpl.UnknownFields
+	sizeCache                 protoimpl.SizeCache
+}
+
+func (x *GetProjectVersionSQLDiffRequest) Reset() {
+	*x = GetProjectVersionSQLDiffRequest{}
+	mi := &file_connection_manager_proto_msgTypes[28]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *GetProjectVersionSQLDiffRequest) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*GetProjectVersionSQLDiffRequest) ProtoMessage() {}
+
+func (x *GetProjectVersionSQLDiffRequest) ProtoReflect() protoreflect.Message {
+	mi := &file_connection_manager_proto_msgTypes[28]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use GetProjectVersionSQLDiffRequest.ProtoReflect.Descriptor instead.
+func (*GetProjectVersionSQLDiffRequest) Descriptor() ([]byte, []int) {
+	return file_connection_manager_proto_rawDescGZIP(), []int{28}
+}
+
+func (x *GetProjectVersionSQLDiffRequest) GetProjectVersionSqlDiffUuid() string {
+	if x != nil {
+		return x.ProjectVersionSqlDiffUuid
+	}
+	return ""
+}
+
+type GetProjectVersionSQLDiffResponse struct {
+	state          protoimpl.MessageState `protogen:"open.v1"`
+	Status         ChangesDiffStatus      `protobuf:"varint,1,opt,name=status,proto3,enum=ChangesDiffStatus" json:"status,omitempty"`
+	Message        string                 `protobuf:"bytes,2,opt,name=message,proto3" json:"message,omitempty"`
+	Apply          string                 `protobuf:"bytes,3,opt,name=apply,proto3" json:"apply,omitempty"`                   // only available when status is SUCCEEDED
+	ContextualDiff string                 `protobuf:"bytes,4,opt,name=contextualDiff,proto3" json:"contextualDiff,omitempty"` // only available when status is SUCCEEDED and for mysql
+	unknownFields  protoimpl.UnknownFields
+	sizeCache      protoimpl.SizeCache
+}
+
+func (x *GetProjectVersionSQLDiffResponse) Reset() {
+	*x = GetProjectVersionSQLDiffResponse{}
+	mi := &file_connection_manager_proto_msgTypes[29]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *GetProjectVersionSQLDiffResponse) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*GetProjectVersionSQLDiffResponse) ProtoMessage() {}
+
+func (x *GetProjectVersionSQLDiffResponse) ProtoReflect() protoreflect.Message {
+	mi := &file_connection_manager_proto_msgTypes[29]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use GetProjectVersionSQLDiffResponse.ProtoReflect.Descriptor instead.
+func (*GetProjectVersionSQLDiffResponse) Descriptor() ([]byte, []int) {
+	return file_connection_manager_proto_rawDescGZIP(), []int{29}
+}
+
+func (x *GetProjectVersionSQLDiffResponse) GetStatus() ChangesDiffStatus {
+	if x != nil {
+		return x.Status
+	}
+	return ChangesDiffStatus_CHANGES_DIFF_STATUS_INVALID
+}
+
+func (x *GetProjectVersionSQLDiffResponse) GetMessage() string {
+	if x != nil {
+		return x.Message
+	}
+	return ""
+}
+
+func (x *GetProjectVersionSQLDiffResponse) GetApply() string {
+	if x != nil {
+		return x.Apply
+	}
+	return ""
+}
+
+func (x *GetProjectVersionSQLDiffResponse) GetContextualDiff() string {
+	if x != nil {
+		return x.ContextualDiff
+	}
+	return ""
+}
+
+type CancelProjectVersionSQLDiffRequest struct {
+	state                     protoimpl.MessageState `protogen:"open.v1"`
+	ProjectVersionSqlDiffUuid string                 `protobuf:"bytes,1,opt,name=project_version_sql_diff_uuid,json=projectVersionSqlDiffUuid,proto3" json:"project_version_sql_diff_uuid,omitempty"`
+	unknownFields             protoimpl.UnknownFields
+	sizeCache                 protoimpl.SizeCache
+}
+
+func (x *CancelProjectVersionSQLDiffRequest) Reset() {
+	*x = CancelProjectVersionSQLDiffRequest{}
+	mi := &file_connection_manager_proto_msgTypes[30]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *CancelProjectVersionSQLDiffRequest) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*CancelProjectVersionSQLDiffRequest) ProtoMessage() {}
+
+func (x *CancelProjectVersionSQLDiffRequest) ProtoReflect() protoreflect.Message {
+	mi := &file_connection_manager_proto_msgTypes[30]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use CancelProjectVersionSQLDiffRequest.ProtoReflect.Descriptor instead.
+func (*CancelProjectVersionSQLDiffRequest) Descriptor() ([]byte, []int) {
+	return file_connection_manager_proto_rawDescGZIP(), []int{30}
+}
+
+func (x *CancelProjectVersionSQLDiffRequest) GetProjectVersionSqlDiffUuid() string {
+	if x != nil {
+		return x.ProjectVersionSqlDiffUuid
+	}
+	return ""
+}
+
+type CancelProjectVersionSQLDiffResponse struct {
+	state         protoimpl.MessageState `protogen:"open.v1"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *CancelProjectVersionSQLDiffResponse) Reset() {
+	*x = CancelProjectVersionSQLDiffResponse{}
+	mi := &file_connection_manager_proto_msgTypes[31]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *CancelProjectVersionSQLDiffResponse) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*CancelProjectVersionSQLDiffResponse) ProtoMessage() {}
+
+func (x *CancelProjectVersionSQLDiffResponse) ProtoReflect() protoreflect.Message {
+	mi := &file_connection_manager_proto_msgTypes[31]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use CancelProjectVersionSQLDiffResponse.ProtoReflect.Descriptor instead.
+func (*CancelProjectVersionSQLDiffResponse) Descriptor() ([]byte, []int) {
+	return file_connection_manager_proto_rawDescGZIP(), []int{31}
+}
+
 // project version start
 type GetProjectVersionFromConnectionRequest struct {
 	state         protoimpl.MessageState        `protogen:"open.v1"`
@@ -1585,7 +1929,7 @@ type GetProjectVersionFromConnectionRequest struct {
 
 func (x *GetProjectVersionFromConnectionRequest) Reset() {
 	*x = GetProjectVersionFromConnectionRequest{}
-	mi := &file_connection_manager_proto_msgTypes[26]
+	mi := &file_connection_manager_proto_msgTypes[32]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -1597,7 +1941,7 @@ func (x *GetProjectVersionFromConnectionRequest) String() string {
 func (*GetProjectVersionFromConnectionRequest) ProtoMessage() {}
 
 func (x *GetProjectVersionFromConnectionRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_connection_manager_proto_msgTypes[26]
+	mi := &file_connection_manager_proto_msgTypes[32]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -1610,7 +1954,7 @@ func (x *GetProjectVersionFromConnectionRequest) ProtoReflect() protoreflect.Mes
 
 // Deprecated: Use GetProjectVersionFromConnectionRequest.ProtoReflect.Descriptor instead.
 func (*GetProjectVersionFromConnectionRequest) Descriptor() ([]byte, []int) {
-	return file_connection_manager_proto_rawDescGZIP(), []int{26}
+	return file_connection_manager_proto_rawDescGZIP(), []int{32}
 }
 
 func (x *GetProjectVersionFromConnectionRequest) GetType() gen.UserConnectionType {
@@ -1650,7 +1994,7 @@ type GetProjectVersionFromConnectionResponse struct {
 
 func (x *GetProjectVersionFromConnectionResponse) Reset() {
 	*x = GetProjectVersionFromConnectionResponse{}
-	mi := &file_connection_manager_proto_msgTypes[27]
+	mi := &file_connection_manager_proto_msgTypes[33]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -1662,7 +2006,7 @@ func (x *GetProjectVersionFromConnectionResponse) String() string {
 func (*GetProjectVersionFromConnectionResponse) ProtoMessage() {}
 
 func (x *GetProjectVersionFromConnectionResponse) ProtoReflect() protoreflect.Message {
-	mi := &file_connection_manager_proto_msgTypes[27]
+	mi := &file_connection_manager_proto_msgTypes[33]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -1675,7 +2019,7 @@ func (x *GetProjectVersionFromConnectionResponse) ProtoReflect() protoreflect.Me
 
 // Deprecated: Use GetProjectVersionFromConnectionResponse.ProtoReflect.Descriptor instead.
 func (*GetProjectVersionFromConnectionResponse) Descriptor() ([]byte, []int) {
-	return file_connection_manager_proto_rawDescGZIP(), []int{27}
+	return file_connection_manager_proto_rawDescGZIP(), []int{33}
 }
 
 func (x *GetProjectVersionFromConnectionResponse) GetProjectVersion() *gen.ProjectVersion {
@@ -1704,7 +2048,7 @@ type LocalAgentToServer struct {
 
 func (x *LocalAgentToServer) Reset() {
 	*x = LocalAgentToServer{}
-	mi := &file_connection_manager_proto_msgTypes[28]
+	mi := &file_connection_manager_proto_msgTypes[34]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -1716,7 +2060,7 @@ func (x *LocalAgentToServer) String() string {
 func (*LocalAgentToServer) ProtoMessage() {}
 
 func (x *LocalAgentToServer) ProtoReflect() protoreflect.Message {
-	mi := &file_connection_manager_proto_msgTypes[28]
+	mi := &file_connection_manager_proto_msgTypes[34]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -1729,7 +2073,7 @@ func (x *LocalAgentToServer) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use LocalAgentToServer.ProtoReflect.Descriptor instead.
 func (*LocalAgentToServer) Descriptor() ([]byte, []int) {
-	return file_connection_manager_proto_rawDescGZIP(), []int{28}
+	return file_connection_manager_proto_rawDescGZIP(), []int{34}
 }
 
 func (x *LocalAgentToServer) GetMessage() isLocalAgentToServer_Message {
@@ -1881,7 +2225,7 @@ type ServerToLocalAgent struct {
 
 func (x *ServerToLocalAgent) Reset() {
 	*x = ServerToLocalAgent{}
-	mi := &file_connection_manager_proto_msgTypes[29]
+	mi := &file_connection_manager_proto_msgTypes[35]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -1893,7 +2237,7 @@ func (x *ServerToLocalAgent) String() string {
 func (*ServerToLocalAgent) ProtoMessage() {}
 
 func (x *ServerToLocalAgent) ProtoReflect() protoreflect.Message {
-	mi := &file_connection_manager_proto_msgTypes[29]
+	mi := &file_connection_manager_proto_msgTypes[35]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -1906,7 +2250,7 @@ func (x *ServerToLocalAgent) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use ServerToLocalAgent.ProtoReflect.Descriptor instead.
 func (*ServerToLocalAgent) Descriptor() ([]byte, []int) {
-	return file_connection_manager_proto_rawDescGZIP(), []int{29}
+	return file_connection_manager_proto_rawDescGZIP(), []int{35}
 }
 
 func (x *ServerToLocalAgent) GetMessage() isServerToLocalAgent_Message {
@@ -2039,7 +2383,7 @@ type Hello struct {
 
 func (x *Hello) Reset() {
 	*x = Hello{}
-	mi := &file_connection_manager_proto_msgTypes[30]
+	mi := &file_connection_manager_proto_msgTypes[36]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -2051,7 +2395,7 @@ func (x *Hello) String() string {
 func (*Hello) ProtoMessage() {}
 
 func (x *Hello) ProtoReflect() protoreflect.Message {
-	mi := &file_connection_manager_proto_msgTypes[30]
+	mi := &file_connection_manager_proto_msgTypes[36]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -2064,7 +2408,7 @@ func (x *Hello) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use Hello.ProtoReflect.Descriptor instead.
 func (*Hello) Descriptor() ([]byte, []int) {
-	return file_connection_manager_proto_rawDescGZIP(), []int{30}
+	return file_connection_manager_proto_rawDescGZIP(), []int{36}
 }
 
 func (x *Hello) GetLocalAgentToken() string {
@@ -2101,7 +2445,7 @@ type Welcome struct {
 
 func (x *Welcome) Reset() {
 	*x = Welcome{}
-	mi := &file_connection_manager_proto_msgTypes[31]
+	mi := &file_connection_manager_proto_msgTypes[37]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -2113,7 +2457,7 @@ func (x *Welcome) String() string {
 func (*Welcome) ProtoMessage() {}
 
 func (x *Welcome) ProtoReflect() protoreflect.Message {
-	mi := &file_connection_manager_proto_msgTypes[31]
+	mi := &file_connection_manager_proto_msgTypes[37]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -2126,7 +2470,7 @@ func (x *Welcome) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use Welcome.ProtoReflect.Descriptor instead.
 func (*Welcome) Descriptor() ([]byte, []int) {
-	return file_connection_manager_proto_rawDescGZIP(), []int{31}
+	return file_connection_manager_proto_rawDescGZIP(), []int{37}
 }
 
 func (x *Welcome) GetMinCliVersion() string {
@@ -2153,7 +2497,7 @@ type Ping struct {
 
 func (x *Ping) Reset() {
 	*x = Ping{}
-	mi := &file_connection_manager_proto_msgTypes[32]
+	mi := &file_connection_manager_proto_msgTypes[38]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -2165,7 +2509,7 @@ func (x *Ping) String() string {
 func (*Ping) ProtoMessage() {}
 
 func (x *Ping) ProtoReflect() protoreflect.Message {
-	mi := &file_connection_manager_proto_msgTypes[32]
+	mi := &file_connection_manager_proto_msgTypes[38]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -2178,7 +2522,7 @@ func (x *Ping) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use Ping.ProtoReflect.Descriptor instead.
 func (*Ping) Descriptor() ([]byte, []int) {
-	return file_connection_manager_proto_rawDescGZIP(), []int{32}
+	return file_connection_manager_proto_rawDescGZIP(), []int{38}
 }
 
 func (x *Ping) GetRequestId() uint64 {
@@ -2204,7 +2548,7 @@ type Pong struct {
 
 func (x *Pong) Reset() {
 	*x = Pong{}
-	mi := &file_connection_manager_proto_msgTypes[33]
+	mi := &file_connection_manager_proto_msgTypes[39]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -2216,7 +2560,7 @@ func (x *Pong) String() string {
 func (*Pong) ProtoMessage() {}
 
 func (x *Pong) ProtoReflect() protoreflect.Message {
-	mi := &file_connection_manager_proto_msgTypes[33]
+	mi := &file_connection_manager_proto_msgTypes[39]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -2229,7 +2573,7 @@ func (x *Pong) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use Pong.ProtoReflect.Descriptor instead.
 func (*Pong) Descriptor() ([]byte, []int) {
-	return file_connection_manager_proto_rawDescGZIP(), []int{33}
+	return file_connection_manager_proto_rawDescGZIP(), []int{39}
 }
 
 func (x *Pong) GetRequestId() uint64 {
@@ -2264,7 +2608,7 @@ type RunQueryRequest struct {
 
 func (x *RunQueryRequest) Reset() {
 	*x = RunQueryRequest{}
-	mi := &file_connection_manager_proto_msgTypes[34]
+	mi := &file_connection_manager_proto_msgTypes[40]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -2276,7 +2620,7 @@ func (x *RunQueryRequest) String() string {
 func (*RunQueryRequest) ProtoMessage() {}
 
 func (x *RunQueryRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_connection_manager_proto_msgTypes[34]
+	mi := &file_connection_manager_proto_msgTypes[40]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -2289,7 +2633,7 @@ func (x *RunQueryRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use RunQueryRequest.ProtoReflect.Descriptor instead.
 func (*RunQueryRequest) Descriptor() ([]byte, []int) {
-	return file_connection_manager_proto_rawDescGZIP(), []int{34}
+	return file_connection_manager_proto_rawDescGZIP(), []int{40}
 }
 
 func (x *RunQueryRequest) GetRequestId() uint64 {
@@ -2351,7 +2695,7 @@ type ExecRequest struct {
 
 func (x *ExecRequest) Reset() {
 	*x = ExecRequest{}
-	mi := &file_connection_manager_proto_msgTypes[35]
+	mi := &file_connection_manager_proto_msgTypes[41]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -2363,7 +2707,7 @@ func (x *ExecRequest) String() string {
 func (*ExecRequest) ProtoMessage() {}
 
 func (x *ExecRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_connection_manager_proto_msgTypes[35]
+	mi := &file_connection_manager_proto_msgTypes[41]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -2376,7 +2720,7 @@ func (x *ExecRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use ExecRequest.ProtoReflect.Descriptor instead.
 func (*ExecRequest) Descriptor() ([]byte, []int) {
-	return file_connection_manager_proto_rawDescGZIP(), []int{35}
+	return file_connection_manager_proto_rawDescGZIP(), []int{41}
 }
 
 func (x *ExecRequest) GetRequestId() uint64 {
@@ -2432,7 +2776,7 @@ type ExecResponse struct {
 
 func (x *ExecResponse) Reset() {
 	*x = ExecResponse{}
-	mi := &file_connection_manager_proto_msgTypes[36]
+	mi := &file_connection_manager_proto_msgTypes[42]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -2444,7 +2788,7 @@ func (x *ExecResponse) String() string {
 func (*ExecResponse) ProtoMessage() {}
 
 func (x *ExecResponse) ProtoReflect() protoreflect.Message {
-	mi := &file_connection_manager_proto_msgTypes[36]
+	mi := &file_connection_manager_proto_msgTypes[42]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -2457,7 +2801,7 @@ func (x *ExecResponse) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use ExecResponse.ProtoReflect.Descriptor instead.
 func (*ExecResponse) Descriptor() ([]byte, []int) {
-	return file_connection_manager_proto_rawDescGZIP(), []int{36}
+	return file_connection_manager_proto_rawDescGZIP(), []int{42}
 }
 
 func (x *ExecResponse) GetRequestId() uint64 {
@@ -2499,7 +2843,7 @@ type BeginTxRequest struct {
 
 func (x *BeginTxRequest) Reset() {
 	*x = BeginTxRequest{}
-	mi := &file_connection_manager_proto_msgTypes[37]
+	mi := &file_connection_manager_proto_msgTypes[43]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -2511,7 +2855,7 @@ func (x *BeginTxRequest) String() string {
 func (*BeginTxRequest) ProtoMessage() {}
 
 func (x *BeginTxRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_connection_manager_proto_msgTypes[37]
+	mi := &file_connection_manager_proto_msgTypes[43]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -2524,7 +2868,7 @@ func (x *BeginTxRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use BeginTxRequest.ProtoReflect.Descriptor instead.
 func (*BeginTxRequest) Descriptor() ([]byte, []int) {
-	return file_connection_manager_proto_rawDescGZIP(), []int{37}
+	return file_connection_manager_proto_rawDescGZIP(), []int{43}
 }
 
 func (x *BeginTxRequest) GetRequestId() uint64 {
@@ -2558,7 +2902,7 @@ type BeginTxResponse struct {
 
 func (x *BeginTxResponse) Reset() {
 	*x = BeginTxResponse{}
-	mi := &file_connection_manager_proto_msgTypes[38]
+	mi := &file_connection_manager_proto_msgTypes[44]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -2570,7 +2914,7 @@ func (x *BeginTxResponse) String() string {
 func (*BeginTxResponse) ProtoMessage() {}
 
 func (x *BeginTxResponse) ProtoReflect() protoreflect.Message {
-	mi := &file_connection_manager_proto_msgTypes[38]
+	mi := &file_connection_manager_proto_msgTypes[44]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -2583,7 +2927,7 @@ func (x *BeginTxResponse) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use BeginTxResponse.ProtoReflect.Descriptor instead.
 func (*BeginTxResponse) Descriptor() ([]byte, []int) {
-	return file_connection_manager_proto_rawDescGZIP(), []int{38}
+	return file_connection_manager_proto_rawDescGZIP(), []int{44}
 }
 
 func (x *BeginTxResponse) GetRequestId() uint64 {
@@ -2610,7 +2954,7 @@ type CommitRequest struct {
 
 func (x *CommitRequest) Reset() {
 	*x = CommitRequest{}
-	mi := &file_connection_manager_proto_msgTypes[39]
+	mi := &file_connection_manager_proto_msgTypes[45]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -2622,7 +2966,7 @@ func (x *CommitRequest) String() string {
 func (*CommitRequest) ProtoMessage() {}
 
 func (x *CommitRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_connection_manager_proto_msgTypes[39]
+	mi := &file_connection_manager_proto_msgTypes[45]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -2635,7 +2979,7 @@ func (x *CommitRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use CommitRequest.ProtoReflect.Descriptor instead.
 func (*CommitRequest) Descriptor() ([]byte, []int) {
-	return file_connection_manager_proto_rawDescGZIP(), []int{39}
+	return file_connection_manager_proto_rawDescGZIP(), []int{45}
 }
 
 func (x *CommitRequest) GetRequestId() uint64 {
@@ -2661,7 +3005,7 @@ type CommitResponse struct {
 
 func (x *CommitResponse) Reset() {
 	*x = CommitResponse{}
-	mi := &file_connection_manager_proto_msgTypes[40]
+	mi := &file_connection_manager_proto_msgTypes[46]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -2673,7 +3017,7 @@ func (x *CommitResponse) String() string {
 func (*CommitResponse) ProtoMessage() {}
 
 func (x *CommitResponse) ProtoReflect() protoreflect.Message {
-	mi := &file_connection_manager_proto_msgTypes[40]
+	mi := &file_connection_manager_proto_msgTypes[46]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -2686,7 +3030,7 @@ func (x *CommitResponse) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use CommitResponse.ProtoReflect.Descriptor instead.
 func (*CommitResponse) Descriptor() ([]byte, []int) {
-	return file_connection_manager_proto_rawDescGZIP(), []int{40}
+	return file_connection_manager_proto_rawDescGZIP(), []int{46}
 }
 
 func (x *CommitResponse) GetRequestId() uint64 {
@@ -2706,7 +3050,7 @@ type RollbackRequest struct {
 
 func (x *RollbackRequest) Reset() {
 	*x = RollbackRequest{}
-	mi := &file_connection_manager_proto_msgTypes[41]
+	mi := &file_connection_manager_proto_msgTypes[47]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -2718,7 +3062,7 @@ func (x *RollbackRequest) String() string {
 func (*RollbackRequest) ProtoMessage() {}
 
 func (x *RollbackRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_connection_manager_proto_msgTypes[41]
+	mi := &file_connection_manager_proto_msgTypes[47]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -2731,7 +3075,7 @@ func (x *RollbackRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use RollbackRequest.ProtoReflect.Descriptor instead.
 func (*RollbackRequest) Descriptor() ([]byte, []int) {
-	return file_connection_manager_proto_rawDescGZIP(), []int{41}
+	return file_connection_manager_proto_rawDescGZIP(), []int{47}
 }
 
 func (x *RollbackRequest) GetRequestId() uint64 {
@@ -2757,7 +3101,7 @@ type RollbackResponse struct {
 
 func (x *RollbackResponse) Reset() {
 	*x = RollbackResponse{}
-	mi := &file_connection_manager_proto_msgTypes[42]
+	mi := &file_connection_manager_proto_msgTypes[48]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -2769,7 +3113,7 @@ func (x *RollbackResponse) String() string {
 func (*RollbackResponse) ProtoMessage() {}
 
 func (x *RollbackResponse) ProtoReflect() protoreflect.Message {
-	mi := &file_connection_manager_proto_msgTypes[42]
+	mi := &file_connection_manager_proto_msgTypes[48]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -2782,7 +3126,7 @@ func (x *RollbackResponse) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use RollbackResponse.ProtoReflect.Descriptor instead.
 func (*RollbackResponse) Descriptor() ([]byte, []int) {
-	return file_connection_manager_proto_rawDescGZIP(), []int{42}
+	return file_connection_manager_proto_rawDescGZIP(), []int{48}
 }
 
 func (x *RollbackResponse) GetRequestId() uint64 {
@@ -2807,7 +3151,7 @@ type ColumnMetadata struct {
 
 func (x *ColumnMetadata) Reset() {
 	*x = ColumnMetadata{}
-	mi := &file_connection_manager_proto_msgTypes[43]
+	mi := &file_connection_manager_proto_msgTypes[49]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -2819,7 +3163,7 @@ func (x *ColumnMetadata) String() string {
 func (*ColumnMetadata) ProtoMessage() {}
 
 func (x *ColumnMetadata) ProtoReflect() protoreflect.Message {
-	mi := &file_connection_manager_proto_msgTypes[43]
+	mi := &file_connection_manager_proto_msgTypes[49]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -2832,7 +3176,7 @@ func (x *ColumnMetadata) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use ColumnMetadata.ProtoReflect.Descriptor instead.
 func (*ColumnMetadata) Descriptor() ([]byte, []int) {
-	return file_connection_manager_proto_rawDescGZIP(), []int{43}
+	return file_connection_manager_proto_rawDescGZIP(), []int{49}
 }
 
 func (x *ColumnMetadata) GetName() string {
@@ -2876,7 +3220,7 @@ type RowsChunk struct {
 
 func (x *RowsChunk) Reset() {
 	*x = RowsChunk{}
-	mi := &file_connection_manager_proto_msgTypes[44]
+	mi := &file_connection_manager_proto_msgTypes[50]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -2888,7 +3232,7 @@ func (x *RowsChunk) String() string {
 func (*RowsChunk) ProtoMessage() {}
 
 func (x *RowsChunk) ProtoReflect() protoreflect.Message {
-	mi := &file_connection_manager_proto_msgTypes[44]
+	mi := &file_connection_manager_proto_msgTypes[50]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -2901,7 +3245,7 @@ func (x *RowsChunk) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use RowsChunk.ProtoReflect.Descriptor instead.
 func (*RowsChunk) Descriptor() ([]byte, []int) {
-	return file_connection_manager_proto_rawDescGZIP(), []int{44}
+	return file_connection_manager_proto_rawDescGZIP(), []int{50}
 }
 
 func (x *RowsChunk) GetRequestId() uint64 {
@@ -2950,7 +3294,7 @@ type Row struct {
 
 func (x *Row) Reset() {
 	*x = Row{}
-	mi := &file_connection_manager_proto_msgTypes[45]
+	mi := &file_connection_manager_proto_msgTypes[51]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -2962,7 +3306,7 @@ func (x *Row) String() string {
 func (*Row) ProtoMessage() {}
 
 func (x *Row) ProtoReflect() protoreflect.Message {
-	mi := &file_connection_manager_proto_msgTypes[45]
+	mi := &file_connection_manager_proto_msgTypes[51]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -2975,7 +3319,7 @@ func (x *Row) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use Row.ProtoReflect.Descriptor instead.
 func (*Row) Descriptor() ([]byte, []int) {
-	return file_connection_manager_proto_rawDescGZIP(), []int{45}
+	return file_connection_manager_proto_rawDescGZIP(), []int{51}
 }
 
 func (x *Row) GetValues() []*Value {
@@ -3006,7 +3350,7 @@ type Value struct {
 
 func (x *Value) Reset() {
 	*x = Value{}
-	mi := &file_connection_manager_proto_msgTypes[46]
+	mi := &file_connection_manager_proto_msgTypes[52]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -3018,7 +3362,7 @@ func (x *Value) String() string {
 func (*Value) ProtoMessage() {}
 
 func (x *Value) ProtoReflect() protoreflect.Message {
-	mi := &file_connection_manager_proto_msgTypes[46]
+	mi := &file_connection_manager_proto_msgTypes[52]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -3031,7 +3375,7 @@ func (x *Value) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use Value.ProtoReflect.Descriptor instead.
 func (*Value) Descriptor() ([]byte, []int) {
-	return file_connection_manager_proto_rawDescGZIP(), []int{46}
+	return file_connection_manager_proto_rawDescGZIP(), []int{52}
 }
 
 func (x *Value) GetKind() isValue_Kind {
@@ -3161,7 +3505,7 @@ type QueryError struct {
 
 func (x *QueryError) Reset() {
 	*x = QueryError{}
-	mi := &file_connection_manager_proto_msgTypes[47]
+	mi := &file_connection_manager_proto_msgTypes[53]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -3173,7 +3517,7 @@ func (x *QueryError) String() string {
 func (*QueryError) ProtoMessage() {}
 
 func (x *QueryError) ProtoReflect() protoreflect.Message {
-	mi := &file_connection_manager_proto_msgTypes[47]
+	mi := &file_connection_manager_proto_msgTypes[53]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -3186,7 +3530,7 @@ func (x *QueryError) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use QueryError.ProtoReflect.Descriptor instead.
 func (*QueryError) Descriptor() ([]byte, []int) {
-	return file_connection_manager_proto_rawDescGZIP(), []int{47}
+	return file_connection_manager_proto_rawDescGZIP(), []int{53}
 }
 
 func (x *QueryError) GetRequestId() uint64 {
@@ -3207,18 +3551,19 @@ var File_connection_manager_proto protoreflect.FileDescriptor
 
 const file_connection_manager_proto_rawDesc = "" +
 	"\n" +
-	"\x18connection_manager.proto\x1a\x15user_connection.proto\x1a!user_connection_type_config.proto\x1a\x1fuser_connection_execution.proto\x1a\x15project_version.proto\x1a\x1fgoogle/protobuf/timestamp.proto\"\x1b\n" +
+	"\x18connection_manager.proto\x1a\venums.proto\x1a\x15user_connection.proto\x1a!user_connection_type_config.proto\x1a\x1fuser_connection_execution.proto\x1a\x15project_version.proto\x1a\x1fgoogle/protobuf/timestamp.proto\x1a\x10connection.proto\"\x1b\n" +
 	"\x19GetUserConnectionsRequest\"S\n" +
 	"\x1aGetUserConnectionsResponse\x125\n" +
 	"\vconnections\x18\x01 \x03(\v2\x13.nem.UserConnectionR\vconnections\":\n" +
 	"\x1bClearUserConnectionsRequest\x12\x1b\n" +
 	"\tuser_uuid\x18\x01 \x01(\tR\buserUuid\"\x1e\n" +
-	"\x1cClearUserConnectionsResponse\"\x9c\x01\n" +
+	"\x1cClearUserConnectionsResponse\"\xd4\x01\n" +
 	"\x15TestConnectionRequest\x12+\n" +
 	"\x04type\x18\x03 \x01(\x0e2\x17.nem.UserConnectionTypeR\x04type\x12>\n" +
 	"\vtype_config\x18\x04 \x01(\v2\x1d.nem.UserConnectionTypeConfigR\n" +
 	"typeConfig\x12\x16\n" +
-	"\x06schema\x18\x05 \x01(\tR\x06schema\"W\n" +
+	"\x06schema\x18\x05 \x01(\tR\x06schema\x126\n" +
+	"\x0eraw_connection\x18\x06 \x01(\v2\x0f.nem.ConnectionR\rrawConnection\"W\n" +
 	"\x16TestConnectionResponse\x12\x18\n" +
 	"\asuccess\x18\x01 \x01(\bR\asuccess\x12#\n" +
 	"\rerror_message\x18\x02 \x01(\tR\ferrorMessage\"\x80\x01\n" +
@@ -3305,7 +3650,29 @@ const file_connection_manager_proto_rawDesc = "" +
 	"\x0econtextualDiff\x18\x04 \x01(\tR\x0econtextualDiff\"F\n" +
 	"\x18CancelChangesDiffRequest\x12*\n" +
 	"\x11changes_diff_uuid\x18\x01 \x01(\tR\x0fchangesDiffUuid\"\x1b\n" +
-	"\x19CancelChangesDiffResponse\"\xc5\x01\n" +
+	"\x19CancelChangesDiffResponse\"\xec\x02\n" +
+	"!StartProjectVersionSQLDiffRequest\x12!\n" +
+	"\fproject_uuid\x18\x01 \x01(\tR\vprojectUuid\x120\n" +
+	"\x14project_version_uuid\x18\x02 \x01(\tR\x12projectVersionUuid\x12?\n" +
+	"\x1ccompare_project_version_uuid\x18\x03 \x01(\tR\x19compareProjectVersionUuid\x12+\n" +
+	"\x04type\x18\x04 \x01(\x0e2\x17.nem.UserConnectionTypeR\x04type\x12>\n" +
+	"\vtype_config\x18\x05 \x01(\v2\x1d.nem.UserConnectionTypeConfigR\n" +
+	"typeConfig\x12\x16\n" +
+	"\x06schema\x18\x06 \x01(\tR\x06schema\x12\x16\n" +
+	"\x06locale\x18\a \x01(\tR\x06locale\x12\x14\n" +
+	"\x05force\x18\b \x01(\bR\x05force\"f\n" +
+	"\"StartProjectVersionSQLDiffResponse\x12@\n" +
+	"\x1dproject_version_sql_diff_uuid\x18\x01 \x01(\tR\x19projectVersionSqlDiffUuid\"c\n" +
+	"\x1fGetProjectVersionSQLDiffRequest\x12@\n" +
+	"\x1dproject_version_sql_diff_uuid\x18\x01 \x01(\tR\x19projectVersionSqlDiffUuid\"\xa6\x01\n" +
+	" GetProjectVersionSQLDiffResponse\x12*\n" +
+	"\x06status\x18\x01 \x01(\x0e2\x12.ChangesDiffStatusR\x06status\x12\x18\n" +
+	"\amessage\x18\x02 \x01(\tR\amessage\x12\x14\n" +
+	"\x05apply\x18\x03 \x01(\tR\x05apply\x12&\n" +
+	"\x0econtextualDiff\x18\x04 \x01(\tR\x0econtextualDiff\"f\n" +
+	"\"CancelProjectVersionSQLDiffRequest\x12@\n" +
+	"\x1dproject_version_sql_diff_uuid\x18\x01 \x01(\tR\x19projectVersionSqlDiffUuid\"%\n" +
+	"#CancelProjectVersionSQLDiffResponse\"\xc5\x01\n" +
 	"&GetProjectVersionFromConnectionRequest\x12+\n" +
 	"\x04type\x18\x01 \x01(\x0e2\x17.nem.UserConnectionTypeR\x04type\x12>\n" +
 	"\vtype_config\x18\x02 \x01(\v2\x1d.nem.UserConnectionTypeConfigR\n" +
@@ -3435,7 +3802,7 @@ const file_connection_manager_proto_rawDesc = "" +
 	"\x1fCHANGES_DIFF_STATUS_IN_PROGRESS\x10\x01\x12!\n" +
 	"\x1dCHANGES_DIFF_STATUS_SUCCEEDED\x10\x02\x12\x1e\n" +
 	"\x1aCHANGES_DIFF_STATUS_FAILED\x10\x03\x12!\n" +
-	"\x1dCHANGES_DIFF_STATUS_CANCELLED\x10\x042\xff\b\n" +
+	"\x1dCHANGES_DIFF_STATUS_CANCELLED\x10\x042\xb7\v\n" +
 	"\x16NuzurConnectionManager\x12O\n" +
 	"\x12GetUserConnections\x12\x1a.GetUserConnectionsRequest\x1a\x1b.GetUserConnectionsResponse\"\x00\x12U\n" +
 	"\x14ClearUserConnections\x12\x1c.ClearUserConnectionsRequest\x1a\x1d.ClearUserConnectionsResponse\"\x00\x12C\n" +
@@ -3450,7 +3817,10 @@ const file_connection_manager_proto_rawDesc = "" +
 	"\x10ExecuteQuerySync\x12\x14.ExecuteQueryRequest\x1a\x19.ExecuteQuerySyncResponse\"\x00\x12I\n" +
 	"\x10StartChangesDiff\x12\x18.StartChangesDiffRequest\x1a\x19.StartChangesDiffResponse\"\x00\x12C\n" +
 	"\x0eGetChangesDiff\x12\x16.GetChangesDiffRequest\x1a\x17.GetChangesDiffResponse\"\x00\x12L\n" +
-	"\x11CancelChangesDiff\x12\x19.CancelChangesDiffRequest\x1a\x1a.CancelChangesDiffResponse\"\x00\x12v\n" +
+	"\x11CancelChangesDiff\x12\x19.CancelChangesDiffRequest\x1a\x1a.CancelChangesDiffResponse\"\x00\x12g\n" +
+	"\x1aStartProjectVersionSQLDiff\x12\".StartProjectVersionSQLDiffRequest\x1a#.StartProjectVersionSQLDiffResponse\"\x00\x12a\n" +
+	"\x18GetProjectVersionSQLDiff\x12 .GetProjectVersionSQLDiffRequest\x1a!.GetProjectVersionSQLDiffResponse\"\x00\x12j\n" +
+	"\x1bCancelProjectVersionSQLDiff\x12#.CancelProjectVersionSQLDiffRequest\x1a$.CancelProjectVersionSQLDiffResponse\"\x00\x12v\n" +
 	"\x1fGetProjectVersionFromConnection\x12'.GetProjectVersionFromConnectionRequest\x1a(.GetProjectVersionFromConnectionResponse\"\x00\x12C\n" +
 	"\x11LocalAgentChannel\x12\x13.LocalAgentToServer\x1a\x13.ServerToLocalAgent\"\x00(\x010\x01B'\n" +
 	"\x05nuzurB\x16NuzurConnectionManagerP\x01Z\x04gen/b\x06proto3"
@@ -3468,7 +3838,7 @@ func file_connection_manager_proto_rawDescGZIP() []byte {
 }
 
 var file_connection_manager_proto_enumTypes = make([]protoimpl.EnumInfo, 2)
-var file_connection_manager_proto_msgTypes = make([]protoimpl.MessageInfo, 48)
+var file_connection_manager_proto_msgTypes = make([]protoimpl.MessageInfo, 54)
 var file_connection_manager_proto_goTypes = []any{
 	(QueryExecutionStatus)(0),                       // 0: QueryExecutionStatus
 	(ChangesDiffStatus)(0),                          // 1: ChangesDiffStatus
@@ -3498,112 +3868,129 @@ var file_connection_manager_proto_goTypes = []any{
 	(*GetChangesDiffResponse)(nil),                  // 25: GetChangesDiffResponse
 	(*CancelChangesDiffRequest)(nil),                // 26: CancelChangesDiffRequest
 	(*CancelChangesDiffResponse)(nil),               // 27: CancelChangesDiffResponse
-	(*GetProjectVersionFromConnectionRequest)(nil),  // 28: GetProjectVersionFromConnectionRequest
-	(*GetProjectVersionFromConnectionResponse)(nil), // 29: GetProjectVersionFromConnectionResponse
-	(*LocalAgentToServer)(nil),                      // 30: LocalAgentToServer
-	(*ServerToLocalAgent)(nil),                      // 31: ServerToLocalAgent
-	(*Hello)(nil),                                   // 32: Hello
-	(*Welcome)(nil),                                 // 33: Welcome
-	(*Ping)(nil),                                    // 34: Ping
-	(*Pong)(nil),                                    // 35: Pong
-	(*RunQueryRequest)(nil),                         // 36: RunQueryRequest
-	(*ExecRequest)(nil),                             // 37: ExecRequest
-	(*ExecResponse)(nil),                            // 38: ExecResponse
-	(*BeginTxRequest)(nil),                          // 39: BeginTxRequest
-	(*BeginTxResponse)(nil),                         // 40: BeginTxResponse
-	(*CommitRequest)(nil),                           // 41: CommitRequest
-	(*CommitResponse)(nil),                          // 42: CommitResponse
-	(*RollbackRequest)(nil),                         // 43: RollbackRequest
-	(*RollbackResponse)(nil),                        // 44: RollbackResponse
-	(*ColumnMetadata)(nil),                          // 45: ColumnMetadata
-	(*RowsChunk)(nil),                               // 46: RowsChunk
-	(*Row)(nil),                                     // 47: Row
-	(*Value)(nil),                                   // 48: Value
-	(*QueryError)(nil),                              // 49: QueryError
-	(*gen.UserConnection)(nil),                      // 50: nem.UserConnection
-	(gen.UserConnectionType)(0),                     // 51: nem.UserConnectionType
-	(*gen.UserConnectionTypeConfig)(nil),            // 52: nem.UserConnectionTypeConfig
-	(*gen.UserConnectionExecution)(nil),             // 53: nem.UserConnectionExecution
-	(*gen.ProjectVersion)(nil),                      // 54: nem.ProjectVersion
-	(*timestamppb.Timestamp)(nil),                   // 55: google.protobuf.Timestamp
+	(*StartProjectVersionSQLDiffRequest)(nil),       // 28: StartProjectVersionSQLDiffRequest
+	(*StartProjectVersionSQLDiffResponse)(nil),      // 29: StartProjectVersionSQLDiffResponse
+	(*GetProjectVersionSQLDiffRequest)(nil),         // 30: GetProjectVersionSQLDiffRequest
+	(*GetProjectVersionSQLDiffResponse)(nil),        // 31: GetProjectVersionSQLDiffResponse
+	(*CancelProjectVersionSQLDiffRequest)(nil),      // 32: CancelProjectVersionSQLDiffRequest
+	(*CancelProjectVersionSQLDiffResponse)(nil),     // 33: CancelProjectVersionSQLDiffResponse
+	(*GetProjectVersionFromConnectionRequest)(nil),  // 34: GetProjectVersionFromConnectionRequest
+	(*GetProjectVersionFromConnectionResponse)(nil), // 35: GetProjectVersionFromConnectionResponse
+	(*LocalAgentToServer)(nil),                      // 36: LocalAgentToServer
+	(*ServerToLocalAgent)(nil),                      // 37: ServerToLocalAgent
+	(*Hello)(nil),                                   // 38: Hello
+	(*Welcome)(nil),                                 // 39: Welcome
+	(*Ping)(nil),                                    // 40: Ping
+	(*Pong)(nil),                                    // 41: Pong
+	(*RunQueryRequest)(nil),                         // 42: RunQueryRequest
+	(*ExecRequest)(nil),                             // 43: ExecRequest
+	(*ExecResponse)(nil),                            // 44: ExecResponse
+	(*BeginTxRequest)(nil),                          // 45: BeginTxRequest
+	(*BeginTxResponse)(nil),                         // 46: BeginTxResponse
+	(*CommitRequest)(nil),                           // 47: CommitRequest
+	(*CommitResponse)(nil),                          // 48: CommitResponse
+	(*RollbackRequest)(nil),                         // 49: RollbackRequest
+	(*RollbackResponse)(nil),                        // 50: RollbackResponse
+	(*ColumnMetadata)(nil),                          // 51: ColumnMetadata
+	(*RowsChunk)(nil),                               // 52: RowsChunk
+	(*Row)(nil),                                     // 53: Row
+	(*Value)(nil),                                   // 54: Value
+	(*QueryError)(nil),                              // 55: QueryError
+	(*gen.UserConnection)(nil),                      // 56: nem.UserConnection
+	(gen.UserConnectionType)(0),                     // 57: nem.UserConnectionType
+	(*gen.UserConnectionTypeConfig)(nil),            // 58: nem.UserConnectionTypeConfig
+	(*gen.Connection)(nil),                          // 59: nem.Connection
+	(*gen.UserConnectionExecution)(nil),             // 60: nem.UserConnectionExecution
+	(*gen.ProjectVersion)(nil),                      // 61: nem.ProjectVersion
+	(*timestamppb.Timestamp)(nil),                   // 62: google.protobuf.Timestamp
 }
 var file_connection_manager_proto_depIdxs = []int32{
-	50, // 0: GetUserConnectionsResponse.connections:type_name -> nem.UserConnection
-	51, // 1: TestConnectionRequest.type:type_name -> nem.UserConnectionType
-	52, // 2: TestConnectionRequest.type_config:type_name -> nem.UserConnectionTypeConfig
-	51, // 3: GetSchemasRequest.type:type_name -> nem.UserConnectionType
-	52, // 4: GetSchemasRequest.type_config:type_name -> nem.UserConnectionTypeConfig
-	51, // 5: CreateSchemaRequest.type:type_name -> nem.UserConnectionType
-	52, // 6: CreateSchemaRequest.type_config:type_name -> nem.UserConnectionTypeConfig
-	51, // 7: ExecuteQueryRequest.type:type_name -> nem.UserConnectionType
-	52, // 8: ExecuteQueryRequest.type_config:type_name -> nem.UserConnectionTypeConfig
-	12, // 9: ExecuteQueryRequest.statements:type_name -> QueryStatement
-	0,  // 10: GetQueryExecutionResponse.status:type_name -> QueryExecutionStatus
-	53, // 11: GetQueryExecutionResponse.result:type_name -> nem.UserConnectionExecution
-	51, // 12: ApplyDataCRRequest.type:type_name -> nem.UserConnectionType
-	52, // 13: ApplyDataCRRequest.type_config:type_name -> nem.UserConnectionTypeConfig
-	0,  // 14: ExecuteQuerySyncResponse.status:type_name -> QueryExecutionStatus
-	53, // 15: ExecuteQuerySyncResponse.result:type_name -> nem.UserConnectionExecution
-	51, // 16: StartChangesDiffRequest.type:type_name -> nem.UserConnectionType
-	52, // 17: StartChangesDiffRequest.type_config:type_name -> nem.UserConnectionTypeConfig
-	1,  // 18: GetChangesDiffResponse.status:type_name -> ChangesDiffStatus
-	51, // 19: GetProjectVersionFromConnectionRequest.type:type_name -> nem.UserConnectionType
-	52, // 20: GetProjectVersionFromConnectionRequest.type_config:type_name -> nem.UserConnectionTypeConfig
-	54, // 21: GetProjectVersionFromConnectionResponse.project_version:type_name -> nem.ProjectVersion
-	32, // 22: LocalAgentToServer.hello:type_name -> Hello
-	35, // 23: LocalAgentToServer.pong:type_name -> Pong
-	46, // 24: LocalAgentToServer.rows_chunk:type_name -> RowsChunk
-	49, // 25: LocalAgentToServer.query_error:type_name -> QueryError
-	38, // 26: LocalAgentToServer.exec_response:type_name -> ExecResponse
-	40, // 27: LocalAgentToServer.begin_tx_response:type_name -> BeginTxResponse
-	42, // 28: LocalAgentToServer.commit_response:type_name -> CommitResponse
-	44, // 29: LocalAgentToServer.rollback_response:type_name -> RollbackResponse
-	33, // 30: ServerToLocalAgent.welcome:type_name -> Welcome
-	34, // 31: ServerToLocalAgent.ping:type_name -> Ping
-	36, // 32: ServerToLocalAgent.run_query:type_name -> RunQueryRequest
-	37, // 33: ServerToLocalAgent.exec:type_name -> ExecRequest
-	39, // 34: ServerToLocalAgent.begin_tx:type_name -> BeginTxRequest
-	41, // 35: ServerToLocalAgent.commit:type_name -> CommitRequest
-	43, // 36: ServerToLocalAgent.rollback:type_name -> RollbackRequest
-	45, // 37: RowsChunk.columns:type_name -> ColumnMetadata
-	47, // 38: RowsChunk.rows:type_name -> Row
-	48, // 39: Row.values:type_name -> Value
-	55, // 40: Value.time_val:type_name -> google.protobuf.Timestamp
-	2,  // 41: NuzurConnectionManager.GetUserConnections:input_type -> GetUserConnectionsRequest
-	4,  // 42: NuzurConnectionManager.ClearUserConnections:input_type -> ClearUserConnectionsRequest
-	6,  // 43: NuzurConnectionManager.TestConnection:input_type -> TestConnectionRequest
-	8,  // 44: NuzurConnectionManager.GetSchemas:input_type -> GetSchemasRequest
-	10, // 45: NuzurConnectionManager.CreateSchema:input_type -> CreateSchemaRequest
-	13, // 46: NuzurConnectionManager.ExecuteQuery:input_type -> ExecuteQueryRequest
-	15, // 47: NuzurConnectionManager.GetQueryExecution:input_type -> GetQueryExecutionRequest
-	17, // 48: NuzurConnectionManager.CancelQueryExecution:input_type -> CancelQueryExecutionRequest
-	19, // 49: NuzurConnectionManager.ApplyDataCR:input_type -> ApplyDataCRRequest
-	13, // 50: NuzurConnectionManager.ExecuteQuerySync:input_type -> ExecuteQueryRequest
-	22, // 51: NuzurConnectionManager.StartChangesDiff:input_type -> StartChangesDiffRequest
-	24, // 52: NuzurConnectionManager.GetChangesDiff:input_type -> GetChangesDiffRequest
-	26, // 53: NuzurConnectionManager.CancelChangesDiff:input_type -> CancelChangesDiffRequest
-	28, // 54: NuzurConnectionManager.GetProjectVersionFromConnection:input_type -> GetProjectVersionFromConnectionRequest
-	30, // 55: NuzurConnectionManager.LocalAgentChannel:input_type -> LocalAgentToServer
-	3,  // 56: NuzurConnectionManager.GetUserConnections:output_type -> GetUserConnectionsResponse
-	5,  // 57: NuzurConnectionManager.ClearUserConnections:output_type -> ClearUserConnectionsResponse
-	7,  // 58: NuzurConnectionManager.TestConnection:output_type -> TestConnectionResponse
-	9,  // 59: NuzurConnectionManager.GetSchemas:output_type -> GetSchemasResponse
-	11, // 60: NuzurConnectionManager.CreateSchema:output_type -> CreateSchemaResponse
-	14, // 61: NuzurConnectionManager.ExecuteQuery:output_type -> ExecuteQueryResponse
-	16, // 62: NuzurConnectionManager.GetQueryExecution:output_type -> GetQueryExecutionResponse
-	18, // 63: NuzurConnectionManager.CancelQueryExecution:output_type -> CancelQueryExecutionResponse
-	20, // 64: NuzurConnectionManager.ApplyDataCR:output_type -> ApplyDataCRResponse
-	21, // 65: NuzurConnectionManager.ExecuteQuerySync:output_type -> ExecuteQuerySyncResponse
-	23, // 66: NuzurConnectionManager.StartChangesDiff:output_type -> StartChangesDiffResponse
-	25, // 67: NuzurConnectionManager.GetChangesDiff:output_type -> GetChangesDiffResponse
-	27, // 68: NuzurConnectionManager.CancelChangesDiff:output_type -> CancelChangesDiffResponse
-	29, // 69: NuzurConnectionManager.GetProjectVersionFromConnection:output_type -> GetProjectVersionFromConnectionResponse
-	31, // 70: NuzurConnectionManager.LocalAgentChannel:output_type -> ServerToLocalAgent
-	56, // [56:71] is the sub-list for method output_type
-	41, // [41:56] is the sub-list for method input_type
-	41, // [41:41] is the sub-list for extension type_name
-	41, // [41:41] is the sub-list for extension extendee
-	0,  // [0:41] is the sub-list for field type_name
+	56, // 0: GetUserConnectionsResponse.connections:type_name -> nem.UserConnection
+	57, // 1: TestConnectionRequest.type:type_name -> nem.UserConnectionType
+	58, // 2: TestConnectionRequest.type_config:type_name -> nem.UserConnectionTypeConfig
+	59, // 3: TestConnectionRequest.raw_connection:type_name -> nem.Connection
+	57, // 4: GetSchemasRequest.type:type_name -> nem.UserConnectionType
+	58, // 5: GetSchemasRequest.type_config:type_name -> nem.UserConnectionTypeConfig
+	57, // 6: CreateSchemaRequest.type:type_name -> nem.UserConnectionType
+	58, // 7: CreateSchemaRequest.type_config:type_name -> nem.UserConnectionTypeConfig
+	57, // 8: ExecuteQueryRequest.type:type_name -> nem.UserConnectionType
+	58, // 9: ExecuteQueryRequest.type_config:type_name -> nem.UserConnectionTypeConfig
+	12, // 10: ExecuteQueryRequest.statements:type_name -> QueryStatement
+	0,  // 11: GetQueryExecutionResponse.status:type_name -> QueryExecutionStatus
+	60, // 12: GetQueryExecutionResponse.result:type_name -> nem.UserConnectionExecution
+	57, // 13: ApplyDataCRRequest.type:type_name -> nem.UserConnectionType
+	58, // 14: ApplyDataCRRequest.type_config:type_name -> nem.UserConnectionTypeConfig
+	0,  // 15: ExecuteQuerySyncResponse.status:type_name -> QueryExecutionStatus
+	60, // 16: ExecuteQuerySyncResponse.result:type_name -> nem.UserConnectionExecution
+	57, // 17: StartChangesDiffRequest.type:type_name -> nem.UserConnectionType
+	58, // 18: StartChangesDiffRequest.type_config:type_name -> nem.UserConnectionTypeConfig
+	1,  // 19: GetChangesDiffResponse.status:type_name -> ChangesDiffStatus
+	57, // 20: StartProjectVersionSQLDiffRequest.type:type_name -> nem.UserConnectionType
+	58, // 21: StartProjectVersionSQLDiffRequest.type_config:type_name -> nem.UserConnectionTypeConfig
+	1,  // 22: GetProjectVersionSQLDiffResponse.status:type_name -> ChangesDiffStatus
+	57, // 23: GetProjectVersionFromConnectionRequest.type:type_name -> nem.UserConnectionType
+	58, // 24: GetProjectVersionFromConnectionRequest.type_config:type_name -> nem.UserConnectionTypeConfig
+	61, // 25: GetProjectVersionFromConnectionResponse.project_version:type_name -> nem.ProjectVersion
+	38, // 26: LocalAgentToServer.hello:type_name -> Hello
+	41, // 27: LocalAgentToServer.pong:type_name -> Pong
+	52, // 28: LocalAgentToServer.rows_chunk:type_name -> RowsChunk
+	55, // 29: LocalAgentToServer.query_error:type_name -> QueryError
+	44, // 30: LocalAgentToServer.exec_response:type_name -> ExecResponse
+	46, // 31: LocalAgentToServer.begin_tx_response:type_name -> BeginTxResponse
+	48, // 32: LocalAgentToServer.commit_response:type_name -> CommitResponse
+	50, // 33: LocalAgentToServer.rollback_response:type_name -> RollbackResponse
+	39, // 34: ServerToLocalAgent.welcome:type_name -> Welcome
+	40, // 35: ServerToLocalAgent.ping:type_name -> Ping
+	42, // 36: ServerToLocalAgent.run_query:type_name -> RunQueryRequest
+	43, // 37: ServerToLocalAgent.exec:type_name -> ExecRequest
+	45, // 38: ServerToLocalAgent.begin_tx:type_name -> BeginTxRequest
+	47, // 39: ServerToLocalAgent.commit:type_name -> CommitRequest
+	49, // 40: ServerToLocalAgent.rollback:type_name -> RollbackRequest
+	51, // 41: RowsChunk.columns:type_name -> ColumnMetadata
+	53, // 42: RowsChunk.rows:type_name -> Row
+	54, // 43: Row.values:type_name -> Value
+	62, // 44: Value.time_val:type_name -> google.protobuf.Timestamp
+	2,  // 45: NuzurConnectionManager.GetUserConnections:input_type -> GetUserConnectionsRequest
+	4,  // 46: NuzurConnectionManager.ClearUserConnections:input_type -> ClearUserConnectionsRequest
+	6,  // 47: NuzurConnectionManager.TestConnection:input_type -> TestConnectionRequest
+	8,  // 48: NuzurConnectionManager.GetSchemas:input_type -> GetSchemasRequest
+	10, // 49: NuzurConnectionManager.CreateSchema:input_type -> CreateSchemaRequest
+	13, // 50: NuzurConnectionManager.ExecuteQuery:input_type -> ExecuteQueryRequest
+	15, // 51: NuzurConnectionManager.GetQueryExecution:input_type -> GetQueryExecutionRequest
+	17, // 52: NuzurConnectionManager.CancelQueryExecution:input_type -> CancelQueryExecutionRequest
+	19, // 53: NuzurConnectionManager.ApplyDataCR:input_type -> ApplyDataCRRequest
+	13, // 54: NuzurConnectionManager.ExecuteQuerySync:input_type -> ExecuteQueryRequest
+	22, // 55: NuzurConnectionManager.StartChangesDiff:input_type -> StartChangesDiffRequest
+	24, // 56: NuzurConnectionManager.GetChangesDiff:input_type -> GetChangesDiffRequest
+	26, // 57: NuzurConnectionManager.CancelChangesDiff:input_type -> CancelChangesDiffRequest
+	28, // 58: NuzurConnectionManager.StartProjectVersionSQLDiff:input_type -> StartProjectVersionSQLDiffRequest
+	30, // 59: NuzurConnectionManager.GetProjectVersionSQLDiff:input_type -> GetProjectVersionSQLDiffRequest
+	32, // 60: NuzurConnectionManager.CancelProjectVersionSQLDiff:input_type -> CancelProjectVersionSQLDiffRequest
+	34, // 61: NuzurConnectionManager.GetProjectVersionFromConnection:input_type -> GetProjectVersionFromConnectionRequest
+	36, // 62: NuzurConnectionManager.LocalAgentChannel:input_type -> LocalAgentToServer
+	3,  // 63: NuzurConnectionManager.GetUserConnections:output_type -> GetUserConnectionsResponse
+	5,  // 64: NuzurConnectionManager.ClearUserConnections:output_type -> ClearUserConnectionsResponse
+	7,  // 65: NuzurConnectionManager.TestConnection:output_type -> TestConnectionResponse
+	9,  // 66: NuzurConnectionManager.GetSchemas:output_type -> GetSchemasResponse
+	11, // 67: NuzurConnectionManager.CreateSchema:output_type -> CreateSchemaResponse
+	14, // 68: NuzurConnectionManager.ExecuteQuery:output_type -> ExecuteQueryResponse
+	16, // 69: NuzurConnectionManager.GetQueryExecution:output_type -> GetQueryExecutionResponse
+	18, // 70: NuzurConnectionManager.CancelQueryExecution:output_type -> CancelQueryExecutionResponse
+	20, // 71: NuzurConnectionManager.ApplyDataCR:output_type -> ApplyDataCRResponse
+	21, // 72: NuzurConnectionManager.ExecuteQuerySync:output_type -> ExecuteQuerySyncResponse
+	23, // 73: NuzurConnectionManager.StartChangesDiff:output_type -> StartChangesDiffResponse
+	25, // 74: NuzurConnectionManager.GetChangesDiff:output_type -> GetChangesDiffResponse
+	27, // 75: NuzurConnectionManager.CancelChangesDiff:output_type -> CancelChangesDiffResponse
+	29, // 76: NuzurConnectionManager.StartProjectVersionSQLDiff:output_type -> StartProjectVersionSQLDiffResponse
+	31, // 77: NuzurConnectionManager.GetProjectVersionSQLDiff:output_type -> GetProjectVersionSQLDiffResponse
+	33, // 78: NuzurConnectionManager.CancelProjectVersionSQLDiff:output_type -> CancelProjectVersionSQLDiffResponse
+	35, // 79: NuzurConnectionManager.GetProjectVersionFromConnection:output_type -> GetProjectVersionFromConnectionResponse
+	37, // 80: NuzurConnectionManager.LocalAgentChannel:output_type -> ServerToLocalAgent
+	63, // [63:81] is the sub-list for method output_type
+	45, // [45:63] is the sub-list for method input_type
+	45, // [45:45] is the sub-list for extension type_name
+	45, // [45:45] is the sub-list for extension extendee
+	0,  // [0:45] is the sub-list for field type_name
 }
 
 func init() { file_connection_manager_proto_init() }
@@ -3611,7 +3998,7 @@ func file_connection_manager_proto_init() {
 	if File_connection_manager_proto != nil {
 		return
 	}
-	file_connection_manager_proto_msgTypes[28].OneofWrappers = []any{
+	file_connection_manager_proto_msgTypes[34].OneofWrappers = []any{
 		(*LocalAgentToServer_Hello)(nil),
 		(*LocalAgentToServer_Pong)(nil),
 		(*LocalAgentToServer_RowsChunk)(nil),
@@ -3621,7 +4008,7 @@ func file_connection_manager_proto_init() {
 		(*LocalAgentToServer_CommitResponse)(nil),
 		(*LocalAgentToServer_RollbackResponse)(nil),
 	}
-	file_connection_manager_proto_msgTypes[29].OneofWrappers = []any{
+	file_connection_manager_proto_msgTypes[35].OneofWrappers = []any{
 		(*ServerToLocalAgent_Welcome)(nil),
 		(*ServerToLocalAgent_Ping)(nil),
 		(*ServerToLocalAgent_RunQuery)(nil),
@@ -3630,7 +4017,7 @@ func file_connection_manager_proto_init() {
 		(*ServerToLocalAgent_Commit)(nil),
 		(*ServerToLocalAgent_Rollback)(nil),
 	}
-	file_connection_manager_proto_msgTypes[46].OneofWrappers = []any{
+	file_connection_manager_proto_msgTypes[52].OneofWrappers = []any{
 		(*Value_IsNull)(nil),
 		(*Value_StringVal)(nil),
 		(*Value_IntVal)(nil),
@@ -3645,7 +4032,7 @@ func file_connection_manager_proto_init() {
 			GoPackagePath: reflect.TypeOf(x{}).PkgPath(),
 			RawDescriptor: unsafe.Slice(unsafe.StringData(file_connection_manager_proto_rawDesc), len(file_connection_manager_proto_rawDesc)),
 			NumEnums:      2,
-			NumMessages:   48,
+			NumMessages:   54,
 			NumExtensions: 0,
 			NumServices:   1,
 		},

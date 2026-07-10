@@ -32,6 +32,9 @@ const (
 	NuzurConnectionManager_StartChangesDiff_FullMethodName                = "/NuzurConnectionManager/StartChangesDiff"
 	NuzurConnectionManager_GetChangesDiff_FullMethodName                  = "/NuzurConnectionManager/GetChangesDiff"
 	NuzurConnectionManager_CancelChangesDiff_FullMethodName               = "/NuzurConnectionManager/CancelChangesDiff"
+	NuzurConnectionManager_StartProjectVersionSQLDiff_FullMethodName      = "/NuzurConnectionManager/StartProjectVersionSQLDiff"
+	NuzurConnectionManager_GetProjectVersionSQLDiff_FullMethodName        = "/NuzurConnectionManager/GetProjectVersionSQLDiff"
+	NuzurConnectionManager_CancelProjectVersionSQLDiff_FullMethodName     = "/NuzurConnectionManager/CancelProjectVersionSQLDiff"
 	NuzurConnectionManager_GetProjectVersionFromConnection_FullMethodName = "/NuzurConnectionManager/GetProjectVersionFromConnection"
 	NuzurConnectionManager_LocalAgentChannel_FullMethodName               = "/NuzurConnectionManager/LocalAgentChannel"
 )
@@ -56,6 +59,10 @@ type NuzurConnectionManagerClient interface {
 	StartChangesDiff(ctx context.Context, in *StartChangesDiffRequest, opts ...grpc.CallOption) (*StartChangesDiffResponse, error)
 	GetChangesDiff(ctx context.Context, in *GetChangesDiffRequest, opts ...grpc.CallOption) (*GetChangesDiffResponse, error)
 	CancelChangesDiff(ctx context.Context, in *CancelChangesDiffRequest, opts ...grpc.CallOption) (*CancelChangesDiffResponse, error)
+	// project version diff changes
+	StartProjectVersionSQLDiff(ctx context.Context, in *StartProjectVersionSQLDiffRequest, opts ...grpc.CallOption) (*StartProjectVersionSQLDiffResponse, error)
+	GetProjectVersionSQLDiff(ctx context.Context, in *GetProjectVersionSQLDiffRequest, opts ...grpc.CallOption) (*GetProjectVersionSQLDiffResponse, error)
+	CancelProjectVersionSQLDiff(ctx context.Context, in *CancelProjectVersionSQLDiffRequest, opts ...grpc.CallOption) (*CancelProjectVersionSQLDiffResponse, error)
 	// project version
 	GetProjectVersionFromConnection(ctx context.Context, in *GetProjectVersionFromConnectionRequest, opts ...grpc.CallOption) (*GetProjectVersionFromConnectionResponse, error)
 	// local agent bidi channel
@@ -203,6 +210,36 @@ func (c *nuzurConnectionManagerClient) CancelChangesDiff(ctx context.Context, in
 	return out, nil
 }
 
+func (c *nuzurConnectionManagerClient) StartProjectVersionSQLDiff(ctx context.Context, in *StartProjectVersionSQLDiffRequest, opts ...grpc.CallOption) (*StartProjectVersionSQLDiffResponse, error) {
+	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
+	out := new(StartProjectVersionSQLDiffResponse)
+	err := c.cc.Invoke(ctx, NuzurConnectionManager_StartProjectVersionSQLDiff_FullMethodName, in, out, cOpts...)
+	if err != nil {
+		return nil, err
+	}
+	return out, nil
+}
+
+func (c *nuzurConnectionManagerClient) GetProjectVersionSQLDiff(ctx context.Context, in *GetProjectVersionSQLDiffRequest, opts ...grpc.CallOption) (*GetProjectVersionSQLDiffResponse, error) {
+	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
+	out := new(GetProjectVersionSQLDiffResponse)
+	err := c.cc.Invoke(ctx, NuzurConnectionManager_GetProjectVersionSQLDiff_FullMethodName, in, out, cOpts...)
+	if err != nil {
+		return nil, err
+	}
+	return out, nil
+}
+
+func (c *nuzurConnectionManagerClient) CancelProjectVersionSQLDiff(ctx context.Context, in *CancelProjectVersionSQLDiffRequest, opts ...grpc.CallOption) (*CancelProjectVersionSQLDiffResponse, error) {
+	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
+	out := new(CancelProjectVersionSQLDiffResponse)
+	err := c.cc.Invoke(ctx, NuzurConnectionManager_CancelProjectVersionSQLDiff_FullMethodName, in, out, cOpts...)
+	if err != nil {
+		return nil, err
+	}
+	return out, nil
+}
+
 func (c *nuzurConnectionManagerClient) GetProjectVersionFromConnection(ctx context.Context, in *GetProjectVersionFromConnectionRequest, opts ...grpc.CallOption) (*GetProjectVersionFromConnectionResponse, error) {
 	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
 	out := new(GetProjectVersionFromConnectionResponse)
@@ -246,6 +283,10 @@ type NuzurConnectionManagerServer interface {
 	StartChangesDiff(context.Context, *StartChangesDiffRequest) (*StartChangesDiffResponse, error)
 	GetChangesDiff(context.Context, *GetChangesDiffRequest) (*GetChangesDiffResponse, error)
 	CancelChangesDiff(context.Context, *CancelChangesDiffRequest) (*CancelChangesDiffResponse, error)
+	// project version diff changes
+	StartProjectVersionSQLDiff(context.Context, *StartProjectVersionSQLDiffRequest) (*StartProjectVersionSQLDiffResponse, error)
+	GetProjectVersionSQLDiff(context.Context, *GetProjectVersionSQLDiffRequest) (*GetProjectVersionSQLDiffResponse, error)
+	CancelProjectVersionSQLDiff(context.Context, *CancelProjectVersionSQLDiffRequest) (*CancelProjectVersionSQLDiffResponse, error)
 	// project version
 	GetProjectVersionFromConnection(context.Context, *GetProjectVersionFromConnectionRequest) (*GetProjectVersionFromConnectionResponse, error)
 	// local agent bidi channel
@@ -301,6 +342,15 @@ func (UnimplementedNuzurConnectionManagerServer) GetChangesDiff(context.Context,
 }
 func (UnimplementedNuzurConnectionManagerServer) CancelChangesDiff(context.Context, *CancelChangesDiffRequest) (*CancelChangesDiffResponse, error) {
 	return nil, status.Error(codes.Unimplemented, "method CancelChangesDiff not implemented")
+}
+func (UnimplementedNuzurConnectionManagerServer) StartProjectVersionSQLDiff(context.Context, *StartProjectVersionSQLDiffRequest) (*StartProjectVersionSQLDiffResponse, error) {
+	return nil, status.Error(codes.Unimplemented, "method StartProjectVersionSQLDiff not implemented")
+}
+func (UnimplementedNuzurConnectionManagerServer) GetProjectVersionSQLDiff(context.Context, *GetProjectVersionSQLDiffRequest) (*GetProjectVersionSQLDiffResponse, error) {
+	return nil, status.Error(codes.Unimplemented, "method GetProjectVersionSQLDiff not implemented")
+}
+func (UnimplementedNuzurConnectionManagerServer) CancelProjectVersionSQLDiff(context.Context, *CancelProjectVersionSQLDiffRequest) (*CancelProjectVersionSQLDiffResponse, error) {
+	return nil, status.Error(codes.Unimplemented, "method CancelProjectVersionSQLDiff not implemented")
 }
 func (UnimplementedNuzurConnectionManagerServer) GetProjectVersionFromConnection(context.Context, *GetProjectVersionFromConnectionRequest) (*GetProjectVersionFromConnectionResponse, error) {
 	return nil, status.Error(codes.Unimplemented, "method GetProjectVersionFromConnection not implemented")
@@ -564,6 +614,60 @@ func _NuzurConnectionManager_CancelChangesDiff_Handler(srv interface{}, ctx cont
 	return interceptor(ctx, in, info, handler)
 }
 
+func _NuzurConnectionManager_StartProjectVersionSQLDiff_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
+	in := new(StartProjectVersionSQLDiffRequest)
+	if err := dec(in); err != nil {
+		return nil, err
+	}
+	if interceptor == nil {
+		return srv.(NuzurConnectionManagerServer).StartProjectVersionSQLDiff(ctx, in)
+	}
+	info := &grpc.UnaryServerInfo{
+		Server:     srv,
+		FullMethod: NuzurConnectionManager_StartProjectVersionSQLDiff_FullMethodName,
+	}
+	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
+		return srv.(NuzurConnectionManagerServer).StartProjectVersionSQLDiff(ctx, req.(*StartProjectVersionSQLDiffRequest))
+	}
+	return interceptor(ctx, in, info, handler)
+}
+
+func _NuzurConnectionManager_GetProjectVersionSQLDiff_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
+	in := new(GetProjectVersionSQLDiffRequest)
+	if err := dec(in); err != nil {
+		return nil, err
+	}
+	if interceptor == nil {
+		return srv.(NuzurConnectionManagerServer).GetProjectVersionSQLDiff(ctx, in)
+	}
+	info := &grpc.UnaryServerInfo{
+		Server:     srv,
+		FullMethod: NuzurConnectionManager_GetProjectVersionSQLDiff_FullMethodName,
+	}
+	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
+		return srv.(NuzurConnectionManagerServer).GetProjectVersionSQLDiff(ctx, req.(*GetProjectVersionSQLDiffRequest))
+	}
+	return interceptor(ctx, in, info, handler)
+}
+
+func _NuzurConnectionManager_CancelProjectVersionSQLDiff_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
+	in := new(CancelProjectVersionSQLDiffRequest)
+	if err := dec(in); err != nil {
+		return nil, err
+	}
+	if interceptor == nil {
+		return srv.(NuzurConnectionManagerServer).CancelProjectVersionSQLDiff(ctx, in)
+	}
+	info := &grpc.UnaryServerInfo{
+		Server:     srv,
+		FullMethod: NuzurConnectionManager_CancelProjectVersionSQLDiff_FullMethodName,
+	}
+	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
+		return srv.(NuzurConnectionManagerServer).CancelProjectVersionSQLDiff(ctx, req.(*CancelProjectVersionSQLDiffRequest))
+	}
+	return interceptor(ctx, in, info, handler)
+}
+
 func _NuzurConnectionManager_GetProjectVersionFromConnection_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
 	in := new(GetProjectVersionFromConnectionRequest)
 	if err := dec(in); err != nil {
@@ -647,6 +751,18 @@ var NuzurConnectionManager_ServiceDesc = grpc.ServiceDesc{
 		{
 			MethodName: "CancelChangesDiff",
 			Handler:    _NuzurConnectionManager_CancelChangesDiff_Handler,
+		},
+		{
+			MethodName: "StartProjectVersionSQLDiff",
+			Handler:    _NuzurConnectionManager_StartProjectVersionSQLDiff_Handler,
+		},
+		{
+			MethodName: "GetProjectVersionSQLDiff",
+			Handler:    _NuzurConnectionManager_GetProjectVersionSQLDiff_Handler,
+		},
+		{
+			MethodName: "CancelProjectVersionSQLDiff",
+			Handler:    _NuzurConnectionManager_CancelProjectVersionSQLDiff_Handler,
 		},
 		{
 			MethodName: "GetProjectVersionFromConnection",

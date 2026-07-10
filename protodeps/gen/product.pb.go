@@ -3043,6 +3043,7 @@ type SendProjectVersionForReviewRequest struct {
 	state              protoimpl.MessageState `protogen:"open.v1"`
 	ProjectVersionUuid string                 `protobuf:"bytes,1,opt,name=project_version_uuid,json=projectVersionUuid,proto3" json:"project_version_uuid,omitempty"`
 	ReviewDescription  string                 `protobuf:"bytes,2,opt,name=review_description,json=reviewDescription,proto3" json:"review_description,omitempty"`
+	AiGenerated        bool                   `protobuf:"varint,3,opt,name=ai_generated,json=aiGenerated,proto3" json:"ai_generated,omitempty"`
 	unknownFields      protoimpl.UnknownFields
 	sizeCache          protoimpl.SizeCache
 }
@@ -3089,6 +3090,13 @@ func (x *SendProjectVersionForReviewRequest) GetReviewDescription() string {
 		return x.ReviewDescription
 	}
 	return ""
+}
+
+func (x *SendProjectVersionForReviewRequest) GetAiGenerated() bool {
+	if x != nil {
+		return x.AiGenerated
+	}
+	return false
 }
 
 type WithdrawFromReviewProjectVersionRequest struct {
@@ -9172,7 +9180,7 @@ var File_product_proto protoreflect.FileDescriptor
 
 const file_product_proto_rawDesc = "" +
 	"\n" +
-	"\rproduct.proto\x1a\n" +
+	"\rproduct.proto\x1a\venums.proto\x1a\n" +
 	"team.proto\x1a\x0fuser_team.proto\x1a\x12user_project.proto\x1a\n" +
 	"user.proto\x1a\rproject.proto\x1a\x15project_version.proto\x1a\x10connection.proto\x1a\x12object_store.proto\x1a\x0fextension.proto\x1a\x17extension_version.proto\x1a\x19extension_execution.proto\x1a\x14change_request.proto\x1a\x10membership.proto\x1a\x0eai_usage.proto\x1a\x11local_agent.proto\x1a\x1clocal_agent_connection.proto\x1a google/protobuf/field_mask.proto\"-\n" +
 	"\x0eGetUserRequest\x12\x1b\n" +
@@ -9372,10 +9380,11 @@ const file_product_proto_rawDesc = "" +
 	"identifier\x12@\n" +
 	"\x1dbased_on_project_version_uuid\x18\x03 \x01(\tR\x19basedOnProjectVersionUuid\"U\n" +
 	"!DiscardDraftProjectVersionRequest\x120\n" +
-	"\x14project_version_uuid\x18\x01 \x01(\tR\x12projectVersionUuid\"\x85\x01\n" +
+	"\x14project_version_uuid\x18\x01 \x01(\tR\x12projectVersionUuid\"\xa8\x01\n" +
 	"\"SendProjectVersionForReviewRequest\x120\n" +
 	"\x14project_version_uuid\x18\x01 \x01(\tR\x12projectVersionUuid\x12-\n" +
-	"\x12review_description\x18\x02 \x01(\tR\x11reviewDescription\"[\n" +
+	"\x12review_description\x18\x02 \x01(\tR\x11reviewDescription\x12!\n" +
+	"\fai_generated\x18\x03 \x01(\bR\vaiGenerated\"[\n" +
 	"'WithdrawFromReviewProjectVersionRequest\x120\n" +
 	"\x14project_version_uuid\x18\x01 \x01(\tR\x12projectVersionUuid\"\x95\x02\n" +
 	"\x1bReviewProjectVersionRequest\x120\n" +
