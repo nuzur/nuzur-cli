@@ -121,6 +121,52 @@ Any failure prints an error envelope to stdout and exits non-zero:
 `errors` is populated only for config-validation failures; other failures carry
 just `message`.
 
+## Remote agents: the `nuzur_cc` MCP `describeExtensionConfig` tool
+
+The [`nuzur_cc`](https://github.com/nuzur/nuzur-go/tree/main/ccmcp) MCP server
+(used by claude.ai / Claude Desktop, where there's no local shell) exposes a
+**`describeExtensionConfig`** tool that returns the *same* schema shape as
+`nuzur-cli … describe`. It cannot run the extension — code generation writes to
+the local filesystem, which a remote server can't reach — so the split is:
+
+- **Remote (`nuzur_cc`)** assembles the config schema from backend data it
+  already serves (entities, connections, stores, enum options).
+- **Local (`nuzur-cli`)** takes that config and does the actual run + file write.
+
+### Tool: `describeExtensionConfig`
+
+Params:
+
+| param | required | meaning |
+|---|---|---|
+| `projectUuid` | yes | the project to run against |
+| `projectVersionUuid` | yes | the version whose entities become the uuid options |
+| `extensionIdentifier` | yes | e.g. `"go-code-gen"` |
+
+Result: the `ConfigSchema` documented above (`extension`, `project`,
+`project_version`, `fields`, `last_used_config`) **plus** an `execution` block
+that tells the agent how to run it locally, since the remote server can't:
+
+```jsonc
+{
+  "extension": { "identifier": "go-code-gen", … },
+  "fields": [ … ],           // identical shape to `nuzur-cli describe`
+  "last_used_config": { … },
+  "execution": {
+    "runner": "nuzur-cli",
+    "note": "This server cannot run the extension — generation writes files to your local machine…",
+    "install": "See https://github.com/nuzur/nuzur-cli …, then `nuzur-cli login`.",
+    "describe_command": "nuzur-cli run-extension describe --project … --version … --extension go-code-gen",
+    "run_command": "nuzur-cli run-extension --project … --version … --extension go-code-gen --config '<json>' --output ./out --json"
+  }
+}
+```
+
+A remote agent's flow: call `describeExtensionConfig` → build the config against
+`fields` → hand it to the user's local `nuzur-cli` (the `execution.run_command`)
+to execute. If the CLI isn't installed, the agent should surface `execution.install`
+to the user.
+
 ## Output streams & exit codes
 
 - **stdout** carries only the JSON document (schema, result, or error envelope)
