@@ -46,7 +46,7 @@ require (
 	github.com/nicksnyder/go-i18n/v2 v2.4.1
 	github.com/nuzur/extension-sdk v1.0.1
 	github.com/nuzur/filetools v0.0.3
-	github.com/nuzur/nem v1.1.3
+	github.com/nuzur/nem v1.1.4
 	github.com/urfave/cli v1.22.17
 	go.uber.org/multierr v1.11.0 // indirect
 	golang.org/x/text v0.37.0
