@@ -14,10 +14,14 @@ var bootstrapTemplate string
 // DB password is intentionally NOT here — it is generated on the box so the
 // plaintext secret never leaves the server.
 type BootstrapParams struct {
-	Identifier  string
-	DBEngine    DBEngine
-	DBName      string
-	DBUser      string
+	Identifier string
+	DBEngine   DBEngine
+	DBName     string
+	DBUser     string
+	// DBOnly provisions only MySQL + the paired agent + connection (and applies
+	// the schema); it skips the generated app, Docker, and Caddy. The database is
+	// then managed entirely through nuzur.
+	DBOnly      bool
 	GRPCEnabled bool
 	// JWTAuth means the generated app uses the JWT auth server, which reads its
 	// signing key from config (auth.jwt.key). The generated base.yaml ships a
@@ -82,7 +86,7 @@ func RenderBootstrap(p BootstrapParams) (string, error) {
 	if p.Identifier == "" || p.DBName == "" || p.DBUser == "" {
 		return "", fmt.Errorf("bootstrap: Identifier, DBName and DBUser are required")
 	}
-	if p.RemoteSrcDir == "" {
+	if p.RemoteSrcDir == "" && !p.DBOnly {
 		return "", fmt.Errorf("bootstrap: RemoteSrcDir is required")
 	}
 	tmpl, err := template.New("bootstrap").Parse(bootstrapTemplate)

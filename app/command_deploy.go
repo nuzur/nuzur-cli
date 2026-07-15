@@ -34,6 +34,8 @@ func (i *Implementation) DeployCommand() cli.Command {
 			cli.StringFlag{Name: "domain", Usage: "Domain pointing at the server — Caddy provisions a real HTTPS cert for it. Omit for IP-only (a self-signed cert is used)."},
 			cli.StringFlag{Name: "project, p", Usage: "Project name or UUID"},
 			cli.StringFlag{Name: "version", Usage: "Project version identifier or UUID (default: latest)"},
+			cli.StringFlag{Name: "identifier", Usage: "Deployment identifier (names the DB/service/config on the box; default: from the go-code-gen config, or the project name for --db-only)"},
+			cli.BoolFlag{Name: "db-only", Usage: "Database-only: install MySQL, pair the agent, register the connection, and apply the schema — but do NOT generate/build/run the app or Caddy. Manage the DB entirely through nuzur."},
 			cli.StringFlag{Name: "db", Value: "mysql", Usage: "Self-hosted database engine (v1: mysql)"},
 			cli.StringFlag{Name: "api", Usage: "API surface to generate: rest | grpc | both. Pick by the consumer — REST for JS/web/browser clients, gRPC for Go/backend clients (leave unset to use the project's last/provided config)"},
 			cli.StringFlag{Name: "auth", Usage: "Auth middleware: disabled | jwt | keycloak (leave unset to use the project's last/provided config)"},
@@ -59,6 +61,7 @@ func (i *Implementation) runDeploy(c *cli.Context) error {
 		return fmt.Errorf("--host is required for the ssh provider")
 	}
 	ctx := context.Background()
+	dbOnly := c.Bool("db-only")
 
 	// 1. Resolve project/version + the go-code-gen extension (logs in).
 	targets, err := i.resolveRunTargets(extRunFlags{
@@ -75,66 +78,74 @@ func (i *Implementation) runDeploy(c *cli.Context) error {
 		return err
 	}
 
-	// 2. Build the go-code-gen config (reuse last/provided; force deploy-friendly values).
-	provided, err := loadDeployConfig(c.String("config-file"))
-	if err != nil {
-		return err
-	}
-	provided["db"] = c.String("db")
-	provided["custom_enabled"] = c.Bool("custom")
-	provided["dockerfile"] = true
-	// Transport selection: pick REST for JS/web clients, gRPC for Go/backend
-	// clients. Unset leaves the project's last/provided config untouched.
-	switch c.String("api") {
-	case "rest":
-		provided["proto_enabled"] = false
-		provided["grpc_server_enabled"] = false
-		provided["rest_enabled"] = true
-	case "grpc":
-		provided["proto_enabled"] = true
-		provided["grpc_server_enabled"] = true
-		provided["rest_enabled"] = false
-	case "both":
-		provided["proto_enabled"] = true
-		provided["grpc_server_enabled"] = true
-		provided["rest_enabled"] = true
-	case "":
-		// leave to config-file / last-used / generator defaults
-	default:
-		return fmt.Errorf("--api must be one of: rest, grpc, both")
-	}
-	if a := c.String("auth"); a != "" {
-		provided["auth"] = a
-	}
-	configValues, err := targets.er.BuildConfigFromJSON(targets.project, targets.projectVersion.Uuid, targets.configEntity, provided, targets.lastConfig)
-	if err != nil {
-		return fmt.Errorf("building generator config (pass --config-file, or run `nuzur go-code-gen` once): %w", err)
+	// 2 + 3. Generate the app (skipped entirely for --db-only, which self-hosts
+	// only the DB + agent and manages it through nuzur — no app, no code-gen
+	// config required, so it works for any project).
+	var configValues map[string]interface{}
+	var sourceRoot string
+	jwtAuth := false
+	if !dbOnly {
+		provided, err := loadDeployConfig(c.String("config-file"))
+		if err != nil {
+			return err
+		}
+		provided["db"] = c.String("db")
+		provided["custom_enabled"] = c.Bool("custom")
+		provided["dockerfile"] = true
+		// Transport selection: pick REST for JS/web clients, gRPC for Go/backend
+		// clients. Unset leaves the project's last/provided config untouched.
+		switch c.String("api") {
+		case "rest":
+			provided["proto_enabled"] = false
+			provided["grpc_server_enabled"] = false
+			provided["rest_enabled"] = true
+		case "grpc":
+			provided["proto_enabled"] = true
+			provided["grpc_server_enabled"] = true
+			provided["rest_enabled"] = false
+		case "both":
+			provided["proto_enabled"] = true
+			provided["grpc_server_enabled"] = true
+			provided["rest_enabled"] = true
+		case "":
+			// leave to config-file / last-used / generator defaults
+		default:
+			return fmt.Errorf("--api must be one of: rest, grpc, both")
+		}
+		if a := c.String("auth"); a != "" {
+			provided["auth"] = a
+		}
+		configValues, err = targets.er.BuildConfigFromJSON(targets.project, targets.projectVersion.Uuid, targets.configEntity, provided, targets.lastConfig)
+		if err != nil {
+			return fmt.Errorf("building generator config (pass --config-file, or run `nuzur go-code-gen` once): %w", err)
+		}
+
+		outDir, err := os.MkdirTemp("", "nuzur-deploy-*")
+		if err != nil {
+			return err
+		}
+		defer os.RemoveAll(outDir)
+		outputtools.PrintlnColoredErr(i.localize.Localize("deploy_generating", "Generating application code..."), outputtools.Blue)
+		if _, err := targets.er.Run(extensionrun.RunParams{
+			Extension:          targets.extension,
+			ExtensionVersion:   targets.extensionVersion,
+			ProjectUUID:        targets.project.Uuid,
+			ProjectVersionUUID: targets.projectVersion.Uuid,
+			ConfigValues:       configValues,
+			OutputPath:         outDir,
+		}); err != nil {
+			return fmt.Errorf("generating code: %w", err)
+		}
+		sourceRoot, err = findSourceRoot(outDir)
+		if err != nil {
+			return err
+		}
+		jwtAuth = generatedHasJWTAuth(sourceRoot)
 	}
 
-	// 3. Generate the app source into a temp dir.
-	outDir, err := os.MkdirTemp("", "nuzur-deploy-*")
-	if err != nil {
-		return err
-	}
-	defer os.RemoveAll(outDir)
-	outputtools.PrintlnColoredErr(i.localize.Localize("deploy_generating", "Generating application code..."), outputtools.Blue)
-	if _, err := targets.er.Run(extensionrun.RunParams{
-		Extension:          targets.extension,
-		ExtensionVersion:   targets.extensionVersion,
-		ProjectUUID:        targets.project.Uuid,
-		ProjectVersionUUID: targets.projectVersion.Uuid,
-		ConfigValues:       configValues,
-		OutputPath:         outDir,
-	}); err != nil {
-		return fmt.Errorf("generating code: %w", err)
-	}
-	sourceRoot, err := findSourceRoot(outDir)
-	if err != nil {
-		return err
-	}
-
-	identifier := stringValue(configValues, "identifier", targets.project.Name)
-	jwtAuth := generatedHasJWTAuth(sourceRoot)
+	// Identifier: --identifier override, else the go-code-gen config's identifier,
+	// else (db-only) the sanitized project name.
+	identifier := firstNonEmpty(c.String("identifier"), stringValue(configValues, "identifier", ""), sanitizeDBName(targets.project.Name))
 
 	// The localhost DB is registered as a named agent connection with this
 	// UUID (locally on the box), then published to nuzur from here so the
@@ -216,38 +227,49 @@ func (i *Implementation) runDeploy(c *cli.Context) error {
 	}
 
 	// 7. Copy generated source to a user-writable path (scp runs as the SSH
-	// user, which may be non-root; the sudo bootstrap builds from here).
+	// user, which may be non-root; the sudo bootstrap builds from here). Skipped
+	// for --db-only (no app to build).
 	const remoteSrc = "/tmp/nuzur-src"
-	if err := runner.RunCommand(ctx, "rm -rf "+remoteSrc); err != nil {
-		return err
-	}
-	outputtools.PrintlnColoredErr(i.localize.Localize("deploy_copying", "Copying source to the server..."), outputtools.Blue)
-	if err := runner.CopyDir(ctx, sourceRoot, remoteSrc); err != nil {
-		return err
+	if !dbOnly {
+		if err := runner.RunCommand(ctx, "rm -rf "+remoteSrc); err != nil {
+			return err
+		}
+		outputtools.PrintlnColoredErr(i.localize.Localize("deploy_copying", "Copying source to the server..."), outputtools.Blue)
+		if err := runner.CopyDir(ctx, sourceRoot, remoteSrc); err != nil {
+			return err
+		}
 	}
 
 	// 8. Render + run the bootstrap.
 	// Empty cli-install-cmd → the bootstrap installs the nuzur CLI from GitHub
 	// releases itself.
-	script, err := deploy.RenderBootstrap(deploy.BootstrapParams{
+	bp := deploy.BootstrapParams{
 		Identifier:        identifier,
 		DBEngine:          deploy.DBMySQL,
 		DBName:            dbName,
 		DBUser:            dbName + "_app",
+		DBOnly:            dbOnly,
 		GRPCEnabled:       boolValue(configValues, "grpc_server_enabled"),
 		JWTAuth:           jwtAuth,
-		RemoteSrcDir:      remoteSrc,
 		ProvisioningToken: tokRes.GetProvisioningToken(),
 		CLIInstallCmd:     c.String("cli-install-cmd"),
 		ConnUUID:          connUUID,
 		ConnName:          connName,
 		Domain:            c.String("domain"),
 		Host:              host,
-	})
+	}
+	if !dbOnly {
+		bp.RemoteSrcDir = remoteSrc
+	}
+	script, err := deploy.RenderBootstrap(bp)
 	if err != nil {
 		return err
 	}
-	outputtools.PrintlnColoredErr(i.localize.Localize("deploy_bootstrapping", "Bootstrapping the server (Docker, MySQL, build, pairing)..."), outputtools.Blue)
+	bootMsg := "Bootstrapping the server (Docker, MySQL, build, pairing)..."
+	if dbOnly {
+		bootMsg = "Bootstrapping the server (MySQL + agent, database-only)..."
+	}
+	outputtools.PrintlnColoredErr(i.localize.Localize("deploy_bootstrapping", bootMsg), outputtools.Blue)
 	if err := runner.RunScript(ctx, script); err != nil {
 		return err
 	}
@@ -281,25 +303,28 @@ func (i *Implementation) runDeploy(c *cli.Context) error {
 	// Read back the resolved front-door URL the bootstrap wrote: a domain project
 	// → https://{domain}; an IP-only project → http://{host}:{auto-assigned port}
 	// (the public port is allocated on the box so N projects can coexist). Falls
-	// back to a best-effort compose if the readback fails.
-	projectDir := "/etc/nuzur/" + identifier
-	publicURL, _ := runner.Capture(ctx, "cat "+projectDir+"/url 2>/dev/null")
-	publicURL = strings.TrimSpace(publicURL)
-	if publicURL == "" {
-		if c.String("domain") != "" {
-			publicURL = "https://" + c.String("domain")
-		} else {
-			publicURL = "http://" + target.Host
+	// back to a best-effort compose if the readback fails. --db-only has no front
+	// door.
+	publicURL, useHTTPS, grpcTarget := "", false, ""
+	if !dbOnly {
+		publicURL, _ = runner.Capture(ctx, "cat /etc/nuzur/"+identifier+"/url 2>/dev/null")
+		publicURL = strings.TrimSpace(publicURL)
+		if publicURL == "" {
+			if c.String("domain") != "" {
+				publicURL = "https://" + c.String("domain")
+			} else {
+				publicURL = "http://" + target.Host
+			}
 		}
-	}
-	useHTTPS := strings.HasPrefix(publicURL, "https://")
-	// gRPC dial target host:port (grpcurl needs an explicit port).
-	grpcTarget := strings.TrimPrefix(strings.TrimPrefix(publicURL, "https://"), "http://")
-	if !strings.Contains(grpcTarget, ":") {
-		if useHTTPS {
-			grpcTarget += ":443"
-		} else {
-			grpcTarget += ":80"
+		useHTTPS = strings.HasPrefix(publicURL, "https://")
+		// gRPC dial target host:port (grpcurl needs an explicit port).
+		grpcTarget = strings.TrimPrefix(strings.TrimPrefix(publicURL, "https://"), "http://")
+		if !strings.Contains(grpcTarget, ":") {
+			if useHTTPS {
+				grpcTarget += ":443"
+			} else {
+				grpcTarget += ":80"
+			}
 		}
 	}
 
@@ -345,35 +370,44 @@ func (i *Implementation) runDeploy(c *cli.Context) error {
 	fmt.Printf("  connection:    %s (%s)\n", connName, connUUID)
 	fmt.Printf("  teardown:      nuzur destroy %s\n", dep.ID)
 
-	// What's deployed: this project's own Caddy front door (HTTPS via a domain,
-	// otherwise plain HTTP on its auto-assigned public port).
-	if useHTTPS {
-		outputtools.PrintlnColored("\nWhat's deployed (HTTPS via Caddy):", outputtools.Green)
+	if dbOnly {
+		// Database-only: no app, no front door — just the self-hosted MySQL
+		// managed through nuzur via the agent connection.
+		outputtools.PrintlnColored("\nWhat's deployed (database-only):", outputtools.Green)
+		fmt.Printf("  MySQL:     self-hosted on the box (localhost), schema applied.\n")
+		fmt.Printf("  Managed:   through nuzur — data manager, SQL Push, and queries via the agent.\n")
+		fmt.Printf("  No app/API or Caddy was installed. Add one later with a normal deploy.\n")
 	} else {
-		outputtools.PrintlnColored("\nWhat's deployed (HTTP via Caddy):", outputtools.Green)
-	}
-	if boolValue(configValues, "grpc_server_enabled") {
+		// What's deployed: this project's own Caddy front door (HTTPS via a domain,
+		// otherwise plain HTTP on its auto-assigned public port).
 		if useHTTPS {
-			fmt.Printf("  gRPC API:  %s (TLS)\n", grpcTarget)
-			fmt.Printf("             grpcurl %s list\n", grpcTarget)
+			outputtools.PrintlnColored("\nWhat's deployed (HTTPS via Caddy):", outputtools.Green)
 		} else {
-			fmt.Printf("  gRPC API:  %s (plaintext)\n", grpcTarget)
-			fmt.Printf("             grpcurl -plaintext %s list\n", grpcTarget)
+			outputtools.PrintlnColored("\nWhat's deployed (HTTP via Caddy):", outputtools.Green)
 		}
-	}
-	if boolValue(configValues, "rest_enabled") {
-		base := stringValue(configValues, "rest_base_path", "/v1")
-		fmt.Printf("  REST API:  %s%s\n", publicURL, base)
-		fmt.Printf("             curl %s%s/<entity>\n", publicURL, base)
-	}
-	if jwtAuth {
-		fmt.Printf("  Auth:      jwt — data endpoints need a Bearer token.\n")
-		fmt.Printf("             sign in: POST %s/signin {\"email\",\"password\"} (then /refresh, /validate)\n", publicURL)
-		fmt.Printf("             a signing key was generated on the box; sign-in needs a user row in your user entity.\n")
-	}
-	fmt.Printf("  Info page: %s/\n", publicURL)
-	if !useHTTPS {
-		outputtools.PrintlnColoredErr("  (IP-only deploy over plain HTTP — pass --domain <name> for automatic HTTPS with a trusted cert.)", outputtools.Yellow)
+		if boolValue(configValues, "grpc_server_enabled") {
+			if useHTTPS {
+				fmt.Printf("  gRPC API:  %s (TLS)\n", grpcTarget)
+				fmt.Printf("             grpcurl %s list\n", grpcTarget)
+			} else {
+				fmt.Printf("  gRPC API:  %s (plaintext)\n", grpcTarget)
+				fmt.Printf("             grpcurl -plaintext %s list\n", grpcTarget)
+			}
+		}
+		if boolValue(configValues, "rest_enabled") {
+			base := stringValue(configValues, "rest_base_path", "/v1")
+			fmt.Printf("  REST API:  %s%s\n", publicURL, base)
+			fmt.Printf("             curl %s%s/<entity>\n", publicURL, base)
+		}
+		if jwtAuth {
+			fmt.Printf("  Auth:      jwt — data endpoints need a Bearer token.\n")
+			fmt.Printf("             sign in: POST %s/signin {\"email\",\"password\"} (then /refresh, /validate)\n", publicURL)
+			fmt.Printf("             a signing key was generated on the box; sign-in needs a user row in your user entity.\n")
+		}
+		fmt.Printf("  Info page: %s/\n", publicURL)
+		if !useHTTPS {
+			outputtools.PrintlnColoredErr("  (IP-only deploy over plain HTTP — pass --domain <name> for automatic HTTPS with a trusted cert.)", outputtools.Yellow)
+		}
 	}
 
 	outputtools.PrintlnColored("\nManage your data:", outputtools.Green)

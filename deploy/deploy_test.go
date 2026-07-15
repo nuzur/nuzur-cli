@@ -104,6 +104,43 @@ func TestRenderBootstrap_DomainAndNoGRPC(t *testing.T) {
 	}
 }
 
+func TestRenderBootstrap_DBOnly(t *testing.T) {
+	script, err := RenderBootstrap(BootstrapParams{
+		Identifier: "dbonly", DBEngine: DBMySQL, DBName: "dbonly", DBUser: "dbonly_app",
+		DBOnly: true, ProvisioningToken: "t", ConnUUID: "c1", ConnName: "dbonly-db",
+	})
+	if err != nil {
+		t.Fatalf("RenderBootstrap db-only: %v", err)
+	}
+	// Keeps: MySQL, DB user, persisted password, agent pair + connection, backup.
+	for _, want := range []string{
+		"CREATE DATABASE IF NOT EXISTS",
+		"'dbonly_app'@'localhost'",
+		"DB_PASSWORD_FILE=/etc/nuzur/dbonly/db_password",
+		"agent pair --provisioning-token 't'",
+		"agent connection add 'dbonly-db' --uuid 'c1'",
+		"/etc/cron.d/nuzur-backup-dbonly",
+		"ufw allow 22/tcp",
+	} {
+		if !strings.Contains(script, want) {
+			t.Errorf("db-only bootstrap missing %q", want)
+		}
+	}
+	// Skips: app build, app service, Caddy, app-config ports, extra firewall.
+	for _, unwanted := range []string{
+		"docker build", "-api.service", "import /etc/caddy", "reverse_proxy",
+		"alloc_port", "ufw allow 80/tcp", "ufw allow 443/tcp",
+	} {
+		if strings.Contains(script, unwanted) {
+			t.Errorf("db-only bootstrap should not contain %q", unwanted)
+		}
+	}
+	// RemoteSrcDir is not required for db-only.
+	if _, err := RenderBootstrap(BootstrapParams{Identifier: "x", DBName: "x", DBUser: "x_app", DBOnly: true}); err != nil {
+		t.Errorf("db-only should not require RemoteSrcDir: %v", err)
+	}
+}
+
 func TestRenderTeardown(t *testing.T) {
 	// Default (keep data, not last project): tears down THIS project only.
 	script, err := RenderTeardown(TeardownParams{Identifier: "shop", DBName: "shop", DBUser: "shop_app", ConnUUID: "conn-1"})

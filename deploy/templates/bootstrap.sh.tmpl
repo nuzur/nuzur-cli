@@ -21,13 +21,20 @@ mkdir -p /etc/nuzur {{.ProjectDir}}
 mkdir -p /etc/apt/apt.conf.d
 echo 'DPkg::Lock::Timeout "300";' > /etc/apt/apt.conf.d/99nuzur-lock-timeout
 
-# ── 1. Docker ────────────────────────────────────────────────────────────────
-if ! command -v docker >/dev/null 2>&1; then
-  echo "[nuzur-deploy] installing docker + base packages"
+# ── 1. Base packages (always) + Docker (skipped for --db-only) ───────────────
+if ! command -v openssl >/dev/null 2>&1 || ! command -v ufw >/dev/null 2>&1; then
+  echo "[nuzur-deploy] installing base packages"
   apt-get update -y
-  apt-get install -y ca-certificates curl gnupg ufw openssl docker.io
+  apt-get install -y ca-certificates curl gnupg ufw openssl
+fi
+{{if not .DBOnly}}
+if ! command -v docker >/dev/null 2>&1; then
+  echo "[nuzur-deploy] installing docker"
+  apt-get update -y
+  apt-get install -y docker.io
   systemctl enable --now docker
 fi
+{{end}}
 
 {{if eq .DBEngine "mysql"}}
 # ── 2. MySQL (localhost-only, shared by all projects on the box) ──────────────
@@ -66,6 +73,7 @@ FLUSH PRIVILEGES;
 SQL
 {{end}}
 
+{{if not .DBOnly}}
 # ── 4. App config: base.yaml (from generated source) + prod.yaml overlay ──────
 mkdir -p {{.ConfigDir}}
 if [ -f "{{.RemoteSrcDir}}/config/base.yaml" ]; then
@@ -152,6 +160,7 @@ systemctl enable {{.Identifier}}-api.service
 # Always restart (not `enable --now`, a no-op when already running) so a re-deploy
 # picks up the freshly built image. ExecStartPre recreates the container.
 systemctl restart {{.Identifier}}-api.service
+{{end}}
 
 # ── 6. nuzur agent: ONE shared agent per box; this project adds its connection ─
 {{if .CLIInstallCmd}}{{.CLIInstallCmd}}{{else}}
@@ -216,6 +225,7 @@ systemctl enable nuzur-agent.service
 # registry (now including this project's connection).
 systemctl restart nuzur-agent.service
 
+{{if not .DBOnly}}
 # ── 7. Caddy front door: one site per project via an import dir (non-destructive)
 # so adding/removing a project never rewrites another's routing. With a domain the
 # site serves HTTPS/443 (auto Let's Encrypt); without one the project gets its own
@@ -279,13 +289,15 @@ systemctl reload caddy 2>/dev/null || systemctl restart caddy
 # (world-readable — it's just a URL, not a secret).
 printf '%s' "${PUBLIC_URL}" > {{.ProjectDir}}/url
 chmod 644 {{.ProjectDir}}/url
+{{end}}
 
-# ── 8. Firewall: SSH + the Caddy front doors — app ports stay internal. ───────
+# ── 8. Firewall: SSH + (for a full deploy) the Caddy front doors. The DB stays
+# bound to 127.0.0.1 and the agent is outbound-only, so --db-only opens only SSH.
 ufw allow 22/tcp
-ufw allow 80/tcp
+{{if not .DBOnly}}ufw allow 80/tcp
 ufw allow 443/tcp
 {{if not .Domain}}ufw allow ${PUBLIC_PORT}/tcp
-{{end}}ufw --force enable
+{{end}}{{end}}ufw --force enable
 
 {{if eq .DBEngine "mysql"}}
 # ── 9. Nightly backup for this project (14-day local retention) ───────────────
@@ -295,4 +307,6 @@ cat > /etc/cron.d/nuzur-backup-{{.Identifier}} <<'CRON'
 CRON
 {{end}}
 
-echo "[nuzur-deploy] bootstrap complete for {{.Identifier}} (${PUBLIC_URL})"
+{{if .DBOnly}}echo "[nuzur-deploy] bootstrap complete for {{.Identifier}} (database-only)"
+{{else}}echo "[nuzur-deploy] bootstrap complete for {{.Identifier}} (${PUBLIC_URL})"
+{{end}}
