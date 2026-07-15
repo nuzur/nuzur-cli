@@ -8,9 +8,14 @@
 //              back to a passphrase-encrypted file under the agent's config
 //              directory — the Keychain backend is gated on `darwin && cgo`,
 //              so a CGO_ENABLED=0 binary would otherwise have no backend.
-//   - Linux:   Secret Service (gnome-keyring / kwallet) when available,
+//   - Linux:   Secret Service (gnome-keyring / kwallet) when it actually works,
 //              falling back to a passphrase-encrypted file under the agent's
-//              config directory for headless servers.
+//              config directory. NB: the Secret Service backend is *selected*
+//              whenever its D-Bus service is merely reachable, but on a headless
+//              server (or a desktop box whose login keyring is locked) every
+//              write then fails ("Object does not exist at path /"). We detect
+//              that with a probe write and fall back to the file backend, so the
+//              agent daemon can store its DSNs unattended.
 //   - Other:   pass-through file backend. We don't ship for Windows yet.
 //
 // Secret IDs are the connection's uuid; the service name is fixed
@@ -50,34 +55,78 @@ var (
 // it can't read the DSN.
 func openKeyring() (keyring.Keyring, error) {
 	keyringOnce.Do(func() {
-		cfg := keyring.Config{
-			ServiceName: keyringService,
-			// macOS — name the keychain item so it's recognizable in
-			// Keychain Access.app.
-			KeychainName:                 "login",
-			KeychainTrustApplication:     true,
-			KeychainAccessibleWhenUnlocked: true,
-			KeychainSynchronizable:       false,
-			// Linux Secret Service — collection label.
-			LibSecretCollectionName: "login",
-			// KWallet folder.
-			KWalletAppID:  keyringService,
-			KWalletFolder: keyringService,
-			// pass — for nerds who use it. Skip configuring; users opting
-			// into pass set $PASSWORD_STORE_DIR themselves.
-			//
-			// File backend — fallback for headless Linux. We seed the
-			// passphrase from a stable machine-derived secret (below) so
-			// the daemon can read its own store on restart without
-			// prompting. This is best-effort encryption-at-rest, not a
-			// defense against a local attacker with file-read access.
-			FileDir:          fileBackendDir(),
-			FilePasswordFunc: fileBackendPassphrase,
-			AllowedBackends:  allowedBackends(),
-		}
-		keyringRef, keyringErr = keyring.Open(cfg)
+		keyringRef, keyringErr = openUsableKeyring()
 	})
 	return keyringRef, keyringErr
+}
+
+// openUsableKeyring opens the OS keyring and guarantees the selected backend can
+// actually store secrets. On Linux the Secret Service backend is chosen whenever
+// its D-Bus service is reachable, but on a headless server or a locked login
+// keyring every write fails; we detect that with a probe and fall back to the
+// passphrase-encrypted file backend, which works unattended.
+func openUsableKeyring() (keyring.Keyring, error) {
+	kr, err := keyring.Open(keyringConfig(allowedBackends()))
+	if err != nil {
+		return nil, err
+	}
+	// Only the D-Bus secret backends (Linux) have the "opens but can't write"
+	// failure mode; Keychain/WinCred/File that Open selects elsewhere are already
+	// usable, and probing macOS Keychain could pop an auth prompt. So probe only
+	// on Linux. If the file backend was already selected the probe just confirms
+	// it works (cheap); if Secret Service was selected but unusable, fall back.
+	if runtime.GOOS != "linux" {
+		return kr, nil
+	}
+	if probeKeyringWritable(kr) == nil {
+		return kr, nil
+	}
+	return keyring.Open(keyringConfig([]keyring.BackendType{keyring.FileBackend}))
+}
+
+// keyringConfig builds the keyring config for a given backend allow-list. The
+// non-selected backend fields are harmless.
+func keyringConfig(backends []keyring.BackendType) keyring.Config {
+	return keyring.Config{
+		ServiceName: keyringService,
+		// macOS — name the keychain item so it's recognizable in Keychain Access.app.
+		KeychainName:                   "login",
+		KeychainTrustApplication:       true,
+		KeychainAccessibleWhenUnlocked: true,
+		KeychainSynchronizable:         false,
+		// Linux Secret Service — collection label.
+		LibSecretCollectionName: "login",
+		// KWallet folder.
+		KWalletAppID:  keyringService,
+		KWalletFolder: keyringService,
+		// pass — for nerds who use it. Skip configuring; users opting into pass
+		// set $PASSWORD_STORE_DIR themselves.
+		//
+		// File backend — fallback for headless Linux. We seed the passphrase from
+		// a stable machine-derived secret (below) so the daemon can read its own
+		// store on restart without prompting. This is best-effort encryption-at-
+		// rest, not a defense against a local attacker with file-read access.
+		FileDir:          fileBackendDir(),
+		FilePasswordFunc: fileBackendPassphrase,
+		AllowedBackends:  backends,
+	}
+}
+
+// probeKeyringWritable verifies the opened backend can round-trip a write by
+// setting and removing a sentinel item. Returns the write error when the backend
+// was selected but isn't actually usable (e.g. a locked/absent Secret Service
+// collection on a headless box).
+func probeKeyringWritable(kr keyring.Keyring) error {
+	const probeKey = dsnSecretPrefix + "backend-probe"
+	if err := kr.Set(keyring.Item{
+		Key:   probeKey,
+		Data:  []byte("probe"),
+		Label: "nuzur keyring backend probe",
+	}); err != nil {
+		return err
+	}
+	_ = kr.Remove(probeKey)
+	return nil
 }
 
 // allowedBackends keeps backend selection explicit per-OS. The "no Windows

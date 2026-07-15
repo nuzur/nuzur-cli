@@ -297,6 +297,18 @@ func handleReverseRPC(ctx context.Context, stream pb.NuzurConnectionManager_Loca
 	case *pb.ServerToLocalAgent_Rollback:
 		handleRollback(stream, txs, payload.Rollback)
 
+	case *pb.ServerToLocalAgent_ComputePgSchemaPlan:
+		// Computing a pg schema plan spins up temp databases + runs pg-schema-diff
+		// locally — expensive, so gate it behind a query slot like the others.
+		acqCtx, cancel := context.WithTimeout(ctx, queryAcquireTimeout)
+		defer cancel()
+		if err := sem.Acquire(acqCtx); err != nil {
+			sendQueryError(stream, payload.ComputePgSchemaPlan.GetRequestId(), err.Error())
+			return
+		}
+		defer sem.Release()
+		handleComputePgSchemaPlan(ctx, stream, pool, payload.ComputePgSchemaPlan)
+
 	default:
 		log.Printf("unhandled reverse RPC: %T", payload)
 	}

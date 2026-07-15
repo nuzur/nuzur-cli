@@ -37,10 +37,10 @@ func (i *Implementation) DeployCommand() cli.Command {
 			cli.StringFlag{Name: "project, p", Usage: "Project name or UUID"},
 			cli.StringFlag{Name: "version", Usage: "Project version identifier or UUID (default: latest)"},
 			cli.StringFlag{Name: "identifier", Usage: "Deployment identifier (names the DB/service/config on the box; default: from the go-code-gen config, or the project name for --db-only)"},
-			cli.BoolFlag{Name: "db-only", Usage: "Database-only: install MySQL, pair the agent, register the connection, and apply the schema — but do NOT generate/build/run the app or Caddy. Manage the DB entirely through nuzur."},
+			cli.BoolFlag{Name: "db-only", Usage: "Database-only: install the DB engine (--db), pair the agent, register the connection, and apply the schema — but do NOT generate/build/run the app or Caddy. Manage the DB entirely through nuzur."},
 			cli.StringFlag{Name: "db-dsn", Usage: "Use an EXISTING database instead of self-hosting one. MySQL DSN (user:pass@tcp(host:port)/db?params) or Postgres URL (postgres://user:pass@host:port/db?sslmode=require). The app + agent connect to it; MySQL install/creation is skipped."},
 			cli.StringFlag{Name: "db-schema", Usage: "Postgres schema/namespace to target (default: public). Ignored for MySQL, where the database IS the schema."},
-			cli.StringFlag{Name: "db", Value: "mysql", Usage: "Self-hosted database engine (v1: mysql)"},
+			cli.StringFlag{Name: "db", Value: "mysql", Usage: "Self-hosted database engine: mysql | postgres"},
 			cli.StringFlag{Name: "api", Usage: "API surface to generate: rest | grpc | both. Pick by the consumer — REST for JS/web/browser clients, gRPC for Go/backend clients (leave unset to use the project's last/provided config)"},
 			cli.StringFlag{Name: "auth", Usage: "Auth middleware: disabled | jwt | keycloak (leave unset to use the project's last/provided config)"},
 			cli.BoolFlag{Name: "custom", Usage: "Generate the custom application layer (app package for custom endpoints)"},
@@ -84,7 +84,10 @@ func (i *Implementation) runDeploy(c *cli.Context) error {
 			return fmt.Errorf("--db-dsn must include a database name")
 		}
 	} else if c.String("db") == "postgres" {
-		return fmt.Errorf("self-hosted Postgres isn't supported — pass --db-dsn postgres://… to connect to an existing Postgres database")
+		// Self-hosted Postgres: install + provision PG on the box (parallels the
+		// MySQL local tier). The engine drives the bootstrap install/create branch,
+		// the app config driver, and the agent connection's --driver/--schema.
+		dbEngine = deploy.DBPostgres
 	}
 
 	// 1. Resolve project/version + the go-code-gen extension (logs in).
@@ -113,13 +116,10 @@ func (i *Implementation) runDeploy(c *cli.Context) error {
 		if err != nil {
 			return err
 		}
-		// The DSN's engine wins when --db-dsn is set (so a Postgres DSN generates
-		// a Postgres app); otherwise use --db.
-		if externalDB {
-			provided["db"] = string(dbEngine)
-		} else {
-			provided["db"] = c.String("db")
-		}
+		// dbEngine is authoritative (from --db, or inferred from --db-dsn). go-code-gen's
+		// `db` config option uses "postgresql" (its DatabaseType enum) — distinct from the
+		// runtime driver name "postgres" used in prod.yaml + the agent connection.
+		provided["db"] = goCodeGenDBValue(dbEngine)
 		provided["custom_enabled"] = c.Bool("custom")
 		provided["dockerfile"] = true
 		// Transport selection: pick REST for JS/web clients, gRPC for Go/backend
@@ -253,7 +253,7 @@ func (i *Implementation) runDeploy(c *cli.Context) error {
 		Identifier:         identifier,
 		ProjectUUID:        targets.project.Uuid,
 		ProjectVersionUUID: targets.projectVersion.Uuid,
-		DBEngine:           deploy.DBMySQL,
+		DBEngine:           dbEngine,
 		ProvisioningToken:  tokRes.GetProvisioningToken(),
 		SourceDir:          sourceRoot,
 	}
@@ -316,9 +316,13 @@ func (i *Implementation) runDeploy(c *cli.Context) error {
 	if err != nil {
 		return err
 	}
-	bootMsg := "Bootstrapping the server (Docker, MySQL, build, pairing)..."
+	dbLabel := "MySQL"
+	if dbEngine == deploy.DBPostgres {
+		dbLabel = "Postgres"
+	}
+	bootMsg := "Bootstrapping the server (Docker, " + dbLabel + ", build, pairing)..."
 	if dbOnly {
-		bootMsg = "Bootstrapping the server (MySQL + agent, database-only)..."
+		bootMsg = "Bootstrapping the server (" + dbLabel + " + agent, database-only)..."
 	}
 	outputtools.PrintlnColoredErr(i.localize.Localize("deploy_bootstrapping", bootMsg), outputtools.Blue)
 	if err := runner.RunScript(ctx, script); err != nil {
@@ -346,7 +350,7 @@ func (i *Implementation) runDeploy(c *cli.Context) error {
 	// 10. Publish the connection catalog (needs the user token — the box can't)
 	// and auto-apply the schema to the empty DB.
 	schemaApplied := true
-	if err := i.publishAndApplySchema(targets, agentUUID, connUUID, connName, schema, c.String("schema-push-extension")); err != nil {
+	if err := i.publishAndApplySchema(targets, agentUUID, connUUID, connName, dbEngine, schema, c.String("schema-push-extension")); err != nil {
 		schemaApplied = false
 		outputtools.PrintlnColoredErr("Schema auto-apply skipped: "+err.Error(), outputtools.Yellow)
 	}
@@ -432,7 +436,7 @@ func (i *Implementation) runDeploy(c *cli.Context) error {
 		if externalDB {
 			fmt.Printf("  Database:  external %s (%s:%s), schema applied via the agent.\n", dbEngine, extHost, extPort)
 		} else {
-			fmt.Printf("  MySQL:     self-hosted on the box (localhost), schema applied.\n")
+			fmt.Printf("  Database:  self-hosted %s on the box (localhost), schema applied.\n", dbEngine)
 		}
 		fmt.Printf("  Managed:   through nuzur — data manager, SQL Push, and queries via the agent.\n")
 		fmt.Printf("  No app/API or Caddy was installed. Add one later with a normal deploy.\n")
@@ -472,14 +476,11 @@ func (i *Implementation) runDeploy(c *cli.Context) error {
 	outputtools.PrintlnColored("\nManage your data:", outputtools.Green)
 	fmt.Printf("  %s\n", dataManagerURL)
 	if !schemaApplied {
-		if dbEngine == deploy.DBPostgres {
-			// Postgres schema diff isn't supported over a local agent yet (the
-			// pg-schema-diff tempdb factory needs a direct live connection). Point
-			// the user at the path that does work for remote Postgres.
-			outputtools.PrintlnColoredErr("\nPostgres schema push over the agent isn't supported yet. To apply the schema, add this database as a DIRECT remote connection in nuzur (the managed/remote tier — nuzur connects straight to it, allowlist nuzur's egress) and run SQL Push there. The app + agent connection deployed here are fine; only the schema auto-apply was skipped.", outputtools.Yellow)
-		} else {
-			outputtools.PrintlnColoredErr("\nApply the schema manually in nuzur (SQL Push / change request) to create the tables.", outputtools.Yellow)
-		}
+		// Auto-apply is supported for both engines over the agent; if it was
+		// skipped it's because the diff step errored (see the message above).
+		// The DB + agent connection are live either way — retry, or apply the
+		// schema from nuzur (SQL Push / change request).
+		outputtools.PrintlnColoredErr("\nSchema auto-apply was skipped (see the error above). The database + agent connection are live — re-run the deploy to retry, or apply the schema from nuzur (SQL Push / change request).", outputtools.Yellow)
 	}
 	return nil
 }
@@ -487,7 +488,26 @@ func (i *Implementation) runDeploy(c *cli.Context) error {
 // publishAndApplySchema publishes the localhost DB as a connection on the paired
 // agent (using the user's token, which the headless box lacks), then runs the
 // SQL-push extension to create the schema on the empty database.
-func (i *Implementation) publishAndApplySchema(targets *runTargets, agentUUID, connUUID, connName, schema, sqlPushExtID string) error {
+// goCodeGenDBValue maps a deploy engine to go-code-gen's `db` config option value.
+// NB: go-code-gen uses "postgresql" (its DatabaseType enum), NOT the runtime driver
+// name "postgres" that prod.yaml + the agent connection use.
+func goCodeGenDBValue(engine deploy.DBEngine) string {
+	if engine == deploy.DBPostgres {
+		return "postgresql"
+	}
+	return "mysql"
+}
+
+// agentConnDbType maps a deploy engine to the nem local-agent connection DbType.
+// Defaults to MySQL for the empty/unknown engine (older records predate the field).
+func agentConnDbType(engine deploy.DBEngine) nemgen.LocalAgentConnectionDbType {
+	if engine == deploy.DBPostgres {
+		return nemgen.LocalAgentConnectionDbType_LOCAL_AGENT_CONNECTION_DB_TYPE_POSTGRES
+	}
+	return nemgen.LocalAgentConnectionDbType_LOCAL_AGENT_CONNECTION_DB_TYPE_MYSQL
+}
+
+func (i *Implementation) publishAndApplySchema(targets *runTargets, agentUUID, connUUID, connName string, dbEngine deploy.DBEngine, schema, sqlPushExtID string) error {
 	authCtx, err := productclient.ClientContext()
 	if err != nil {
 		return err
@@ -498,7 +518,7 @@ func (i *Implementation) publishAndApplySchema(targets *runTargets, agentUUID, c
 	// deploy would wipe the first's connection from nuzur.
 	conns := []*nemgen.LocalAgentConnection{}
 	seen := map[string]bool{}
-	addConn := func(uuid, name string) {
+	addConn := func(uuid, name string, engine deploy.DBEngine) {
 		if uuid == "" || seen[uuid] {
 			return
 		}
@@ -506,14 +526,14 @@ func (i *Implementation) publishAndApplySchema(targets *runTargets, agentUUID, c
 		conns = append(conns, &nemgen.LocalAgentConnection{
 			Uuid:   uuid,
 			Name:   name,
-			DbType: nemgen.LocalAgentConnectionDbType_LOCAL_AGENT_CONNECTION_DB_TYPE_MYSQL,
+			DbType: agentConnDbType(engine),
 		})
 	}
-	addConn(connUUID, connName) // the project being deployed (its record isn't saved yet)
+	addConn(connUUID, connName, dbEngine) // the project being deployed (its record isn't saved yet)
 	if deps, e := deploy.ListDeployments(); e == nil {
 		for _, d := range deps {
 			if d.LocalAgentUUID == agentUUID && d.ConnUUID != "" {
-				addConn(d.ConnUUID, d.Identifier+"-db")
+				addConn(d.ConnUUID, d.Identifier+"-db", d.DBEngine)
 			}
 		}
 	}
@@ -633,6 +653,7 @@ func (i *Implementation) DestroyCommand() cli.Command {
 				}
 				script, rerr := deploy.RenderTeardown(deploy.TeardownParams{
 					Identifier:    dep.Identifier,
+					DBEngine:      dep.DBEngine,
 					DBName:        dbName,
 					DBUser:        dbName + "_app",
 					ConnUUID:      dep.ConnUUID,
@@ -683,7 +704,7 @@ func (i *Implementation) DestroyCommand() cli.Command {
 								conns = append(conns, &nemgen.LocalAgentConnection{
 									Uuid:   d.ConnUUID,
 									Name:   d.Identifier + "-db",
-									DbType: nemgen.LocalAgentConnectionDbType_LOCAL_AGENT_CONNECTION_DB_TYPE_MYSQL,
+									DbType: agentConnDbType(d.DBEngine),
 								})
 							}
 						}

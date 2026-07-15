@@ -19,14 +19,13 @@ const (
 	ProviderSSH Provider = "ssh"
 )
 
-// DBEngine is the self-hosted database engine. MySQL is the supported local
-// tier today (schema changes over a local agent work for MySQL).
+// DBEngine is the database engine. Both MySQL and Postgres are supported as a
+// self-hosted local tier (installed + provisioned on the box) and as an external
+// (--db-dsn) database the app/agent connect to directly.
 type DBEngine string
 
 const (
-	DBMySQL DBEngine = "mysql"
-	// DBPostgres is only valid for an EXTERNAL (--db-dsn) database — nuzur does
-	// not self-host Postgres. The generated app + agent connect to it directly.
+	DBMySQL    DBEngine = "mysql"
 	DBPostgres DBEngine = "postgres"
 )
 

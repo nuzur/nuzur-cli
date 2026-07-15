@@ -2041,6 +2041,7 @@ type LocalAgentToServer struct {
 	//	*LocalAgentToServer_BeginTxResponse
 	//	*LocalAgentToServer_CommitResponse
 	//	*LocalAgentToServer_RollbackResponse
+	//	*LocalAgentToServer_ComputePgSchemaPlanResponse
 	Message       isLocalAgentToServer_Message `protobuf_oneof:"message"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
@@ -2155,6 +2156,15 @@ func (x *LocalAgentToServer) GetRollbackResponse() *RollbackResponse {
 	return nil
 }
 
+func (x *LocalAgentToServer) GetComputePgSchemaPlanResponse() *ComputePgSchemaPlanResponse {
+	if x != nil {
+		if x, ok := x.Message.(*LocalAgentToServer_ComputePgSchemaPlanResponse); ok {
+			return x.ComputePgSchemaPlanResponse
+		}
+	}
+	return nil
+}
+
 type isLocalAgentToServer_Message interface {
 	isLocalAgentToServer_Message()
 }
@@ -2191,6 +2201,10 @@ type LocalAgentToServer_RollbackResponse struct {
 	RollbackResponse *RollbackResponse `protobuf:"bytes,8,opt,name=rollback_response,json=rollbackResponse,proto3,oneof"`
 }
 
+type LocalAgentToServer_ComputePgSchemaPlanResponse struct {
+	ComputePgSchemaPlanResponse *ComputePgSchemaPlanResponse `protobuf:"bytes,9,opt,name=compute_pg_schema_plan_response,json=computePgSchemaPlanResponse,proto3,oneof"`
+}
+
 func (*LocalAgentToServer_Hello) isLocalAgentToServer_Message() {}
 
 func (*LocalAgentToServer_Pong) isLocalAgentToServer_Message() {}
@@ -2207,6 +2221,8 @@ func (*LocalAgentToServer_CommitResponse) isLocalAgentToServer_Message() {}
 
 func (*LocalAgentToServer_RollbackResponse) isLocalAgentToServer_Message() {}
 
+func (*LocalAgentToServer_ComputePgSchemaPlanResponse) isLocalAgentToServer_Message() {}
+
 type ServerToLocalAgent struct {
 	state protoimpl.MessageState `protogen:"open.v1"`
 	// Types that are valid to be assigned to Message:
@@ -2218,6 +2234,7 @@ type ServerToLocalAgent struct {
 	//	*ServerToLocalAgent_BeginTx
 	//	*ServerToLocalAgent_Commit
 	//	*ServerToLocalAgent_Rollback
+	//	*ServerToLocalAgent_ComputePgSchemaPlan
 	Message       isServerToLocalAgent_Message `protobuf_oneof:"message"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
@@ -2323,6 +2340,15 @@ func (x *ServerToLocalAgent) GetRollback() *RollbackRequest {
 	return nil
 }
 
+func (x *ServerToLocalAgent) GetComputePgSchemaPlan() *ComputePgSchemaPlanRequest {
+	if x != nil {
+		if x, ok := x.Message.(*ServerToLocalAgent_ComputePgSchemaPlan); ok {
+			return x.ComputePgSchemaPlan
+		}
+	}
+	return nil
+}
+
 type isServerToLocalAgent_Message interface {
 	isServerToLocalAgent_Message()
 }
@@ -2355,6 +2381,10 @@ type ServerToLocalAgent_Rollback struct {
 	Rollback *RollbackRequest `protobuf:"bytes,7,opt,name=rollback,proto3,oneof"`
 }
 
+type ServerToLocalAgent_ComputePgSchemaPlan struct {
+	ComputePgSchemaPlan *ComputePgSchemaPlanRequest `protobuf:"bytes,8,opt,name=compute_pg_schema_plan,json=computePgSchemaPlan,proto3,oneof"`
+}
+
 func (*ServerToLocalAgent_Welcome) isServerToLocalAgent_Message() {}
 
 func (*ServerToLocalAgent_Ping) isServerToLocalAgent_Message() {}
@@ -2368,6 +2398,8 @@ func (*ServerToLocalAgent_BeginTx) isServerToLocalAgent_Message() {}
 func (*ServerToLocalAgent_Commit) isServerToLocalAgent_Message() {}
 
 func (*ServerToLocalAgent_Rollback) isServerToLocalAgent_Message() {}
+
+func (*ServerToLocalAgent_ComputePgSchemaPlan) isServerToLocalAgent_Message() {}
 
 // Hello is the first message the agent must send after opening the stream.
 // The server validates the token (SHA-256 → lookup against local_agent.token_hash),
@@ -3136,6 +3168,147 @@ func (x *RollbackResponse) GetRequestId() uint64 {
 	return 0
 }
 
+// ComputePgSchemaPlanRequest asks the agent to compute a Postgres schema-diff
+// plan ON-BOX. pg-schema-diff needs a live "tempdb" (a second, freshly created
+// database + a raw *sql.DB) which the agent tunnel can't express, so instead of
+// tunnelling SQL the cloud ships the two rendered create.sql sources and the
+// agent runs pg-schema-diff locally against a temp database on 127.0.0.1,
+// returning the apply SQL. This is the Postgres counterpart to the cloud-side
+// tempdb factory used for remote connections.
+type ComputePgSchemaPlanRequest struct {
+	state                    protoimpl.MessageState `protogen:"open.v1"`
+	RequestId                uint64                 `protobuf:"varint,1,opt,name=request_id,json=requestId,proto3" json:"request_id,omitempty"`
+	LocalAgentConnectionUuid string                 `protobuf:"bytes,2,opt,name=local_agent_connection_uuid,json=localAgentConnectionUuid,proto3" json:"local_agent_connection_uuid,omitempty"`
+	// schema is the target namespace (search_path); the agent CREATE SCHEMA IF
+	// NOT EXISTS <schema> in each temp db and scopes the diff to it.
+	Schema string `protobuf:"bytes,3,opt,name=schema,proto3" json:"schema,omitempty"`
+	// existing_create_sql / new_create_sql are the full CREATE-statement sources
+	// for the current live schema and the target project version, respectively.
+	ExistingCreateSql string `protobuf:"bytes,4,opt,name=existing_create_sql,json=existingCreateSql,proto3" json:"existing_create_sql,omitempty"`
+	NewCreateSql      string `protobuf:"bytes,5,opt,name=new_create_sql,json=newCreateSql,proto3" json:"new_create_sql,omitempty"`
+	unknownFields     protoimpl.UnknownFields
+	sizeCache         protoimpl.SizeCache
+}
+
+func (x *ComputePgSchemaPlanRequest) Reset() {
+	*x = ComputePgSchemaPlanRequest{}
+	mi := &file_connection_manager_proto_msgTypes[49]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *ComputePgSchemaPlanRequest) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*ComputePgSchemaPlanRequest) ProtoMessage() {}
+
+func (x *ComputePgSchemaPlanRequest) ProtoReflect() protoreflect.Message {
+	mi := &file_connection_manager_proto_msgTypes[49]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use ComputePgSchemaPlanRequest.ProtoReflect.Descriptor instead.
+func (*ComputePgSchemaPlanRequest) Descriptor() ([]byte, []int) {
+	return file_connection_manager_proto_rawDescGZIP(), []int{49}
+}
+
+func (x *ComputePgSchemaPlanRequest) GetRequestId() uint64 {
+	if x != nil {
+		return x.RequestId
+	}
+	return 0
+}
+
+func (x *ComputePgSchemaPlanRequest) GetLocalAgentConnectionUuid() string {
+	if x != nil {
+		return x.LocalAgentConnectionUuid
+	}
+	return ""
+}
+
+func (x *ComputePgSchemaPlanRequest) GetSchema() string {
+	if x != nil {
+		return x.Schema
+	}
+	return ""
+}
+
+func (x *ComputePgSchemaPlanRequest) GetExistingCreateSql() string {
+	if x != nil {
+		return x.ExistingCreateSql
+	}
+	return ""
+}
+
+func (x *ComputePgSchemaPlanRequest) GetNewCreateSql() string {
+	if x != nil {
+		return x.NewCreateSql
+	}
+	return ""
+}
+
+type ComputePgSchemaPlanResponse struct {
+	state     protoimpl.MessageState `protogen:"open.v1"`
+	RequestId uint64                 `protobuf:"varint,1,opt,name=request_id,json=requestId,proto3" json:"request_id,omitempty"`
+	// apply_sql is the ordered DDL that migrates existing → new. Empty is valid
+	// (no changes). On failure the agent sends a QueryError with this request_id.
+	ApplySql      string `protobuf:"bytes,2,opt,name=apply_sql,json=applySql,proto3" json:"apply_sql,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *ComputePgSchemaPlanResponse) Reset() {
+	*x = ComputePgSchemaPlanResponse{}
+	mi := &file_connection_manager_proto_msgTypes[50]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *ComputePgSchemaPlanResponse) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*ComputePgSchemaPlanResponse) ProtoMessage() {}
+
+func (x *ComputePgSchemaPlanResponse) ProtoReflect() protoreflect.Message {
+	mi := &file_connection_manager_proto_msgTypes[50]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use ComputePgSchemaPlanResponse.ProtoReflect.Descriptor instead.
+func (*ComputePgSchemaPlanResponse) Descriptor() ([]byte, []int) {
+	return file_connection_manager_proto_rawDescGZIP(), []int{50}
+}
+
+func (x *ComputePgSchemaPlanResponse) GetRequestId() uint64 {
+	if x != nil {
+		return x.RequestId
+	}
+	return 0
+}
+
+func (x *ComputePgSchemaPlanResponse) GetApplySql() string {
+	if x != nil {
+		return x.ApplySql
+	}
+	return ""
+}
+
 // ColumnMetadata is the over-the-wire shape of *sql.ColumnType-ish metadata.
 // scan_type_hint is a string the agent picks from a small known set
 // ("int64", "float64", "string", "time", "bytes", "bool", "null_string", etc.)
@@ -3151,7 +3324,7 @@ type ColumnMetadata struct {
 
 func (x *ColumnMetadata) Reset() {
 	*x = ColumnMetadata{}
-	mi := &file_connection_manager_proto_msgTypes[49]
+	mi := &file_connection_manager_proto_msgTypes[51]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -3163,7 +3336,7 @@ func (x *ColumnMetadata) String() string {
 func (*ColumnMetadata) ProtoMessage() {}
 
 func (x *ColumnMetadata) ProtoReflect() protoreflect.Message {
-	mi := &file_connection_manager_proto_msgTypes[49]
+	mi := &file_connection_manager_proto_msgTypes[51]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -3176,7 +3349,7 @@ func (x *ColumnMetadata) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use ColumnMetadata.ProtoReflect.Descriptor instead.
 func (*ColumnMetadata) Descriptor() ([]byte, []int) {
-	return file_connection_manager_proto_rawDescGZIP(), []int{49}
+	return file_connection_manager_proto_rawDescGZIP(), []int{51}
 }
 
 func (x *ColumnMetadata) GetName() string {
@@ -3220,7 +3393,7 @@ type RowsChunk struct {
 
 func (x *RowsChunk) Reset() {
 	*x = RowsChunk{}
-	mi := &file_connection_manager_proto_msgTypes[50]
+	mi := &file_connection_manager_proto_msgTypes[52]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -3232,7 +3405,7 @@ func (x *RowsChunk) String() string {
 func (*RowsChunk) ProtoMessage() {}
 
 func (x *RowsChunk) ProtoReflect() protoreflect.Message {
-	mi := &file_connection_manager_proto_msgTypes[50]
+	mi := &file_connection_manager_proto_msgTypes[52]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -3245,7 +3418,7 @@ func (x *RowsChunk) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use RowsChunk.ProtoReflect.Descriptor instead.
 func (*RowsChunk) Descriptor() ([]byte, []int) {
-	return file_connection_manager_proto_rawDescGZIP(), []int{50}
+	return file_connection_manager_proto_rawDescGZIP(), []int{52}
 }
 
 func (x *RowsChunk) GetRequestId() uint64 {
@@ -3294,7 +3467,7 @@ type Row struct {
 
 func (x *Row) Reset() {
 	*x = Row{}
-	mi := &file_connection_manager_proto_msgTypes[51]
+	mi := &file_connection_manager_proto_msgTypes[53]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -3306,7 +3479,7 @@ func (x *Row) String() string {
 func (*Row) ProtoMessage() {}
 
 func (x *Row) ProtoReflect() protoreflect.Message {
-	mi := &file_connection_manager_proto_msgTypes[51]
+	mi := &file_connection_manager_proto_msgTypes[53]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -3319,7 +3492,7 @@ func (x *Row) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use Row.ProtoReflect.Descriptor instead.
 func (*Row) Descriptor() ([]byte, []int) {
-	return file_connection_manager_proto_rawDescGZIP(), []int{51}
+	return file_connection_manager_proto_rawDescGZIP(), []int{53}
 }
 
 func (x *Row) GetValues() []*Value {
@@ -3350,7 +3523,7 @@ type Value struct {
 
 func (x *Value) Reset() {
 	*x = Value{}
-	mi := &file_connection_manager_proto_msgTypes[52]
+	mi := &file_connection_manager_proto_msgTypes[54]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -3362,7 +3535,7 @@ func (x *Value) String() string {
 func (*Value) ProtoMessage() {}
 
 func (x *Value) ProtoReflect() protoreflect.Message {
-	mi := &file_connection_manager_proto_msgTypes[52]
+	mi := &file_connection_manager_proto_msgTypes[54]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -3375,7 +3548,7 @@ func (x *Value) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use Value.ProtoReflect.Descriptor instead.
 func (*Value) Descriptor() ([]byte, []int) {
-	return file_connection_manager_proto_rawDescGZIP(), []int{52}
+	return file_connection_manager_proto_rawDescGZIP(), []int{54}
 }
 
 func (x *Value) GetKind() isValue_Kind {
@@ -3505,7 +3678,7 @@ type QueryError struct {
 
 func (x *QueryError) Reset() {
 	*x = QueryError{}
-	mi := &file_connection_manager_proto_msgTypes[53]
+	mi := &file_connection_manager_proto_msgTypes[55]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -3517,7 +3690,7 @@ func (x *QueryError) String() string {
 func (*QueryError) ProtoMessage() {}
 
 func (x *QueryError) ProtoReflect() protoreflect.Message {
-	mi := &file_connection_manager_proto_msgTypes[53]
+	mi := &file_connection_manager_proto_msgTypes[55]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -3530,7 +3703,7 @@ func (x *QueryError) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use QueryError.ProtoReflect.Descriptor instead.
 func (*QueryError) Descriptor() ([]byte, []int) {
-	return file_connection_manager_proto_rawDescGZIP(), []int{53}
+	return file_connection_manager_proto_rawDescGZIP(), []int{55}
 }
 
 func (x *QueryError) GetRequestId() uint64 {
@@ -3680,7 +3853,7 @@ const file_connection_manager_proto_rawDesc = "" +
 	"\x06schema\x18\x03 \x01(\tR\x06schema\x12\x16\n" +
 	"\x06locale\x18\x04 \x01(\tR\x06locale\"g\n" +
 	"'GetProjectVersionFromConnectionResponse\x12<\n" +
-	"\x0fproject_version\x18\x01 \x01(\v2\x13.nem.ProjectVersionR\x0eprojectVersion\"\xad\x03\n" +
+	"\x0fproject_version\x18\x01 \x01(\v2\x13.nem.ProjectVersionR\x0eprojectVersion\"\x93\x04\n" +
 	"\x12LocalAgentToServer\x12\x1e\n" +
 	"\x05hello\x18\x01 \x01(\v2\x06.HelloH\x00R\x05hello\x12\x1b\n" +
 	"\x04pong\x18\x02 \x01(\v2\x05.PongH\x00R\x04pong\x12+\n" +
@@ -3692,8 +3865,9 @@ const file_connection_manager_proto_rawDesc = "" +
 	"\rexec_response\x18\x05 \x01(\v2\r.ExecResponseH\x00R\fexecResponse\x12>\n" +
 	"\x11begin_tx_response\x18\x06 \x01(\v2\x10.BeginTxResponseH\x00R\x0fbeginTxResponse\x12:\n" +
 	"\x0fcommit_response\x18\a \x01(\v2\x0f.CommitResponseH\x00R\x0ecommitResponse\x12@\n" +
-	"\x11rollback_response\x18\b \x01(\v2\x11.RollbackResponseH\x00R\x10rollbackResponseB\t\n" +
-	"\amessage\"\xbf\x02\n" +
+	"\x11rollback_response\x18\b \x01(\v2\x11.RollbackResponseH\x00R\x10rollbackResponse\x12d\n" +
+	"\x1fcompute_pg_schema_plan_response\x18\t \x01(\v2\x1c.ComputePgSchemaPlanResponseH\x00R\x1bcomputePgSchemaPlanResponseB\t\n" +
+	"\amessage\"\x93\x03\n" +
 	"\x12ServerToLocalAgent\x12$\n" +
 	"\awelcome\x18\x01 \x01(\v2\b.WelcomeH\x00R\awelcome\x12\x1b\n" +
 	"\x04ping\x18\x02 \x01(\v2\x05.PingH\x00R\x04ping\x12/\n" +
@@ -3701,7 +3875,8 @@ const file_connection_manager_proto_rawDesc = "" +
 	"\x04exec\x18\x04 \x01(\v2\f.ExecRequestH\x00R\x04exec\x12,\n" +
 	"\bbegin_tx\x18\x05 \x01(\v2\x0f.BeginTxRequestH\x00R\abeginTx\x12(\n" +
 	"\x06commit\x18\x06 \x01(\v2\x0e.CommitRequestH\x00R\x06commit\x12.\n" +
-	"\brollback\x18\a \x01(\v2\x10.RollbackRequestH\x00R\brollbackB\t\n" +
+	"\brollback\x18\a \x01(\v2\x10.RollbackRequestH\x00R\brollback\x12R\n" +
+	"\x16compute_pg_schema_plan\x18\b \x01(\v2\x1b.ComputePgSchemaPlanRequestH\x00R\x13computePgSchemaPlanB\t\n" +
 	"\amessage\"~\n" +
 	"\x05Hello\x12*\n" +
 	"\x11local_agent_token\x18\x01 \x01(\tR\x0flocalAgentToken\x12(\n" +
@@ -3761,7 +3936,18 @@ const file_connection_manager_proto_rawDesc = "" +
 	"\x05tx_id\x18\x02 \x01(\tR\x04txId\"1\n" +
 	"\x10RollbackResponse\x12\x1d\n" +
 	"\n" +
-	"request_id\x18\x01 \x01(\x04R\trequestId\"x\n" +
+	"request_id\x18\x01 \x01(\x04R\trequestId\"\xe8\x01\n" +
+	"\x1aComputePgSchemaPlanRequest\x12\x1d\n" +
+	"\n" +
+	"request_id\x18\x01 \x01(\x04R\trequestId\x12=\n" +
+	"\x1blocal_agent_connection_uuid\x18\x02 \x01(\tR\x18localAgentConnectionUuid\x12\x16\n" +
+	"\x06schema\x18\x03 \x01(\tR\x06schema\x12.\n" +
+	"\x13existing_create_sql\x18\x04 \x01(\tR\x11existingCreateSql\x12$\n" +
+	"\x0enew_create_sql\x18\x05 \x01(\tR\fnewCreateSql\"Y\n" +
+	"\x1bComputePgSchemaPlanResponse\x12\x1d\n" +
+	"\n" +
+	"request_id\x18\x01 \x01(\x04R\trequestId\x12\x1b\n" +
+	"\tapply_sql\x18\x02 \x01(\tR\bapplySql\"x\n" +
 	"\x0eColumnMetadata\x12\x12\n" +
 	"\x04name\x18\x01 \x01(\tR\x04name\x12,\n" +
 	"\x12database_type_name\x18\x02 \x01(\tR\x10databaseTypeName\x12$\n" +
@@ -3838,7 +4024,7 @@ func file_connection_manager_proto_rawDescGZIP() []byte {
 }
 
 var file_connection_manager_proto_enumTypes = make([]protoimpl.EnumInfo, 2)
-var file_connection_manager_proto_msgTypes = make([]protoimpl.MessageInfo, 54)
+var file_connection_manager_proto_msgTypes = make([]protoimpl.MessageInfo, 56)
 var file_connection_manager_proto_goTypes = []any{
 	(QueryExecutionStatus)(0),                       // 0: QueryExecutionStatus
 	(ChangesDiffStatus)(0),                          // 1: ChangesDiffStatus
@@ -3891,106 +4077,110 @@ var file_connection_manager_proto_goTypes = []any{
 	(*CommitResponse)(nil),                          // 48: CommitResponse
 	(*RollbackRequest)(nil),                         // 49: RollbackRequest
 	(*RollbackResponse)(nil),                        // 50: RollbackResponse
-	(*ColumnMetadata)(nil),                          // 51: ColumnMetadata
-	(*RowsChunk)(nil),                               // 52: RowsChunk
-	(*Row)(nil),                                     // 53: Row
-	(*Value)(nil),                                   // 54: Value
-	(*QueryError)(nil),                              // 55: QueryError
-	(*gen.UserConnection)(nil),                      // 56: nem.UserConnection
-	(gen.UserConnectionType)(0),                     // 57: nem.UserConnectionType
-	(*gen.UserConnectionTypeConfig)(nil),            // 58: nem.UserConnectionTypeConfig
-	(*gen.Connection)(nil),                          // 59: nem.Connection
-	(*gen.UserConnectionExecution)(nil),             // 60: nem.UserConnectionExecution
-	(*gen.ProjectVersion)(nil),                      // 61: nem.ProjectVersion
-	(*timestamppb.Timestamp)(nil),                   // 62: google.protobuf.Timestamp
+	(*ComputePgSchemaPlanRequest)(nil),              // 51: ComputePgSchemaPlanRequest
+	(*ComputePgSchemaPlanResponse)(nil),             // 52: ComputePgSchemaPlanResponse
+	(*ColumnMetadata)(nil),                          // 53: ColumnMetadata
+	(*RowsChunk)(nil),                               // 54: RowsChunk
+	(*Row)(nil),                                     // 55: Row
+	(*Value)(nil),                                   // 56: Value
+	(*QueryError)(nil),                              // 57: QueryError
+	(*gen.UserConnection)(nil),                      // 58: nem.UserConnection
+	(gen.UserConnectionType)(0),                     // 59: nem.UserConnectionType
+	(*gen.UserConnectionTypeConfig)(nil),            // 60: nem.UserConnectionTypeConfig
+	(*gen.Connection)(nil),                          // 61: nem.Connection
+	(*gen.UserConnectionExecution)(nil),             // 62: nem.UserConnectionExecution
+	(*gen.ProjectVersion)(nil),                      // 63: nem.ProjectVersion
+	(*timestamppb.Timestamp)(nil),                   // 64: google.protobuf.Timestamp
 }
 var file_connection_manager_proto_depIdxs = []int32{
-	56, // 0: GetUserConnectionsResponse.connections:type_name -> nem.UserConnection
-	57, // 1: TestConnectionRequest.type:type_name -> nem.UserConnectionType
-	58, // 2: TestConnectionRequest.type_config:type_name -> nem.UserConnectionTypeConfig
-	59, // 3: TestConnectionRequest.raw_connection:type_name -> nem.Connection
-	57, // 4: GetSchemasRequest.type:type_name -> nem.UserConnectionType
-	58, // 5: GetSchemasRequest.type_config:type_name -> nem.UserConnectionTypeConfig
-	57, // 6: CreateSchemaRequest.type:type_name -> nem.UserConnectionType
-	58, // 7: CreateSchemaRequest.type_config:type_name -> nem.UserConnectionTypeConfig
-	57, // 8: ExecuteQueryRequest.type:type_name -> nem.UserConnectionType
-	58, // 9: ExecuteQueryRequest.type_config:type_name -> nem.UserConnectionTypeConfig
+	58, // 0: GetUserConnectionsResponse.connections:type_name -> nem.UserConnection
+	59, // 1: TestConnectionRequest.type:type_name -> nem.UserConnectionType
+	60, // 2: TestConnectionRequest.type_config:type_name -> nem.UserConnectionTypeConfig
+	61, // 3: TestConnectionRequest.raw_connection:type_name -> nem.Connection
+	59, // 4: GetSchemasRequest.type:type_name -> nem.UserConnectionType
+	60, // 5: GetSchemasRequest.type_config:type_name -> nem.UserConnectionTypeConfig
+	59, // 6: CreateSchemaRequest.type:type_name -> nem.UserConnectionType
+	60, // 7: CreateSchemaRequest.type_config:type_name -> nem.UserConnectionTypeConfig
+	59, // 8: ExecuteQueryRequest.type:type_name -> nem.UserConnectionType
+	60, // 9: ExecuteQueryRequest.type_config:type_name -> nem.UserConnectionTypeConfig
 	12, // 10: ExecuteQueryRequest.statements:type_name -> QueryStatement
 	0,  // 11: GetQueryExecutionResponse.status:type_name -> QueryExecutionStatus
-	60, // 12: GetQueryExecutionResponse.result:type_name -> nem.UserConnectionExecution
-	57, // 13: ApplyDataCRRequest.type:type_name -> nem.UserConnectionType
-	58, // 14: ApplyDataCRRequest.type_config:type_name -> nem.UserConnectionTypeConfig
+	62, // 12: GetQueryExecutionResponse.result:type_name -> nem.UserConnectionExecution
+	59, // 13: ApplyDataCRRequest.type:type_name -> nem.UserConnectionType
+	60, // 14: ApplyDataCRRequest.type_config:type_name -> nem.UserConnectionTypeConfig
 	0,  // 15: ExecuteQuerySyncResponse.status:type_name -> QueryExecutionStatus
-	60, // 16: ExecuteQuerySyncResponse.result:type_name -> nem.UserConnectionExecution
-	57, // 17: StartChangesDiffRequest.type:type_name -> nem.UserConnectionType
-	58, // 18: StartChangesDiffRequest.type_config:type_name -> nem.UserConnectionTypeConfig
+	62, // 16: ExecuteQuerySyncResponse.result:type_name -> nem.UserConnectionExecution
+	59, // 17: StartChangesDiffRequest.type:type_name -> nem.UserConnectionType
+	60, // 18: StartChangesDiffRequest.type_config:type_name -> nem.UserConnectionTypeConfig
 	1,  // 19: GetChangesDiffResponse.status:type_name -> ChangesDiffStatus
-	57, // 20: StartProjectVersionSQLDiffRequest.type:type_name -> nem.UserConnectionType
-	58, // 21: StartProjectVersionSQLDiffRequest.type_config:type_name -> nem.UserConnectionTypeConfig
+	59, // 20: StartProjectVersionSQLDiffRequest.type:type_name -> nem.UserConnectionType
+	60, // 21: StartProjectVersionSQLDiffRequest.type_config:type_name -> nem.UserConnectionTypeConfig
 	1,  // 22: GetProjectVersionSQLDiffResponse.status:type_name -> ChangesDiffStatus
-	57, // 23: GetProjectVersionFromConnectionRequest.type:type_name -> nem.UserConnectionType
-	58, // 24: GetProjectVersionFromConnectionRequest.type_config:type_name -> nem.UserConnectionTypeConfig
-	61, // 25: GetProjectVersionFromConnectionResponse.project_version:type_name -> nem.ProjectVersion
+	59, // 23: GetProjectVersionFromConnectionRequest.type:type_name -> nem.UserConnectionType
+	60, // 24: GetProjectVersionFromConnectionRequest.type_config:type_name -> nem.UserConnectionTypeConfig
+	63, // 25: GetProjectVersionFromConnectionResponse.project_version:type_name -> nem.ProjectVersion
 	38, // 26: LocalAgentToServer.hello:type_name -> Hello
 	41, // 27: LocalAgentToServer.pong:type_name -> Pong
-	52, // 28: LocalAgentToServer.rows_chunk:type_name -> RowsChunk
-	55, // 29: LocalAgentToServer.query_error:type_name -> QueryError
+	54, // 28: LocalAgentToServer.rows_chunk:type_name -> RowsChunk
+	57, // 29: LocalAgentToServer.query_error:type_name -> QueryError
 	44, // 30: LocalAgentToServer.exec_response:type_name -> ExecResponse
 	46, // 31: LocalAgentToServer.begin_tx_response:type_name -> BeginTxResponse
 	48, // 32: LocalAgentToServer.commit_response:type_name -> CommitResponse
 	50, // 33: LocalAgentToServer.rollback_response:type_name -> RollbackResponse
-	39, // 34: ServerToLocalAgent.welcome:type_name -> Welcome
-	40, // 35: ServerToLocalAgent.ping:type_name -> Ping
-	42, // 36: ServerToLocalAgent.run_query:type_name -> RunQueryRequest
-	43, // 37: ServerToLocalAgent.exec:type_name -> ExecRequest
-	45, // 38: ServerToLocalAgent.begin_tx:type_name -> BeginTxRequest
-	47, // 39: ServerToLocalAgent.commit:type_name -> CommitRequest
-	49, // 40: ServerToLocalAgent.rollback:type_name -> RollbackRequest
-	51, // 41: RowsChunk.columns:type_name -> ColumnMetadata
-	53, // 42: RowsChunk.rows:type_name -> Row
-	54, // 43: Row.values:type_name -> Value
-	62, // 44: Value.time_val:type_name -> google.protobuf.Timestamp
-	2,  // 45: NuzurConnectionManager.GetUserConnections:input_type -> GetUserConnectionsRequest
-	4,  // 46: NuzurConnectionManager.ClearUserConnections:input_type -> ClearUserConnectionsRequest
-	6,  // 47: NuzurConnectionManager.TestConnection:input_type -> TestConnectionRequest
-	8,  // 48: NuzurConnectionManager.GetSchemas:input_type -> GetSchemasRequest
-	10, // 49: NuzurConnectionManager.CreateSchema:input_type -> CreateSchemaRequest
-	13, // 50: NuzurConnectionManager.ExecuteQuery:input_type -> ExecuteQueryRequest
-	15, // 51: NuzurConnectionManager.GetQueryExecution:input_type -> GetQueryExecutionRequest
-	17, // 52: NuzurConnectionManager.CancelQueryExecution:input_type -> CancelQueryExecutionRequest
-	19, // 53: NuzurConnectionManager.ApplyDataCR:input_type -> ApplyDataCRRequest
-	13, // 54: NuzurConnectionManager.ExecuteQuerySync:input_type -> ExecuteQueryRequest
-	22, // 55: NuzurConnectionManager.StartChangesDiff:input_type -> StartChangesDiffRequest
-	24, // 56: NuzurConnectionManager.GetChangesDiff:input_type -> GetChangesDiffRequest
-	26, // 57: NuzurConnectionManager.CancelChangesDiff:input_type -> CancelChangesDiffRequest
-	28, // 58: NuzurConnectionManager.StartProjectVersionSQLDiff:input_type -> StartProjectVersionSQLDiffRequest
-	30, // 59: NuzurConnectionManager.GetProjectVersionSQLDiff:input_type -> GetProjectVersionSQLDiffRequest
-	32, // 60: NuzurConnectionManager.CancelProjectVersionSQLDiff:input_type -> CancelProjectVersionSQLDiffRequest
-	34, // 61: NuzurConnectionManager.GetProjectVersionFromConnection:input_type -> GetProjectVersionFromConnectionRequest
-	36, // 62: NuzurConnectionManager.LocalAgentChannel:input_type -> LocalAgentToServer
-	3,  // 63: NuzurConnectionManager.GetUserConnections:output_type -> GetUserConnectionsResponse
-	5,  // 64: NuzurConnectionManager.ClearUserConnections:output_type -> ClearUserConnectionsResponse
-	7,  // 65: NuzurConnectionManager.TestConnection:output_type -> TestConnectionResponse
-	9,  // 66: NuzurConnectionManager.GetSchemas:output_type -> GetSchemasResponse
-	11, // 67: NuzurConnectionManager.CreateSchema:output_type -> CreateSchemaResponse
-	14, // 68: NuzurConnectionManager.ExecuteQuery:output_type -> ExecuteQueryResponse
-	16, // 69: NuzurConnectionManager.GetQueryExecution:output_type -> GetQueryExecutionResponse
-	18, // 70: NuzurConnectionManager.CancelQueryExecution:output_type -> CancelQueryExecutionResponse
-	20, // 71: NuzurConnectionManager.ApplyDataCR:output_type -> ApplyDataCRResponse
-	21, // 72: NuzurConnectionManager.ExecuteQuerySync:output_type -> ExecuteQuerySyncResponse
-	23, // 73: NuzurConnectionManager.StartChangesDiff:output_type -> StartChangesDiffResponse
-	25, // 74: NuzurConnectionManager.GetChangesDiff:output_type -> GetChangesDiffResponse
-	27, // 75: NuzurConnectionManager.CancelChangesDiff:output_type -> CancelChangesDiffResponse
-	29, // 76: NuzurConnectionManager.StartProjectVersionSQLDiff:output_type -> StartProjectVersionSQLDiffResponse
-	31, // 77: NuzurConnectionManager.GetProjectVersionSQLDiff:output_type -> GetProjectVersionSQLDiffResponse
-	33, // 78: NuzurConnectionManager.CancelProjectVersionSQLDiff:output_type -> CancelProjectVersionSQLDiffResponse
-	35, // 79: NuzurConnectionManager.GetProjectVersionFromConnection:output_type -> GetProjectVersionFromConnectionResponse
-	37, // 80: NuzurConnectionManager.LocalAgentChannel:output_type -> ServerToLocalAgent
-	63, // [63:81] is the sub-list for method output_type
-	45, // [45:63] is the sub-list for method input_type
-	45, // [45:45] is the sub-list for extension type_name
-	45, // [45:45] is the sub-list for extension extendee
-	0,  // [0:45] is the sub-list for field type_name
+	52, // 34: LocalAgentToServer.compute_pg_schema_plan_response:type_name -> ComputePgSchemaPlanResponse
+	39, // 35: ServerToLocalAgent.welcome:type_name -> Welcome
+	40, // 36: ServerToLocalAgent.ping:type_name -> Ping
+	42, // 37: ServerToLocalAgent.run_query:type_name -> RunQueryRequest
+	43, // 38: ServerToLocalAgent.exec:type_name -> ExecRequest
+	45, // 39: ServerToLocalAgent.begin_tx:type_name -> BeginTxRequest
+	47, // 40: ServerToLocalAgent.commit:type_name -> CommitRequest
+	49, // 41: ServerToLocalAgent.rollback:type_name -> RollbackRequest
+	51, // 42: ServerToLocalAgent.compute_pg_schema_plan:type_name -> ComputePgSchemaPlanRequest
+	53, // 43: RowsChunk.columns:type_name -> ColumnMetadata
+	55, // 44: RowsChunk.rows:type_name -> Row
+	56, // 45: Row.values:type_name -> Value
+	64, // 46: Value.time_val:type_name -> google.protobuf.Timestamp
+	2,  // 47: NuzurConnectionManager.GetUserConnections:input_type -> GetUserConnectionsRequest
+	4,  // 48: NuzurConnectionManager.ClearUserConnections:input_type -> ClearUserConnectionsRequest
+	6,  // 49: NuzurConnectionManager.TestConnection:input_type -> TestConnectionRequest
+	8,  // 50: NuzurConnectionManager.GetSchemas:input_type -> GetSchemasRequest
+	10, // 51: NuzurConnectionManager.CreateSchema:input_type -> CreateSchemaRequest
+	13, // 52: NuzurConnectionManager.ExecuteQuery:input_type -> ExecuteQueryRequest
+	15, // 53: NuzurConnectionManager.GetQueryExecution:input_type -> GetQueryExecutionRequest
+	17, // 54: NuzurConnectionManager.CancelQueryExecution:input_type -> CancelQueryExecutionRequest
+	19, // 55: NuzurConnectionManager.ApplyDataCR:input_type -> ApplyDataCRRequest
+	13, // 56: NuzurConnectionManager.ExecuteQuerySync:input_type -> ExecuteQueryRequest
+	22, // 57: NuzurConnectionManager.StartChangesDiff:input_type -> StartChangesDiffRequest
+	24, // 58: NuzurConnectionManager.GetChangesDiff:input_type -> GetChangesDiffRequest
+	26, // 59: NuzurConnectionManager.CancelChangesDiff:input_type -> CancelChangesDiffRequest
+	28, // 60: NuzurConnectionManager.StartProjectVersionSQLDiff:input_type -> StartProjectVersionSQLDiffRequest
+	30, // 61: NuzurConnectionManager.GetProjectVersionSQLDiff:input_type -> GetProjectVersionSQLDiffRequest
+	32, // 62: NuzurConnectionManager.CancelProjectVersionSQLDiff:input_type -> CancelProjectVersionSQLDiffRequest
+	34, // 63: NuzurConnectionManager.GetProjectVersionFromConnection:input_type -> GetProjectVersionFromConnectionRequest
+	36, // 64: NuzurConnectionManager.LocalAgentChannel:input_type -> LocalAgentToServer
+	3,  // 65: NuzurConnectionManager.GetUserConnections:output_type -> GetUserConnectionsResponse
+	5,  // 66: NuzurConnectionManager.ClearUserConnections:output_type -> ClearUserConnectionsResponse
+	7,  // 67: NuzurConnectionManager.TestConnection:output_type -> TestConnectionResponse
+	9,  // 68: NuzurConnectionManager.GetSchemas:output_type -> GetSchemasResponse
+	11, // 69: NuzurConnectionManager.CreateSchema:output_type -> CreateSchemaResponse
+	14, // 70: NuzurConnectionManager.ExecuteQuery:output_type -> ExecuteQueryResponse
+	16, // 71: NuzurConnectionManager.GetQueryExecution:output_type -> GetQueryExecutionResponse
+	18, // 72: NuzurConnectionManager.CancelQueryExecution:output_type -> CancelQueryExecutionResponse
+	20, // 73: NuzurConnectionManager.ApplyDataCR:output_type -> ApplyDataCRResponse
+	21, // 74: NuzurConnectionManager.ExecuteQuerySync:output_type -> ExecuteQuerySyncResponse
+	23, // 75: NuzurConnectionManager.StartChangesDiff:output_type -> StartChangesDiffResponse
+	25, // 76: NuzurConnectionManager.GetChangesDiff:output_type -> GetChangesDiffResponse
+	27, // 77: NuzurConnectionManager.CancelChangesDiff:output_type -> CancelChangesDiffResponse
+	29, // 78: NuzurConnectionManager.StartProjectVersionSQLDiff:output_type -> StartProjectVersionSQLDiffResponse
+	31, // 79: NuzurConnectionManager.GetProjectVersionSQLDiff:output_type -> GetProjectVersionSQLDiffResponse
+	33, // 80: NuzurConnectionManager.CancelProjectVersionSQLDiff:output_type -> CancelProjectVersionSQLDiffResponse
+	35, // 81: NuzurConnectionManager.GetProjectVersionFromConnection:output_type -> GetProjectVersionFromConnectionResponse
+	37, // 82: NuzurConnectionManager.LocalAgentChannel:output_type -> ServerToLocalAgent
+	65, // [65:83] is the sub-list for method output_type
+	47, // [47:65] is the sub-list for method input_type
+	47, // [47:47] is the sub-list for extension type_name
+	47, // [47:47] is the sub-list for extension extendee
+	0,  // [0:47] is the sub-list for field type_name
 }
 
 func init() { file_connection_manager_proto_init() }
@@ -4007,6 +4197,7 @@ func file_connection_manager_proto_init() {
 		(*LocalAgentToServer_BeginTxResponse)(nil),
 		(*LocalAgentToServer_CommitResponse)(nil),
 		(*LocalAgentToServer_RollbackResponse)(nil),
+		(*LocalAgentToServer_ComputePgSchemaPlanResponse)(nil),
 	}
 	file_connection_manager_proto_msgTypes[35].OneofWrappers = []any{
 		(*ServerToLocalAgent_Welcome)(nil),
@@ -4016,8 +4207,9 @@ func file_connection_manager_proto_init() {
 		(*ServerToLocalAgent_BeginTx)(nil),
 		(*ServerToLocalAgent_Commit)(nil),
 		(*ServerToLocalAgent_Rollback)(nil),
+		(*ServerToLocalAgent_ComputePgSchemaPlan)(nil),
 	}
-	file_connection_manager_proto_msgTypes[52].OneofWrappers = []any{
+	file_connection_manager_proto_msgTypes[54].OneofWrappers = []any{
 		(*Value_IsNull)(nil),
 		(*Value_StringVal)(nil),
 		(*Value_IntVal)(nil),
@@ -4032,7 +4224,7 @@ func file_connection_manager_proto_init() {
 			GoPackagePath: reflect.TypeOf(x{}).PkgPath(),
 			RawDescriptor: unsafe.Slice(unsafe.StringData(file_connection_manager_proto_rawDesc), len(file_connection_manager_proto_rawDesc)),
 			NumEnums:      2,
-			NumMessages:   54,
+			NumMessages:   56,
 			NumExtensions: 0,
 			NumServices:   1,
 		},

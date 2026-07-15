@@ -20,6 +20,7 @@ type TeardownParams struct {
 	ContainerName string
 	ImageName     string
 	ProjectDir    string // /etc/nuzur/{identifier}
+	DBEngine      DBEngine
 	DBName        string
 	DBUser        string
 	ConnUUID      string // this project's agent connection to remove from the shared agent
@@ -43,6 +44,9 @@ func (p *TeardownParams) defaults() {
 	}
 	if p.NuzurBin == "" {
 		p.NuzurBin = "/usr/local/bin/nuzur-cli"
+	}
+	if p.DBEngine == "" {
+		p.DBEngine = DBMySQL
 	}
 }
 

@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 # nuzur deploy teardown for {{.Identifier}} (idempotent; safe to re-run). Removes
-# THIS project's artifacts only; the shared agent, MySQL and packages
-# (docker/mysql/caddy) stay — unless this is the last project on the box
+# THIS project's artifacts only; the shared agent, the DB engine and packages
+# (docker/mysql/postgres/caddy) stay — unless this is the last project on the box
 # (IsLastProject), in which case the shared agent is removed too. The database is
 # dropped only with --purge.
 # Deliberately no `set -e`: teardown is best-effort — a missing unit or already
@@ -39,13 +39,20 @@ rm -rf {{.ProjectDir}}
 {{end}}
 
 {{if .Purge}}
-# ── 6. Purge this project's database + app user (opt-in; irreversible) ────────
-mysql <<SQL 2>/dev/null || true
+# ── 6. Purge this project's database + app user/role (opt-in; irreversible) ───
+{{if eq .DBEngine "postgres"}}# Postgres refuses DROP DATABASE while connections are open (the shared agent may
+# still hold a pooled connection to it), and the teardown swallows errors — so
+# terminate any remaining backends first, then drop the database before the role
+# (the role owns it).
+sudo -u postgres psql -c "SELECT pg_terminate_backend(pid) FROM pg_stat_activity WHERE datname='{{.DBName}}' AND pid <> pg_backend_pid()" 2>/dev/null || true
+sudo -u postgres psql -c "DROP DATABASE IF EXISTS \"{{.DBName}}\"" 2>/dev/null || true
+sudo -u postgres psql -c "DROP ROLE IF EXISTS \"{{.DBUser}}\"" 2>/dev/null || true
+{{else}}mysql <<SQL 2>/dev/null || true
 DROP DATABASE IF EXISTS \`{{.DBName}}\`;
 DROP USER IF EXISTS '{{.DBUser}}'@'localhost';
 FLUSH PRIVILEGES;
 SQL
-echo "[nuzur-destroy] purged database {{.DBName}}"
+{{end}}echo "[nuzur-destroy] purged database {{.DBName}}"
 {{end}}
 
 {{if .IsLastProject}}

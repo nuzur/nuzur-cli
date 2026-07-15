@@ -193,6 +193,69 @@ func TestRenderBootstrap_ExternalDB(t *testing.T) {
 	}
 }
 
+func TestRenderBootstrap_SelfHostedPostgres(t *testing.T) {
+	// Self-hosted Postgres: install PG, create the role+database, wire the app
+	// config + agent connection with the lib/pq keyword DSN, and back it up.
+	script, err := RenderBootstrap(BootstrapParams{
+		Identifier: "shop", DBEngine: DBPostgres, DBName: "shop", DBUser: "shop_app",
+		DBSchema:    "public", // engine-set default schema (database ≠ schema in PG)
+		GRPCEnabled: true, RemoteSrcDir: "/src", ProvisioningToken: "t",
+		ConnUUID: "c", ConnName: "shop-db", Host: "10.0.0.5",
+	})
+	if err != nil {
+		t.Fatalf("RenderBootstrap self-hosted postgres: %v", err)
+	}
+	for _, want := range []string{
+		"apt-get install -y postgresql",
+		"systemctl enable --now postgresql",
+		"DB_PORT=5432",
+		`CREATE ROLE \"shop_app\" LOGIN CREATEDB PASSWORD`,
+		`ALTER ROLE \"shop_app\" LOGIN CREATEDB PASSWORD`,
+		`createdb -O "shop_app" "shop"`,
+		`CREATE SCHEMA IF NOT EXISTS \"public\" AUTHORIZATION \"shop_app\"`,
+		`driver: "postgres"`,
+		"params: sslmode=disable",
+		"schema: public",
+		// lib/pq keyword DSN (not the MySQL @tcp form) for both the agent conn + env.
+		`--driver postgres --schema 'public' --dsn "host=${DB_HOST} port=${DB_PORT} user=shop_app password=${DB_PASSWORD} dbname=shop sslmode=disable"`,
+		"pg_dump shop",
+	} {
+		if !strings.Contains(script, want) {
+			t.Errorf("self-hosted postgres bootstrap missing %q", want)
+		}
+	}
+	for _, unwanted := range []string{"installing mysql-server", "mysqldump", "@tcp("} {
+		if strings.Contains(script, unwanted) {
+			t.Errorf("self-hosted postgres bootstrap should not contain %q", unwanted)
+		}
+	}
+}
+
+func TestRenderTeardown_Postgres(t *testing.T) {
+	// Purge on a Postgres deployment drops the database then the role via psql.
+	purged, err := RenderTeardown(TeardownParams{
+		Identifier: "shop", DBEngine: DBPostgres, DBName: "shop", DBUser: "shop_app", Purge: true,
+	})
+	if err != nil {
+		t.Fatalf("RenderTeardown postgres purge: %v", err)
+	}
+	for _, want := range []string{
+		`pg_terminate_backend(pid)`, // close open connections first, else DROP DATABASE is refused
+		`WHERE datname='shop'`,
+		`DROP DATABASE IF EXISTS \"shop\"`,
+		`DROP ROLE IF EXISTS \"shop_app\"`,
+	} {
+		if !strings.Contains(purged, want) {
+			t.Errorf("postgres purge teardown missing %q", want)
+		}
+	}
+	for _, unwanted := range []string{"mysql <<SQL", "FLUSH PRIVILEGES"} {
+		if strings.Contains(purged, unwanted) {
+			t.Errorf("postgres purge teardown should not contain %q", unwanted)
+		}
+	}
+}
+
 func TestRenderTeardown(t *testing.T) {
 	// Default (keep data, not last project): tears down THIS project only.
 	script, err := RenderTeardown(TeardownParams{Identifier: "shop", DBName: "shop", DBUser: "shop_app", ConnUUID: "conn-1"})

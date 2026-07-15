@@ -18,13 +18,13 @@ type BootstrapParams struct {
 	DBEngine   DBEngine
 	DBName     string
 	DBUser     string
-	// DBOnly provisions only MySQL + the paired agent + connection (and applies
-	// the schema); it skips the generated app, Docker, and Caddy. The database is
-	// then managed entirely through nuzur.
+	// DBOnly provisions only the DB engine (--db) + the paired agent + connection
+	// (and applies the schema); it skips the generated app, Docker, and Caddy. The
+	// database is then managed entirely through nuzur.
 	DBOnly bool
 	// ExternalDB means the app/agent connect to a caller-supplied existing DB
 	// (--db-dsn, local or remote, MySQL or Postgres) instead of a self-hosted one.
-	// The bootstrap skips MySQL install + DB/user creation + backups; DBHost/
+	// The bootstrap skips DB install + DB/user creation + backups; DBHost/
 	// DBPort/DBPassword/DBParams/DBDSN carry the connection.
 	ExternalDB bool
 	DBHost     string
@@ -92,7 +92,13 @@ func (p *BootstrapParams) defaults() {
 		p.ContainerName = p.Identifier + "-api"
 	}
 	if p.DBParams == "" {
-		p.DBParams = "parseTime=true"
+		// Self-hosted DSN query params: MySQL wants parseTime=true; localhost
+		// Postgres wants sslmode=disable (no TLS on the loopback socket).
+		if p.DBEngine == DBPostgres {
+			p.DBParams = "sslmode=disable"
+		} else {
+			p.DBParams = "parseTime=true"
+		}
 	}
 }
 

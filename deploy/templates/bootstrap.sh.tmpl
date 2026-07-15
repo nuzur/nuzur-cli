@@ -44,6 +44,51 @@ DB_HOST='{{.DBHost}}'
 DB_PORT='{{.DBPort}}'
 DB_PASSWORD='{{.DBPassword}}'
 echo "[nuzur-deploy] using external {{.DBEngine}} database at ${DB_HOST}:${DB_PORT}/{{.DBName}}"
+{{else}}{{if eq .DBEngine "postgres"}}
+# ── 2. Postgres (localhost-only, shared by all projects on the box) ────────────
+DB_HOST=127.0.0.1
+DB_PORT=5432
+if ! command -v psql >/dev/null 2>&1; then
+  echo "[nuzur-deploy] installing postgresql"
+  apt-get update -y
+  apt-get install -y postgresql
+fi
+systemctl enable --now postgresql 2>/dev/null || true
+# Best-effort tune shared_buffers on the active cluster's config file. PG only
+# listens on localhost by default, so no bind-address change is needed.
+PG_CONF="$(sudo -u postgres psql -tAc 'SHOW config_file' 2>/dev/null || true)"
+if [ -n "$PG_CONF" ] && [ -f "$PG_CONF" ] && ! grep -qE '^[[:space:]]*shared_buffers' "$PG_CONF"; then
+  echo "shared_buffers = {{.InnoDBBufferMB}}MB" >> "$PG_CONF"
+  systemctl restart postgresql 2>/dev/null || true
+fi
+
+# ── 3. This project's DB + least-privilege role. The password is PERSISTED
+#       per-project and reused every run, so a re-deploy never rotates it out from
+#       under the app config, the agent connection, or the published nuzur catalog.
+#       ALTER ROLE converges to the persisted value, so a re-run is self-healing.
+DB_PASSWORD_FILE={{.ProjectDir}}/db_password
+if [ -s "$DB_PASSWORD_FILE" ]; then
+  DB_PASSWORD="$(cat "$DB_PASSWORD_FILE")"
+else
+  DB_PASSWORD="$(openssl rand -hex 24)"
+  ( umask 077; printf '%s' "$DB_PASSWORD" > "$DB_PASSWORD_FILE" )
+fi
+# Role (idempotent; PG has no CREATE ROLE IF NOT EXISTS — guard with a catalog check).
+# CREATEDB is granted so nuzur's over-agent schema diff can spin up throwaway temp
+# databases on this instance (pg-schema-diff materializes each candidate schema in
+# a temp DB); without it schema pushes/re-deploys would fail. The role is still
+# non-superuser and localhost-only.
+if ! sudo -u postgres psql -tAc "SELECT 1 FROM pg_roles WHERE rolname='{{.DBUser}}'" | grep -q 1; then
+  sudo -u postgres psql -v ON_ERROR_STOP=1 -c "CREATE ROLE \"{{.DBUser}}\" LOGIN CREATEDB PASSWORD '${DB_PASSWORD}'"
+fi
+sudo -u postgres psql -v ON_ERROR_STOP=1 -c "ALTER ROLE \"{{.DBUser}}\" LOGIN CREATEDB PASSWORD '${DB_PASSWORD}'"
+# Database (no CREATE DATABASE IF NOT EXISTS in PG — guard with a catalog check).
+if ! sudo -u postgres psql -tAc "SELECT 1 FROM pg_database WHERE datname='{{.DBName}}'" | grep -q 1; then
+  sudo -u postgres createdb -O "{{.DBUser}}" "{{.DBName}}"
+fi
+sudo -u postgres psql -v ON_ERROR_STOP=1 -c "GRANT ALL ON DATABASE \"{{.DBName}}\" TO \"{{.DBUser}}\""
+sudo -u postgres psql -v ON_ERROR_STOP=1 -d "{{.DBName}}" -c "CREATE SCHEMA IF NOT EXISTS \"{{if .DBSchema}}{{.DBSchema}}{{else}}public{{end}}\" AUTHORIZATION \"{{.DBUser}}\""
+sudo -u postgres psql -v ON_ERROR_STOP=1 -d "{{.DBName}}" -c "GRANT ALL ON SCHEMA \"{{if .DBSchema}}{{.DBSchema}}{{else}}public{{end}}\" TO \"{{.DBUser}}\""
 {{else}}
 # ── 2. MySQL (localhost-only, shared by all projects on the box) ──────────────
 DB_HOST=127.0.0.1
@@ -81,7 +126,7 @@ ALTER USER '{{.DBUser}}'@'localhost' IDENTIFIED BY '${DB_PASSWORD}';
 GRANT ALL PRIVILEGES ON \`{{.DBName}}\`.* TO '{{.DBUser}}'@'localhost';
 FLUSH PRIVILEGES;
 SQL
-{{end}}
+{{end}}{{end}}
 
 {{if not .DBOnly}}
 # ── 4. App config: base.yaml (from generated source) + prod.yaml overlay ──────
@@ -135,7 +180,8 @@ db:
     pswd: ${DB_PASSWORD}
     params: {{.DBParams}}
     driver: "{{.DBEngine}}"
-ports:
+{{if .DBSchema}}    schema: {{.DBSchema}}
+{{end}}ports:
   grpc: ${GRPC_PORT}
   http: ${HTTP_PORT}
 {{if .JWTAuth}}auth:
@@ -202,14 +248,14 @@ fi
 # (local-only; the deploy command publishes the catalog with the user's token).
 # Idempotent: re-writes the DSN. Self-hosted → localhost DSN with the persisted
 # password; external → the caller-supplied DSN as-is (MySQL or Postgres).
-{{.NuzurBin}} agent connection add '{{.ConnName}}' --uuid '{{.ConnUUID}}' --driver {{.DBEngine}} {{if .DBSchema}}--schema '{{.DBSchema}}' {{end}}--dsn "{{if .ExternalDB}}{{.DBDSN}}{{else}}{{.DBUser}}:${DB_PASSWORD}@tcp(${DB_HOST}:${DB_PORT})/{{.DBName}}?{{.DBParams}}{{end}}" --no-publish --non-interactive
+{{.NuzurBin}} agent connection add '{{.ConnName}}' --uuid '{{.ConnUUID}}' --driver {{.DBEngine}} {{if .DBSchema}}--schema '{{.DBSchema}}' {{end}}--dsn "{{if .ExternalDB}}{{.DBDSN}}{{else}}{{if eq .DBEngine "postgres"}}host=${DB_HOST} port=${DB_PORT} user={{.DBUser}} password=${DB_PASSWORD} dbname={{.DBName}} {{.DBParams}}{{else}}{{.DBUser}}:${DB_PASSWORD}@tcp(${DB_HOST}:${DB_PORT})/{{.DBName}}?{{.DBParams}}{{end}}{{end}}" --no-publish --non-interactive
 
 # Shared agent default-DSN fallback (only used for queries without a connection
 # uuid; real queries specify the uuid). Last deploy wins — harmless.
 install -m 600 /dev/null /etc/nuzur/agent.env
 cat > /etc/nuzur/agent.env <<ENV
 NUZUR_AGENT_DRIVER={{.DBEngine}}
-NUZUR_AGENT_DSN={{if .ExternalDB}}{{.DBDSN}}{{else}}{{.DBUser}}:${DB_PASSWORD}@tcp(${DB_HOST}:${DB_PORT})/{{.DBName}}?{{.DBParams}}{{end}}
+NUZUR_AGENT_DSN={{if .ExternalDB}}{{.DBDSN}}{{else}}{{if eq .DBEngine "postgres"}}host=${DB_HOST} port=${DB_PORT} user={{.DBUser}} password=${DB_PASSWORD} dbname={{.DBName}} {{.DBParams}}{{else}}{{.DBUser}}:${DB_PASSWORD}@tcp(${DB_HOST}:${DB_PORT})/{{.DBName}}?{{.DBParams}}{{end}}{{end}}
 ENV
 chmod 600 /etc/nuzur/agent.env
 cat > /etc/systemd/system/nuzur-agent.service <<UNIT
@@ -310,12 +356,12 @@ ufw allow 443/tcp
 {{if not .Domain}}ufw allow ${PUBLIC_PORT}/tcp
 {{end}}{{end}}ufw --force enable
 
-{{if and (eq .DBEngine "mysql") (not .ExternalDB)}}
+{{if not .ExternalDB}}
 # ── 9. Nightly backup for this SELF-HOSTED project (14-day local retention).
 #       External/managed DBs are backed up by their provider, so this is skipped.
 mkdir -p /var/backups/nuzur
 cat > /etc/cron.d/nuzur-backup-{{.Identifier}} <<'CRON'
-0 3 * * * root mysqldump {{.DBName}} 2>/dev/null | gzip > /var/backups/nuzur/{{.DBName}}-$(date +\%F).sql.gz; find /var/backups/nuzur -name '{{.DBName}}-*.sql.gz' -mtime +14 -delete
+{{if eq .DBEngine "postgres"}}0 3 * * * postgres pg_dump {{.DBName}} 2>/dev/null | gzip > /var/backups/nuzur/{{.DBName}}-$(date +\%F).sql.gz; find /var/backups/nuzur -name '{{.DBName}}-*.sql.gz' -mtime +14 -delete{{else}}0 3 * * * root mysqldump {{.DBName}} 2>/dev/null | gzip > /var/backups/nuzur/{{.DBName}}-$(date +\%F).sql.gz; find /var/backups/nuzur -name '{{.DBName}}-*.sql.gz' -mtime +14 -delete{{end}}
 CRON
 {{end}}
 
