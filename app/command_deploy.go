@@ -306,9 +306,14 @@ func (i *Implementation) runDeploy(c *cli.Context) error {
 		agentUUID, connUUID, url.QueryEscape(dbName),
 	)
 
-	// 12. Record state.
+	// 12. Record state. A re-deploy updates the existing record in place (same
+	// ID) rather than accumulating a new one per deploy.
+	depID := identifier + "-" + shortID()
+	if prior != nil {
+		depID = prior.ID
+	}
 	dep := &deploy.Deployment{
-		ID:                 identifier + "-" + shortID(),
+		ID:                 depID,
 		Provider:           deploy.ProviderSSH,
 		Host:               target.Host, User: target.User, Port: target.Port,
 		Identifier:         identifier,
@@ -446,8 +451,16 @@ func (i *Implementation) DeployListCommand() cli.Command {
 func (i *Implementation) DestroyCommand() cli.Command {
 	return cli.Command{
 		Name:      "destroy",
-		Usage:     i.localize.Localize("destroy_desc", "Tear down a deployment: revoke its agent and remove local state"),
+		Usage:     i.localize.Localize("destroy_desc", "Tear down a deployment: clean up the server, revoke its agent, remove local state"),
 		ArgsUsage: "<deployment-id>",
+		Flags: []cli.Flag{
+			cli.StringFlag{Name: "ssh-key", Usage: "Path to the SSH private key for the server teardown (default: ssh-agent / ~/.ssh/config)"},
+			cli.StringFlag{Name: "user", Usage: "SSH user (default: the deployment's recorded user)"},
+			cli.IntFlag{Name: "port", Usage: "SSH port (default: the deployment's recorded port)"},
+			cli.BoolFlag{Name: "sudo", Usage: "Run the teardown with sudo (auto-enabled for non-root users)"},
+			cli.BoolFlag{Name: "purge", Usage: "Also DROP the database and app user on the box (irreversible; default keeps the data)"},
+			cli.BoolFlag{Name: "skip-server", Usage: "Only revoke the agent + remove local state; leave the server untouched"},
+		},
 		Action: func(c *cli.Context) error {
 			if !c.Args().Present() {
 				return fmt.Errorf("missing deployment-id (see `nuzur deploy list`)")
@@ -460,7 +473,42 @@ func (i *Implementation) DestroyCommand() cli.Command {
 			if err := i.Login(); err != nil {
 				return err
 			}
-			// Revoke the agent so no ghost row remains.
+			ctx := context.Background()
+
+			// 1. Server teardown: remove the nuzur-installed artifacts (services,
+			// container, image, config, secrets, agent pairing, Caddy site, backup
+			// cron). Best-effort — a gone/unreachable box still lets the cloud-side
+			// cleanup proceed so no ghost agent is left behind.
+			if !c.Bool("skip-server") {
+				dbName := sanitizeDBName(dep.Identifier)
+				script, rerr := deploy.RenderTeardown(deploy.TeardownParams{
+					Identifier: dep.Identifier,
+					DBName:     dbName,
+					DBUser:     dbName + "_app",
+					Purge:      c.Bool("purge"),
+				})
+				if rerr != nil {
+					return rerr
+				}
+				port := c.Int("port")
+				if port == 0 {
+					port = dep.Port
+				}
+				target := deploy.Target{
+					Host:    dep.Host,
+					User:    firstNonEmpty(c.String("user"), dep.User),
+					Port:    port,
+					KeyPath: c.String("ssh-key"),
+				}
+				runner := deploy.NewSSHRunner(target)
+				runner.Sudo = c.Bool("sudo") || target.User != "root"
+				outputtools.PrintlnColoredErr("Cleaning up the server (services, container, config"+purgeSuffix(c.Bool("purge"))+")...", outputtools.Blue)
+				if err := runner.RunScript(ctx, script); err != nil {
+					outputtools.PrintlnColoredErr(fmt.Sprintf("warning: server teardown failed (%v) — cleaning up nuzur state anyway. Re-run `nuzur destroy %s` once the box is reachable, or use --skip-server.", err, id), outputtools.Yellow)
+				}
+			}
+
+			// 2. Revoke the agent so no ghost row remains in nuzur.
 			if dep.LocalAgentUUID != "" {
 				authCtx, err := productclient.ClientContext()
 				if err != nil {
@@ -472,15 +520,25 @@ func (i *Implementation) DestroyCommand() cli.Command {
 					outputtools.PrintlnColoredErr(fmt.Sprintf("warning: could not revoke agent %s: %v", dep.LocalAgentUUID, err), outputtools.Yellow)
 				}
 			}
-			// Provider teardown (no-op for BYO-SSH — the user owns the box).
-			_ = deploy.NewSSHProvisioner().Destroy(context.Background(), deploy.Target{Host: dep.Host})
+
+			// 3. Remove local deployment state.
 			if err := deploy.DeleteDeployment(id); err != nil {
 				return err
 			}
-			fmt.Printf("Destroyed deployment %s (agent revoked; the server itself was not deleted for BYO-SSH).\n", id)
+			fmt.Printf("Destroyed deployment %s (server cleaned up, agent revoked).\n", id)
+			if !c.Bool("purge") && !c.Bool("skip-server") {
+				fmt.Printf("  The database was kept — pass --purge to drop it.\n")
+			}
 			return nil
 		},
 	}
+}
+
+func purgeSuffix(purge bool) string {
+	if purge {
+		return ", database"
+	}
+	return ""
 }
 
 // ── helpers ──────────────────────────────────────────────────────────────────

@@ -91,6 +91,48 @@ func TestRenderBootstrap_DomainAndNoGRPC(t *testing.T) {
 	}
 }
 
+func TestRenderTeardown(t *testing.T) {
+	// Default (keep data): tears down infra, no DB drop.
+	script, err := RenderTeardown(TeardownParams{Identifier: "shop", DBName: "shop", DBUser: "shop_app"})
+	if err != nil {
+		t.Fatalf("RenderTeardown: %v", err)
+	}
+	for _, want := range []string{
+		"systemctl stop \"$unit\"",
+		"shop-api.service nuzur-agent.service",
+		"docker rm -f shop-api",
+		"docker rmi -f nuzur/shop:latest",
+		"rm -f /etc/caddy/Caddyfile",
+		"rm -rf /etc/nuzur",
+		"rm -rf /root/.config/nuzur",
+		"rm -f /etc/cron.d/nuzur-backup",
+	} {
+		if !strings.Contains(script, want) {
+			t.Errorf("teardown missing %q", want)
+		}
+	}
+	if strings.Contains(script, "DROP DATABASE") {
+		t.Error("default teardown must not drop the database")
+	}
+
+	// Purge: also drops the DB + user.
+	purged, err := RenderTeardown(TeardownParams{Identifier: "shop", DBName: "shop", DBUser: "shop_app", Purge: true})
+	if err != nil {
+		t.Fatalf("RenderTeardown purge: %v", err)
+	}
+	for _, want := range []string{"DROP DATABASE IF EXISTS", "shop", "DROP USER IF EXISTS 'shop_app'@'localhost'"} {
+		if !strings.Contains(purged, want) {
+			t.Errorf("purge teardown missing %q", want)
+		}
+	}
+}
+
+func TestRenderTeardown_PurgeRequiresDBFields(t *testing.T) {
+	if _, err := RenderTeardown(TeardownParams{Identifier: "shop", Purge: true}); err == nil {
+		t.Fatal("expected error: purge needs DBName/DBUser")
+	}
+}
+
 func TestRenderBootstrap_RequiresFields(t *testing.T) {
 	if _, err := RenderBootstrap(BootstrapParams{Identifier: "x"}); err == nil {
 		t.Fatal("expected error when required DB fields are missing")
