@@ -27,6 +27,7 @@ type Deployment struct {
 	LocalAgentUUID     string    `json:"local_agent_uuid"`
 	ConnUUID           string    `json:"conn_uuid,omitempty"`
 	DBEngine           DBEngine  `json:"db_engine"`
+	ExternalDB         bool      `json:"external_db,omitempty"` // --db-dsn: an existing DB, not self-hosted (never dropped on destroy)
 	Domain             string    `json:"domain,omitempty"`      // set when deployed with --domain (HTTPS site)
 	APIURL             string    `json:"api_url,omitempty"`     // resolved front-door URL
 	PublicURL          string    `json:"public_url,omitempty"`  // same as APIURL; explicit alias

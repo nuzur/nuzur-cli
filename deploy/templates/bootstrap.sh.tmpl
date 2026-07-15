@@ -36,8 +36,18 @@ if ! command -v docker >/dev/null 2>&1; then
 fi
 {{end}}
 
-{{if eq .DBEngine "mysql"}}
+{{if .ExternalDB}}
+# ── 2 + 3. External database: use the caller-supplied connection (--db-dsn).
+#           No install, no DB/user creation — the DB (local or remote, MySQL or
+#           Postgres) already exists and is owned by the user/provider.
+DB_HOST='{{.DBHost}}'
+DB_PORT='{{.DBPort}}'
+DB_PASSWORD='{{.DBPassword}}'
+echo "[nuzur-deploy] using external {{.DBEngine}} database at ${DB_HOST}:${DB_PORT}/{{.DBName}}"
+{{else}}
 # ── 2. MySQL (localhost-only, shared by all projects on the box) ──────────────
+DB_HOST=127.0.0.1
+DB_PORT=3306
 if ! command -v mysqld >/dev/null 2>&1 && ! command -v mariadbd >/dev/null 2>&1; then
   echo "[nuzur-deploy] installing mysql-server"
   apt-get update -y
@@ -119,11 +129,11 @@ echo "[nuzur-deploy] {{.Identifier}} internal ports: http=$HTTP_PORT grpc=$GRPC_
 cat > "$PROD_YAML" <<YAML
 db:
   - name: {{.DBName}}
-    host: 127.0.0.1
-    port: 3306
+    host: ${DB_HOST}
+    port: ${DB_PORT}
     user: {{.DBUser}}
     pswd: ${DB_PASSWORD}
-    params: parseTime=true
+    params: {{.DBParams}}
     driver: "{{.DBEngine}}"
 ports:
   grpc: ${GRPC_PORT}
@@ -188,17 +198,18 @@ else
   {{.NuzurBin}} agent pair --provisioning-token '{{.ProvisioningToken}}'
 fi
 
-# register this project's localhost DB as its own named connection on the shared
-# agent (local-only; the deploy command publishes the catalog with the user's
-# token). Idempotent: re-writes the DSN with the persisted password.
-{{.NuzurBin}} agent connection add '{{.ConnName}}' --uuid '{{.ConnUUID}}' --driver {{.DBEngine}} --dsn "{{.DBUser}}:${DB_PASSWORD}@tcp(127.0.0.1:3306)/{{.DBName}}?parseTime=true" --no-publish --non-interactive
+# register this project's DB as its own named connection on the shared agent
+# (local-only; the deploy command publishes the catalog with the user's token).
+# Idempotent: re-writes the DSN. Self-hosted → localhost DSN with the persisted
+# password; external → the caller-supplied DSN as-is (MySQL or Postgres).
+{{.NuzurBin}} agent connection add '{{.ConnName}}' --uuid '{{.ConnUUID}}' --driver {{.DBEngine}} {{if .DBSchema}}--schema '{{.DBSchema}}' {{end}}--dsn "{{if .ExternalDB}}{{.DBDSN}}{{else}}{{.DBUser}}:${DB_PASSWORD}@tcp(${DB_HOST}:${DB_PORT})/{{.DBName}}?{{.DBParams}}{{end}}" --no-publish --non-interactive
 
 # Shared agent default-DSN fallback (only used for queries without a connection
 # uuid; real queries specify the uuid). Last deploy wins — harmless.
 install -m 600 /dev/null /etc/nuzur/agent.env
 cat > /etc/nuzur/agent.env <<ENV
 NUZUR_AGENT_DRIVER={{.DBEngine}}
-NUZUR_AGENT_DSN={{.DBUser}}:${DB_PASSWORD}@tcp(127.0.0.1:3306)/{{.DBName}}?parseTime=true
+NUZUR_AGENT_DSN={{if .ExternalDB}}{{.DBDSN}}{{else}}{{.DBUser}}:${DB_PASSWORD}@tcp(${DB_HOST}:${DB_PORT})/{{.DBName}}?{{.DBParams}}{{end}}
 ENV
 chmod 600 /etc/nuzur/agent.env
 cat > /etc/systemd/system/nuzur-agent.service <<UNIT
@@ -299,8 +310,9 @@ ufw allow 443/tcp
 {{if not .Domain}}ufw allow ${PUBLIC_PORT}/tcp
 {{end}}{{end}}ufw --force enable
 
-{{if eq .DBEngine "mysql"}}
-# ── 9. Nightly backup for this project (14-day local retention) ───────────────
+{{if and (eq .DBEngine "mysql") (not .ExternalDB)}}
+# ── 9. Nightly backup for this SELF-HOSTED project (14-day local retention).
+#       External/managed DBs are backed up by their provider, so this is skipped.
 mkdir -p /var/backups/nuzur
 cat > /etc/cron.d/nuzur-backup-{{.Identifier}} <<'CRON'
 0 3 * * * root mysqldump {{.DBName}} 2>/dev/null | gzip > /var/backups/nuzur/{{.DBName}}-$(date +\%F).sql.gz; find /var/backups/nuzur -name '{{.DBName}}-*.sql.gz' -mtime +14 -delete

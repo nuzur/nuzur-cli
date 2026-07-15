@@ -25,6 +25,9 @@ type DBEngine string
 
 const (
 	DBMySQL DBEngine = "mysql"
+	// DBPostgres is only valid for an EXTERNAL (--db-dsn) database — nuzur does
+	// not self-host Postgres. The generated app + agent connect to it directly.
+	DBPostgres DBEngine = "postgres"
 )
 
 // Target is a resolved server the bootstrap runs against.

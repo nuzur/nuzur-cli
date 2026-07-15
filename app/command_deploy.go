@@ -4,12 +4,14 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"net"
 	"net/url"
 	"os"
 	"path/filepath"
 	"strings"
 	"time"
 
+	mysqldriver "github.com/go-sql-driver/mysql"
 	"github.com/gofrs/uuid"
 	nemgen "github.com/nuzur/nem/idl/gen"
 	"github.com/nuzur/nuzur-cli/constants"
@@ -36,6 +38,8 @@ func (i *Implementation) DeployCommand() cli.Command {
 			cli.StringFlag{Name: "version", Usage: "Project version identifier or UUID (default: latest)"},
 			cli.StringFlag{Name: "identifier", Usage: "Deployment identifier (names the DB/service/config on the box; default: from the go-code-gen config, or the project name for --db-only)"},
 			cli.BoolFlag{Name: "db-only", Usage: "Database-only: install MySQL, pair the agent, register the connection, and apply the schema — but do NOT generate/build/run the app or Caddy. Manage the DB entirely through nuzur."},
+			cli.StringFlag{Name: "db-dsn", Usage: "Use an EXISTING database instead of self-hosting one. MySQL DSN (user:pass@tcp(host:port)/db?params) or Postgres URL (postgres://user:pass@host:port/db?sslmode=require). The app + agent connect to it; MySQL install/creation is skipped."},
+			cli.StringFlag{Name: "db-schema", Usage: "Postgres schema/namespace to target (default: public). Ignored for MySQL, where the database IS the schema."},
 			cli.StringFlag{Name: "db", Value: "mysql", Usage: "Self-hosted database engine (v1: mysql)"},
 			cli.StringFlag{Name: "api", Usage: "API surface to generate: rest | grpc | both. Pick by the consumer — REST for JS/web/browser clients, gRPC for Go/backend clients (leave unset to use the project's last/provided config)"},
 			cli.StringFlag{Name: "auth", Usage: "Auth middleware: disabled | jwt | keycloak (leave unset to use the project's last/provided config)"},
@@ -63,6 +67,26 @@ func (i *Implementation) runDeploy(c *cli.Context) error {
 	ctx := context.Background()
 	dbOnly := c.Bool("db-only")
 
+	// --db-dsn: connect to an EXISTING database (local or remote, MySQL or
+	// Postgres) instead of self-hosting one. Parse it up front so it can drive
+	// the generated app's engine, the app config, and the agent connection.
+	dbDSN := strings.TrimSpace(c.String("db-dsn"))
+	externalDB := dbDSN != ""
+	dbEngine := deploy.DBMySQL
+	var extHost, extPort, extUser, extPass, extName, extParams string
+	if externalDB {
+		var perr error
+		dbEngine, extHost, extPort, extUser, extPass, extName, extParams, perr = parseDeployDSN(dbDSN)
+		if perr != nil {
+			return fmt.Errorf("parsing --db-dsn: %w", perr)
+		}
+		if extName == "" {
+			return fmt.Errorf("--db-dsn must include a database name")
+		}
+	} else if c.String("db") == "postgres" {
+		return fmt.Errorf("self-hosted Postgres isn't supported — pass --db-dsn postgres://… to connect to an existing Postgres database")
+	}
+
 	// 1. Resolve project/version + the go-code-gen extension (logs in).
 	targets, err := i.resolveRunTargets(extRunFlags{
 		project:        c.String("project"),
@@ -89,7 +113,13 @@ func (i *Implementation) runDeploy(c *cli.Context) error {
 		if err != nil {
 			return err
 		}
-		provided["db"] = c.String("db")
+		// The DSN's engine wins when --db-dsn is set (so a Postgres DSN generates
+		// a Postgres app); otherwise use --db.
+		if externalDB {
+			provided["db"] = string(dbEngine)
+		} else {
+			provided["db"] = c.String("db")
+		}
 		provided["custom_enabled"] = c.Bool("custom")
 		provided["dockerfile"] = true
 		// Transport selection: pick REST for JS/web clients, gRPC for Go/backend
@@ -147,12 +177,26 @@ func (i *Implementation) runDeploy(c *cli.Context) error {
 	// else (db-only) the sanitized project name.
 	identifier := firstNonEmpty(c.String("identifier"), stringValue(configValues, "identifier", ""), sanitizeDBName(targets.project.Name))
 
-	// The localhost DB is registered as a named agent connection with this
-	// UUID (locally on the box), then published to nuzur from here so the
-	// schema can be pushed to it. Ports are now allocated on the box (written
-	// into the project's prod.yaml) so N apps can coexist — the CLI no longer
-	// pins them.
+	// The DB is registered as a named agent connection with this UUID, then
+	// published to nuzur so the schema can be pushed to it. Self-hosted → a DB
+	// named after the identifier with a least-priv `{db}_app` user; external
+	// (--db-dsn) → the DB name + user from the DSN.
 	dbName := sanitizeDBName(identifier)
+	dbUser := dbName + "_app"
+	if externalDB {
+		dbName = extName
+		dbUser = extUser
+	}
+	// Schema vs database: in MySQL the database IS the schema; in Postgres a
+	// database contains schemas (default `public`). `schema` is what the diff
+	// engine, the data-manager link, and the agent connection's default schema
+	// target — the DB name for MySQL, a namespace for Postgres.
+	schema := dbName
+	dbSchema := "" // agent-connection default schema; empty for MySQL (chosen per query)
+	if dbEngine == deploy.DBPostgres {
+		schema = firstNonEmpty(c.String("db-schema"), "public")
+		dbSchema = schema
+	}
 	connName := identifier + "-db"
 	host := c.String("host")
 
@@ -245,10 +289,17 @@ func (i *Implementation) runDeploy(c *cli.Context) error {
 	// releases itself.
 	bp := deploy.BootstrapParams{
 		Identifier:        identifier,
-		DBEngine:          deploy.DBMySQL,
+		DBEngine:          dbEngine,
 		DBName:            dbName,
-		DBUser:            dbName + "_app",
+		DBUser:            dbUser,
 		DBOnly:            dbOnly,
+		ExternalDB:        externalDB,
+		DBHost:            extHost,
+		DBPort:            extPort,
+		DBPassword:        extPass,
+		DBParams:          extParams,
+		DBDSN:             dbDSN,
+		DBSchema:          dbSchema,
 		GRPCEnabled:       boolValue(configValues, "grpc_server_enabled"),
 		JWTAuth:           jwtAuth,
 		ProvisioningToken: tokRes.GetProvisioningToken(),
@@ -295,7 +346,7 @@ func (i *Implementation) runDeploy(c *cli.Context) error {
 	// 10. Publish the connection catalog (needs the user token — the box can't)
 	// and auto-apply the schema to the empty DB.
 	schemaApplied := true
-	if err := i.publishAndApplySchema(targets, agentUUID, connUUID, connName, dbName, c.String("schema-push-extension")); err != nil {
+	if err := i.publishAndApplySchema(targets, agentUUID, connUUID, connName, schema, c.String("schema-push-extension")); err != nil {
 		schemaApplied = false
 		outputtools.PrintlnColoredErr("Schema auto-apply skipped: "+err.Error(), outputtools.Yellow)
 	}
@@ -334,7 +385,7 @@ func (i *Implementation) runDeploy(c *cli.Context) error {
 		"%s/project/data-manager/%s/%s?mode=local&localAgent=%s&localAgentConn=%s&schema=%s",
 		strings.TrimRight(c.String("web-url"), "/"),
 		targets.project.Uuid, targets.projectVersion.Uuid,
-		agentUUID, connUUID, url.QueryEscape(dbName),
+		agentUUID, connUUID, url.QueryEscape(schema),
 	)
 
 	// 12. Record state. A re-deploy updates the existing record in place (same
@@ -352,7 +403,8 @@ func (i *Implementation) runDeploy(c *cli.Context) error {
 		ProjectVersionUUID: targets.projectVersion.Uuid,
 		LocalAgentUUID:     agentUUID,
 		ConnUUID:           connUUID,
-		DBEngine:           deploy.DBMySQL,
+		DBEngine:           dbEngine,
+		ExternalDB:         externalDB,
 		Domain:             c.String("domain"),
 		APIURL:             publicURL,
 		PublicURL:          publicURL,
@@ -368,13 +420,20 @@ func (i *Implementation) runDeploy(c *cli.Context) error {
 	fmt.Printf("  deployment id: %s\n", dep.ID)
 	fmt.Printf("  agent uuid:    %s\n", agentUUID)
 	fmt.Printf("  connection:    %s (%s)\n", connName, connUUID)
+	if externalDB {
+		fmt.Printf("  database:      external %s at %s:%s/%s (not self-hosted; kept on destroy)\n", dbEngine, extHost, extPort, dbName)
+	}
 	fmt.Printf("  teardown:      nuzur destroy %s\n", dep.ID)
 
 	if dbOnly {
-		// Database-only: no app, no front door — just the self-hosted MySQL
-		// managed through nuzur via the agent connection.
+		// Database-only: no app, no front door — just the database managed
+		// through nuzur via the agent connection.
 		outputtools.PrintlnColored("\nWhat's deployed (database-only):", outputtools.Green)
-		fmt.Printf("  MySQL:     self-hosted on the box (localhost), schema applied.\n")
+		if externalDB {
+			fmt.Printf("  Database:  external %s (%s:%s), schema applied via the agent.\n", dbEngine, extHost, extPort)
+		} else {
+			fmt.Printf("  MySQL:     self-hosted on the box (localhost), schema applied.\n")
+		}
 		fmt.Printf("  Managed:   through nuzur — data manager, SQL Push, and queries via the agent.\n")
 		fmt.Printf("  No app/API or Caddy was installed. Add one later with a normal deploy.\n")
 	} else {
@@ -413,7 +472,14 @@ func (i *Implementation) runDeploy(c *cli.Context) error {
 	outputtools.PrintlnColored("\nManage your data:", outputtools.Green)
 	fmt.Printf("  %s\n", dataManagerURL)
 	if !schemaApplied {
-		outputtools.PrintlnColoredErr("\nApply the schema manually in nuzur (SQL Push / change request) to create the tables.", outputtools.Yellow)
+		if dbEngine == deploy.DBPostgres {
+			// Postgres schema diff isn't supported over a local agent yet (the
+			// pg-schema-diff tempdb factory needs a direct live connection). Point
+			// the user at the path that does work for remote Postgres.
+			outputtools.PrintlnColoredErr("\nPostgres schema push over the agent isn't supported yet. To apply the schema, add this database as a DIRECT remote connection in nuzur (the managed/remote tier — nuzur connects straight to it, allowlist nuzur's egress) and run SQL Push there. The app + agent connection deployed here are fine; only the schema auto-apply was skipped.", outputtools.Yellow)
+		} else {
+			outputtools.PrintlnColoredErr("\nApply the schema manually in nuzur (SQL Push / change request) to create the tables.", outputtools.Yellow)
+		}
 	}
 	return nil
 }
@@ -558,12 +624,19 @@ func (i *Implementation) DestroyCommand() cli.Command {
 			// gone/unreachable box still lets the cloud-side cleanup proceed.
 			if !c.Bool("skip-server") {
 				dbName := sanitizeDBName(dep.Identifier)
+				// Never drop an EXTERNAL (--db-dsn) database — it's the user's own
+				// managed/remote DB, not something we provisioned.
+				purge := c.Bool("purge")
+				if purge && dep.ExternalDB {
+					purge = false
+					outputtools.PrintlnColoredErr("Note: this deployment uses an external database (--db-dsn); --purge is ignored (managed elsewhere).", outputtools.Yellow)
+				}
 				script, rerr := deploy.RenderTeardown(deploy.TeardownParams{
 					Identifier:    dep.Identifier,
 					DBName:        dbName,
 					DBUser:        dbName + "_app",
 					ConnUUID:      dep.ConnUUID,
-					Purge:         c.Bool("purge"),
+					Purge:         purge,
 					IsLastProject: isLast,
 				})
 				if rerr != nil {
@@ -817,6 +890,45 @@ func stringValue(m map[string]interface{}, key, def string) string {
 		}
 	}
 	return def
+}
+
+// parseDeployDSN parses a MySQL DSN (user:pass@tcp(host:port)/db?params) or a
+// Postgres URL (postgres://user:pass@host:port/db?params) into the pieces the
+// bootstrap needs. The engine is inferred from a postgres:// / postgresql://
+// scheme; everything else is treated as a MySQL DSN.
+func parseDeployDSN(dsn string) (engine deploy.DBEngine, host, port, user, pass, name, params string, err error) {
+	if strings.HasPrefix(dsn, "postgres://") || strings.HasPrefix(dsn, "postgresql://") {
+		u, e := url.Parse(dsn)
+		if e != nil {
+			return "", "", "", "", "", "", "", e
+		}
+		host = u.Hostname()
+		port = u.Port()
+		if port == "" {
+			port = "5432"
+		}
+		user = u.User.Username()
+		pass, _ = u.User.Password()
+		name = strings.TrimPrefix(u.Path, "/")
+		params = u.RawQuery
+		if params == "" {
+			params = "sslmode=require"
+		}
+		return deploy.DBPostgres, host, port, user, pass, name, params, nil
+	}
+	cfg, e := mysqldriver.ParseDSN(dsn)
+	if e != nil {
+		return "", "", "", "", "", "", "", e
+	}
+	host, port, e = net.SplitHostPort(cfg.Addr)
+	if e != nil { // Addr without a port
+		host, port = cfg.Addr, "3306"
+	}
+	params = "parseTime=true"
+	if q := strings.LastIndex(dsn, "?"); q >= 0 {
+		params = dsn[q+1:]
+	}
+	return deploy.DBMySQL, host, port, cfg.User, cfg.Passwd, cfg.DBName, params, nil
 }
 
 // firstNonEmpty returns the first non-empty string in vals, or "".

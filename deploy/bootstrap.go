@@ -21,7 +21,20 @@ type BootstrapParams struct {
 	// DBOnly provisions only MySQL + the paired agent + connection (and applies
 	// the schema); it skips the generated app, Docker, and Caddy. The database is
 	// then managed entirely through nuzur.
-	DBOnly      bool
+	DBOnly bool
+	// ExternalDB means the app/agent connect to a caller-supplied existing DB
+	// (--db-dsn, local or remote, MySQL or Postgres) instead of a self-hosted one.
+	// The bootstrap skips MySQL install + DB/user creation + backups; DBHost/
+	// DBPort/DBPassword/DBParams/DBDSN carry the connection.
+	ExternalDB bool
+	DBHost     string
+	DBPort     string
+	DBPassword string // external only; self-hosted generates its own on the box
+	DBParams   string // DSN query params (e.g. parseTime=true / sslmode=require)
+	DBDSN      string // external only: the raw DSN used for the agent connection
+	// DBSchema is the agent connection's default schema — set for Postgres (a
+	// namespace like `public`), empty for MySQL where the database is the schema.
+	DBSchema string
 	GRPCEnabled bool
 	// JWTAuth means the generated app uses the JWT auth server, which reads its
 	// signing key from config (auth.jwt.key). The generated base.yaml ships a
@@ -77,6 +90,9 @@ func (p *BootstrapParams) defaults() {
 	}
 	if p.ContainerName == "" {
 		p.ContainerName = p.Identifier + "-api"
+	}
+	if p.DBParams == "" {
+		p.DBParams = "parseTime=true"
 	}
 }
 

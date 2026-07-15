@@ -141,6 +141,58 @@ func TestRenderBootstrap_DBOnly(t *testing.T) {
 	}
 }
 
+func TestRenderBootstrap_ExternalDB(t *testing.T) {
+	// External MySQL (remote): no install/create, app config points at the remote.
+	my, err := RenderBootstrap(BootstrapParams{
+		Identifier: "ext", DBEngine: DBMySQL, DBName: "shopdb", DBUser: "app",
+		ExternalDB: true, DBHost: "db.example.com", DBPort: "3306", DBPassword: "secret",
+		DBParams: "parseTime=true&tls=true", DBDSN: "app:secret@tcp(db.example.com:3306)/shopdb?parseTime=true&tls=true",
+		GRPCEnabled: true, RemoteSrcDir: "/src", ProvisioningToken: "t", ConnUUID: "c", ConnName: "ext-db",
+	})
+	if err != nil {
+		t.Fatalf("RenderBootstrap external mysql: %v", err)
+	}
+	for _, want := range []string{
+		"using external mysql database at ${DB_HOST}:${DB_PORT}",
+		"DB_HOST='db.example.com'",
+		"DB_PORT='3306'",
+		"host: ${DB_HOST}",
+		"params: parseTime=true&tls=true",
+		"agent connection add 'ext-db' --uuid 'c' --driver mysql --dsn \"app:secret@tcp(db.example.com:3306)/shopdb?parseTime=true&tls=true\"",
+	} {
+		if !strings.Contains(my, want) {
+			t.Errorf("external mysql bootstrap missing %q", want)
+		}
+	}
+	for _, unwanted := range []string{"installing mysql-server", "CREATE DATABASE", "nuzur-backup-ext"} {
+		if strings.Contains(my, unwanted) {
+			t.Errorf("external db bootstrap should not contain %q", unwanted)
+		}
+	}
+
+	// External Postgres.
+	pg, err := RenderBootstrap(BootstrapParams{
+		Identifier: "pg", DBEngine: DBPostgres, DBName: "shop", DBUser: "app",
+		ExternalDB: true, DBHost: "pg.example.com", DBPort: "5432", DBPassword: "s",
+		DBParams: "sslmode=require", DBDSN: "postgres://app:s@pg.example.com:5432/shop?sslmode=require",
+		DBSchema: "public", // Postgres schema/namespace, distinct from the database
+		RemoteSrcDir: "/src", ProvisioningToken: "t", ConnUUID: "c", ConnName: "pg-db",
+	})
+	if err != nil {
+		t.Fatalf("RenderBootstrap external postgres: %v", err)
+	}
+	for _, want := range []string{
+		"using external postgres database",
+		"driver: \"postgres\"",
+		// Postgres passes a default schema to the connection (database ≠ schema).
+		"--driver postgres --schema 'public' --dsn \"postgres://app:s@pg.example.com:5432/shop?sslmode=require\"",
+	} {
+		if !strings.Contains(pg, want) {
+			t.Errorf("external postgres bootstrap missing %q", want)
+		}
+	}
+}
+
 func TestRenderTeardown(t *testing.T) {
 	// Default (keep data, not last project): tears down THIS project only.
 	script, err := RenderTeardown(TeardownParams{Identifier: "shop", DBName: "shop", DBUser: "shop_app", ConnUUID: "conn-1"})
