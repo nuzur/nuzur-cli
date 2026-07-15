@@ -53,8 +53,10 @@ const (
 	NuzurProduct_ListProjectVersionsForUserCached_FullMethodName            = "/NuzurProduct/ListProjectVersionsForUserCached"
 	NuzurProduct_GetProjectVersionForUser_FullMethodName                    = "/NuzurProduct/GetProjectVersionForUser"
 	NuzurProduct_GetProjectVersionForUserCached_FullMethodName              = "/NuzurProduct/GetProjectVersionForUserCached"
+	NuzurProduct_GetProjectVersionLeanForUser_FullMethodName                = "/NuzurProduct/GetProjectVersionLeanForUser"
 	NuzurProduct_GetLatestProjectVersion_FullMethodName                     = "/NuzurProduct/GetLatestProjectVersion"
 	NuzurProduct_GetLatestProjectVersionForUser_FullMethodName              = "/NuzurProduct/GetLatestProjectVersionForUser"
+	NuzurProduct_GetLatestProjectVersionLeanForUser_FullMethodName          = "/NuzurProduct/GetLatestProjectVersionLeanForUser"
 	NuzurProduct_GetLatestProjectVersionUUIDForUser_FullMethodName          = "/NuzurProduct/GetLatestProjectVersionUUIDForUser"
 	NuzurProduct_GetProjectVersionVersion_FullMethodName                    = "/NuzurProduct/GetProjectVersionVersion"
 	NuzurProduct_GetProjectVersionIdentifier_FullMethodName                 = "/NuzurProduct/GetProjectVersionIdentifier"
@@ -131,6 +133,19 @@ const (
 	NuzurProduct_ListLocalAgents_FullMethodName                             = "/NuzurProduct/ListLocalAgents"
 	NuzurProduct_UpdateLocalAgentConnections_FullMethodName                 = "/NuzurProduct/UpdateLocalAgentConnections"
 	NuzurProduct_GetLocalAgentConnections_FullMethodName                    = "/NuzurProduct/GetLocalAgentConnections"
+	NuzurProduct_IssueProvisioningToken_FullMethodName                      = "/NuzurProduct/IssueProvisioningToken"
+	NuzurProduct_ExchangeProvisioningToken_FullMethodName                   = "/NuzurProduct/ExchangeProvisioningToken"
+	NuzurProduct_CreateAutomation_FullMethodName                            = "/NuzurProduct/CreateAutomation"
+	NuzurProduct_RotateAutomationSecret_FullMethodName                      = "/NuzurProduct/RotateAutomationSecret"
+	NuzurProduct_UpdateAutomation_FullMethodName                            = "/NuzurProduct/UpdateAutomation"
+	NuzurProduct_DeleteAutomation_FullMethodName                            = "/NuzurProduct/DeleteAutomation"
+	NuzurProduct_GetAutomation_FullMethodName                               = "/NuzurProduct/GetAutomation"
+	NuzurProduct_ListAutomationsForProject_FullMethodName                   = "/NuzurProduct/ListAutomationsForProject"
+	NuzurProduct_TestAutomation_FullMethodName                              = "/NuzurProduct/TestAutomation"
+	NuzurProduct_ListAutomationEvents_FullMethodName                        = "/NuzurProduct/ListAutomationEvents"
+	NuzurProduct_GetAutomationEvent_FullMethodName                          = "/NuzurProduct/GetAutomationEvent"
+	NuzurProduct_RetryAutomationEvent_FullMethodName                        = "/NuzurProduct/RetryAutomationEvent"
+	NuzurProduct_MarkChangeRequestApplied_FullMethodName                    = "/NuzurProduct/MarkChangeRequestApplied"
 )
 
 // NuzurProductClient is the client API for NuzurProduct service.
@@ -176,8 +191,15 @@ type NuzurProductClient interface {
 	ListProjectVersionsForUserCached(ctx context.Context, in *ListProjectVersionsForUserRequest, opts ...grpc.CallOption) (*ListProjectVersionsForUserResponse, error)
 	GetProjectVersionForUser(ctx context.Context, in *GetProjectVersionForUserRequest, opts ...grpc.CallOption) (*gen.ProjectVersion, error)
 	GetProjectVersionForUserCached(ctx context.Context, in *GetProjectVersionForUserRequest, opts ...grpc.CallOption) (*gen.ProjectVersion, error)
+	// Returns the project version WITHOUT the heavy schema blobs (entities,
+	// relationships, enums, services, deployments) so the web can render the
+	// editor shell immediately, then fetch the full version for the board.
+	GetProjectVersionLeanForUser(ctx context.Context, in *GetProjectVersionForUserRequest, opts ...grpc.CallOption) (*gen.ProjectVersion, error)
 	GetLatestProjectVersion(ctx context.Context, in *GetLatestProjectVersionRequest, opts ...grpc.CallOption) (*gen.ProjectVersion, error)
 	GetLatestProjectVersionForUser(ctx context.Context, in *GetLatestProjectVersionForUserRequest, opts ...grpc.CallOption) (*gen.ProjectVersion, error)
+	// Latest version metadata only (no schema blobs) — for callers that just need
+	// the uuid/metadata (e.g. the editor's redirect-to-latest).
+	GetLatestProjectVersionLeanForUser(ctx context.Context, in *GetLatestProjectVersionForUserRequest, opts ...grpc.CallOption) (*gen.ProjectVersion, error)
 	GetLatestProjectVersionUUIDForUser(ctx context.Context, in *GetLatestProjectVersionUUIDForUserRequest, opts ...grpc.CallOption) (*GetLatestProjectVersionUUIDForUserResponse, error)
 	GetProjectVersionVersion(ctx context.Context, in *GetProjectVersionVersionRequest, opts ...grpc.CallOption) (*GetProjectVersionVersionResponse, error)
 	GetProjectVersionIdentifier(ctx context.Context, in *GetProjectVersionIdentifierRequest, opts ...grpc.CallOption) (*GetProjectVersionIdentifierResponse, error)
@@ -268,6 +290,22 @@ type NuzurProductClient interface {
 	ListLocalAgents(ctx context.Context, in *ListLocalAgentsRequest, opts ...grpc.CallOption) (*ListLocalAgentsResponse, error)
 	UpdateLocalAgentConnections(ctx context.Context, in *UpdateLocalAgentConnectionsRequest, opts ...grpc.CallOption) (*UpdateLocalAgentConnectionsResponse, error)
 	GetLocalAgentConnections(ctx context.Context, in *GetLocalAgentConnectionsRequest, opts ...grpc.CallOption) (*GetLocalAgentConnectionsResponse, error)
+	// Headless pairing: an authenticated user mints a short-lived provisioning
+	// token; a fresh (non-logged-in) machine exchanges it for agent creds.
+	IssueProvisioningToken(ctx context.Context, in *IssueProvisioningTokenRequest, opts ...grpc.CallOption) (*IssueProvisioningTokenResponse, error)
+	ExchangeProvisioningToken(ctx context.Context, in *ExchangeProvisioningTokenRequest, opts ...grpc.CallOption) (*ExchangeProvisioningTokenResponse, error)
+	// automations
+	CreateAutomation(ctx context.Context, in *CreateAutomationRequest, opts ...grpc.CallOption) (*CreateAutomationResponse, error)
+	RotateAutomationSecret(ctx context.Context, in *RotateAutomationSecretRequest, opts ...grpc.CallOption) (*RotateAutomationSecretResponse, error)
+	UpdateAutomation(ctx context.Context, in *UpdateAutomationRequest, opts ...grpc.CallOption) (*gen.Automation, error)
+	DeleteAutomation(ctx context.Context, in *DeleteAutomationRequest, opts ...grpc.CallOption) (*DeleteAutomationResponse, error)
+	GetAutomation(ctx context.Context, in *GetAutomationRequest, opts ...grpc.CallOption) (*gen.Automation, error)
+	ListAutomationsForProject(ctx context.Context, in *ListAutomationsForProjectRequest, opts ...grpc.CallOption) (*ListAutomationsForProjectResponse, error)
+	TestAutomation(ctx context.Context, in *TestAutomationRequest, opts ...grpc.CallOption) (*TestAutomationResponse, error)
+	ListAutomationEvents(ctx context.Context, in *ListAutomationEventsRequest, opts ...grpc.CallOption) (*ListAutomationEventsResponse, error)
+	GetAutomationEvent(ctx context.Context, in *GetAutomationEventRequest, opts ...grpc.CallOption) (*gen.AutomationEvent, error)
+	RetryAutomationEvent(ctx context.Context, in *RetryAutomationEventRequest, opts ...grpc.CallOption) (*gen.AutomationEvent, error)
+	MarkChangeRequestApplied(ctx context.Context, in *MarkChangeRequestAppliedRequest, opts ...grpc.CallOption) (*MarkChangeRequestAppliedResponse, error)
 }
 
 type nuzurProductClient struct {
@@ -608,6 +646,16 @@ func (c *nuzurProductClient) GetProjectVersionForUserCached(ctx context.Context,
 	return out, nil
 }
 
+func (c *nuzurProductClient) GetProjectVersionLeanForUser(ctx context.Context, in *GetProjectVersionForUserRequest, opts ...grpc.CallOption) (*gen.ProjectVersion, error) {
+	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
+	out := new(gen.ProjectVersion)
+	err := c.cc.Invoke(ctx, NuzurProduct_GetProjectVersionLeanForUser_FullMethodName, in, out, cOpts...)
+	if err != nil {
+		return nil, err
+	}
+	return out, nil
+}
+
 func (c *nuzurProductClient) GetLatestProjectVersion(ctx context.Context, in *GetLatestProjectVersionRequest, opts ...grpc.CallOption) (*gen.ProjectVersion, error) {
 	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
 	out := new(gen.ProjectVersion)
@@ -622,6 +670,16 @@ func (c *nuzurProductClient) GetLatestProjectVersionForUser(ctx context.Context,
 	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
 	out := new(gen.ProjectVersion)
 	err := c.cc.Invoke(ctx, NuzurProduct_GetLatestProjectVersionForUser_FullMethodName, in, out, cOpts...)
+	if err != nil {
+		return nil, err
+	}
+	return out, nil
+}
+
+func (c *nuzurProductClient) GetLatestProjectVersionLeanForUser(ctx context.Context, in *GetLatestProjectVersionForUserRequest, opts ...grpc.CallOption) (*gen.ProjectVersion, error) {
+	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
+	out := new(gen.ProjectVersion)
+	err := c.cc.Invoke(ctx, NuzurProduct_GetLatestProjectVersionLeanForUser_FullMethodName, in, out, cOpts...)
 	if err != nil {
 		return nil, err
 	}
@@ -1388,6 +1446,136 @@ func (c *nuzurProductClient) GetLocalAgentConnections(ctx context.Context, in *G
 	return out, nil
 }
 
+func (c *nuzurProductClient) IssueProvisioningToken(ctx context.Context, in *IssueProvisioningTokenRequest, opts ...grpc.CallOption) (*IssueProvisioningTokenResponse, error) {
+	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
+	out := new(IssueProvisioningTokenResponse)
+	err := c.cc.Invoke(ctx, NuzurProduct_IssueProvisioningToken_FullMethodName, in, out, cOpts...)
+	if err != nil {
+		return nil, err
+	}
+	return out, nil
+}
+
+func (c *nuzurProductClient) ExchangeProvisioningToken(ctx context.Context, in *ExchangeProvisioningTokenRequest, opts ...grpc.CallOption) (*ExchangeProvisioningTokenResponse, error) {
+	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
+	out := new(ExchangeProvisioningTokenResponse)
+	err := c.cc.Invoke(ctx, NuzurProduct_ExchangeProvisioningToken_FullMethodName, in, out, cOpts...)
+	if err != nil {
+		return nil, err
+	}
+	return out, nil
+}
+
+func (c *nuzurProductClient) CreateAutomation(ctx context.Context, in *CreateAutomationRequest, opts ...grpc.CallOption) (*CreateAutomationResponse, error) {
+	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
+	out := new(CreateAutomationResponse)
+	err := c.cc.Invoke(ctx, NuzurProduct_CreateAutomation_FullMethodName, in, out, cOpts...)
+	if err != nil {
+		return nil, err
+	}
+	return out, nil
+}
+
+func (c *nuzurProductClient) RotateAutomationSecret(ctx context.Context, in *RotateAutomationSecretRequest, opts ...grpc.CallOption) (*RotateAutomationSecretResponse, error) {
+	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
+	out := new(RotateAutomationSecretResponse)
+	err := c.cc.Invoke(ctx, NuzurProduct_RotateAutomationSecret_FullMethodName, in, out, cOpts...)
+	if err != nil {
+		return nil, err
+	}
+	return out, nil
+}
+
+func (c *nuzurProductClient) UpdateAutomation(ctx context.Context, in *UpdateAutomationRequest, opts ...grpc.CallOption) (*gen.Automation, error) {
+	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
+	out := new(gen.Automation)
+	err := c.cc.Invoke(ctx, NuzurProduct_UpdateAutomation_FullMethodName, in, out, cOpts...)
+	if err != nil {
+		return nil, err
+	}
+	return out, nil
+}
+
+func (c *nuzurProductClient) DeleteAutomation(ctx context.Context, in *DeleteAutomationRequest, opts ...grpc.CallOption) (*DeleteAutomationResponse, error) {
+	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
+	out := new(DeleteAutomationResponse)
+	err := c.cc.Invoke(ctx, NuzurProduct_DeleteAutomation_FullMethodName, in, out, cOpts...)
+	if err != nil {
+		return nil, err
+	}
+	return out, nil
+}
+
+func (c *nuzurProductClient) GetAutomation(ctx context.Context, in *GetAutomationRequest, opts ...grpc.CallOption) (*gen.Automation, error) {
+	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
+	out := new(gen.Automation)
+	err := c.cc.Invoke(ctx, NuzurProduct_GetAutomation_FullMethodName, in, out, cOpts...)
+	if err != nil {
+		return nil, err
+	}
+	return out, nil
+}
+
+func (c *nuzurProductClient) ListAutomationsForProject(ctx context.Context, in *ListAutomationsForProjectRequest, opts ...grpc.CallOption) (*ListAutomationsForProjectResponse, error) {
+	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
+	out := new(ListAutomationsForProjectResponse)
+	err := c.cc.Invoke(ctx, NuzurProduct_ListAutomationsForProject_FullMethodName, in, out, cOpts...)
+	if err != nil {
+		return nil, err
+	}
+	return out, nil
+}
+
+func (c *nuzurProductClient) TestAutomation(ctx context.Context, in *TestAutomationRequest, opts ...grpc.CallOption) (*TestAutomationResponse, error) {
+	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
+	out := new(TestAutomationResponse)
+	err := c.cc.Invoke(ctx, NuzurProduct_TestAutomation_FullMethodName, in, out, cOpts...)
+	if err != nil {
+		return nil, err
+	}
+	return out, nil
+}
+
+func (c *nuzurProductClient) ListAutomationEvents(ctx context.Context, in *ListAutomationEventsRequest, opts ...grpc.CallOption) (*ListAutomationEventsResponse, error) {
+	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
+	out := new(ListAutomationEventsResponse)
+	err := c.cc.Invoke(ctx, NuzurProduct_ListAutomationEvents_FullMethodName, in, out, cOpts...)
+	if err != nil {
+		return nil, err
+	}
+	return out, nil
+}
+
+func (c *nuzurProductClient) GetAutomationEvent(ctx context.Context, in *GetAutomationEventRequest, opts ...grpc.CallOption) (*gen.AutomationEvent, error) {
+	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
+	out := new(gen.AutomationEvent)
+	err := c.cc.Invoke(ctx, NuzurProduct_GetAutomationEvent_FullMethodName, in, out, cOpts...)
+	if err != nil {
+		return nil, err
+	}
+	return out, nil
+}
+
+func (c *nuzurProductClient) RetryAutomationEvent(ctx context.Context, in *RetryAutomationEventRequest, opts ...grpc.CallOption) (*gen.AutomationEvent, error) {
+	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
+	out := new(gen.AutomationEvent)
+	err := c.cc.Invoke(ctx, NuzurProduct_RetryAutomationEvent_FullMethodName, in, out, cOpts...)
+	if err != nil {
+		return nil, err
+	}
+	return out, nil
+}
+
+func (c *nuzurProductClient) MarkChangeRequestApplied(ctx context.Context, in *MarkChangeRequestAppliedRequest, opts ...grpc.CallOption) (*MarkChangeRequestAppliedResponse, error) {
+	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
+	out := new(MarkChangeRequestAppliedResponse)
+	err := c.cc.Invoke(ctx, NuzurProduct_MarkChangeRequestApplied_FullMethodName, in, out, cOpts...)
+	if err != nil {
+		return nil, err
+	}
+	return out, nil
+}
+
 // NuzurProductServer is the server API for NuzurProduct service.
 // All implementations must embed UnimplementedNuzurProductServer
 // for forward compatibility.
@@ -1431,8 +1619,15 @@ type NuzurProductServer interface {
 	ListProjectVersionsForUserCached(context.Context, *ListProjectVersionsForUserRequest) (*ListProjectVersionsForUserResponse, error)
 	GetProjectVersionForUser(context.Context, *GetProjectVersionForUserRequest) (*gen.ProjectVersion, error)
 	GetProjectVersionForUserCached(context.Context, *GetProjectVersionForUserRequest) (*gen.ProjectVersion, error)
+	// Returns the project version WITHOUT the heavy schema blobs (entities,
+	// relationships, enums, services, deployments) so the web can render the
+	// editor shell immediately, then fetch the full version for the board.
+	GetProjectVersionLeanForUser(context.Context, *GetProjectVersionForUserRequest) (*gen.ProjectVersion, error)
 	GetLatestProjectVersion(context.Context, *GetLatestProjectVersionRequest) (*gen.ProjectVersion, error)
 	GetLatestProjectVersionForUser(context.Context, *GetLatestProjectVersionForUserRequest) (*gen.ProjectVersion, error)
+	// Latest version metadata only (no schema blobs) — for callers that just need
+	// the uuid/metadata (e.g. the editor's redirect-to-latest).
+	GetLatestProjectVersionLeanForUser(context.Context, *GetLatestProjectVersionForUserRequest) (*gen.ProjectVersion, error)
 	GetLatestProjectVersionUUIDForUser(context.Context, *GetLatestProjectVersionUUIDForUserRequest) (*GetLatestProjectVersionUUIDForUserResponse, error)
 	GetProjectVersionVersion(context.Context, *GetProjectVersionVersionRequest) (*GetProjectVersionVersionResponse, error)
 	GetProjectVersionIdentifier(context.Context, *GetProjectVersionIdentifierRequest) (*GetProjectVersionIdentifierResponse, error)
@@ -1523,6 +1718,22 @@ type NuzurProductServer interface {
 	ListLocalAgents(context.Context, *ListLocalAgentsRequest) (*ListLocalAgentsResponse, error)
 	UpdateLocalAgentConnections(context.Context, *UpdateLocalAgentConnectionsRequest) (*UpdateLocalAgentConnectionsResponse, error)
 	GetLocalAgentConnections(context.Context, *GetLocalAgentConnectionsRequest) (*GetLocalAgentConnectionsResponse, error)
+	// Headless pairing: an authenticated user mints a short-lived provisioning
+	// token; a fresh (non-logged-in) machine exchanges it for agent creds.
+	IssueProvisioningToken(context.Context, *IssueProvisioningTokenRequest) (*IssueProvisioningTokenResponse, error)
+	ExchangeProvisioningToken(context.Context, *ExchangeProvisioningTokenRequest) (*ExchangeProvisioningTokenResponse, error)
+	// automations
+	CreateAutomation(context.Context, *CreateAutomationRequest) (*CreateAutomationResponse, error)
+	RotateAutomationSecret(context.Context, *RotateAutomationSecretRequest) (*RotateAutomationSecretResponse, error)
+	UpdateAutomation(context.Context, *UpdateAutomationRequest) (*gen.Automation, error)
+	DeleteAutomation(context.Context, *DeleteAutomationRequest) (*DeleteAutomationResponse, error)
+	GetAutomation(context.Context, *GetAutomationRequest) (*gen.Automation, error)
+	ListAutomationsForProject(context.Context, *ListAutomationsForProjectRequest) (*ListAutomationsForProjectResponse, error)
+	TestAutomation(context.Context, *TestAutomationRequest) (*TestAutomationResponse, error)
+	ListAutomationEvents(context.Context, *ListAutomationEventsRequest) (*ListAutomationEventsResponse, error)
+	GetAutomationEvent(context.Context, *GetAutomationEventRequest) (*gen.AutomationEvent, error)
+	RetryAutomationEvent(context.Context, *RetryAutomationEventRequest) (*gen.AutomationEvent, error)
+	MarkChangeRequestApplied(context.Context, *MarkChangeRequestAppliedRequest) (*MarkChangeRequestAppliedResponse, error)
 	mustEmbedUnimplementedNuzurProductServer()
 }
 
@@ -1632,11 +1843,17 @@ func (UnimplementedNuzurProductServer) GetProjectVersionForUser(context.Context,
 func (UnimplementedNuzurProductServer) GetProjectVersionForUserCached(context.Context, *GetProjectVersionForUserRequest) (*gen.ProjectVersion, error) {
 	return nil, status.Error(codes.Unimplemented, "method GetProjectVersionForUserCached not implemented")
 }
+func (UnimplementedNuzurProductServer) GetProjectVersionLeanForUser(context.Context, *GetProjectVersionForUserRequest) (*gen.ProjectVersion, error) {
+	return nil, status.Error(codes.Unimplemented, "method GetProjectVersionLeanForUser not implemented")
+}
 func (UnimplementedNuzurProductServer) GetLatestProjectVersion(context.Context, *GetLatestProjectVersionRequest) (*gen.ProjectVersion, error) {
 	return nil, status.Error(codes.Unimplemented, "method GetLatestProjectVersion not implemented")
 }
 func (UnimplementedNuzurProductServer) GetLatestProjectVersionForUser(context.Context, *GetLatestProjectVersionForUserRequest) (*gen.ProjectVersion, error) {
 	return nil, status.Error(codes.Unimplemented, "method GetLatestProjectVersionForUser not implemented")
+}
+func (UnimplementedNuzurProductServer) GetLatestProjectVersionLeanForUser(context.Context, *GetLatestProjectVersionForUserRequest) (*gen.ProjectVersion, error) {
+	return nil, status.Error(codes.Unimplemented, "method GetLatestProjectVersionLeanForUser not implemented")
 }
 func (UnimplementedNuzurProductServer) GetLatestProjectVersionUUIDForUser(context.Context, *GetLatestProjectVersionUUIDForUserRequest) (*GetLatestProjectVersionUUIDForUserResponse, error) {
 	return nil, status.Error(codes.Unimplemented, "method GetLatestProjectVersionUUIDForUser not implemented")
@@ -1865,6 +2082,45 @@ func (UnimplementedNuzurProductServer) UpdateLocalAgentConnections(context.Conte
 }
 func (UnimplementedNuzurProductServer) GetLocalAgentConnections(context.Context, *GetLocalAgentConnectionsRequest) (*GetLocalAgentConnectionsResponse, error) {
 	return nil, status.Error(codes.Unimplemented, "method GetLocalAgentConnections not implemented")
+}
+func (UnimplementedNuzurProductServer) IssueProvisioningToken(context.Context, *IssueProvisioningTokenRequest) (*IssueProvisioningTokenResponse, error) {
+	return nil, status.Error(codes.Unimplemented, "method IssueProvisioningToken not implemented")
+}
+func (UnimplementedNuzurProductServer) ExchangeProvisioningToken(context.Context, *ExchangeProvisioningTokenRequest) (*ExchangeProvisioningTokenResponse, error) {
+	return nil, status.Error(codes.Unimplemented, "method ExchangeProvisioningToken not implemented")
+}
+func (UnimplementedNuzurProductServer) CreateAutomation(context.Context, *CreateAutomationRequest) (*CreateAutomationResponse, error) {
+	return nil, status.Error(codes.Unimplemented, "method CreateAutomation not implemented")
+}
+func (UnimplementedNuzurProductServer) RotateAutomationSecret(context.Context, *RotateAutomationSecretRequest) (*RotateAutomationSecretResponse, error) {
+	return nil, status.Error(codes.Unimplemented, "method RotateAutomationSecret not implemented")
+}
+func (UnimplementedNuzurProductServer) UpdateAutomation(context.Context, *UpdateAutomationRequest) (*gen.Automation, error) {
+	return nil, status.Error(codes.Unimplemented, "method UpdateAutomation not implemented")
+}
+func (UnimplementedNuzurProductServer) DeleteAutomation(context.Context, *DeleteAutomationRequest) (*DeleteAutomationResponse, error) {
+	return nil, status.Error(codes.Unimplemented, "method DeleteAutomation not implemented")
+}
+func (UnimplementedNuzurProductServer) GetAutomation(context.Context, *GetAutomationRequest) (*gen.Automation, error) {
+	return nil, status.Error(codes.Unimplemented, "method GetAutomation not implemented")
+}
+func (UnimplementedNuzurProductServer) ListAutomationsForProject(context.Context, *ListAutomationsForProjectRequest) (*ListAutomationsForProjectResponse, error) {
+	return nil, status.Error(codes.Unimplemented, "method ListAutomationsForProject not implemented")
+}
+func (UnimplementedNuzurProductServer) TestAutomation(context.Context, *TestAutomationRequest) (*TestAutomationResponse, error) {
+	return nil, status.Error(codes.Unimplemented, "method TestAutomation not implemented")
+}
+func (UnimplementedNuzurProductServer) ListAutomationEvents(context.Context, *ListAutomationEventsRequest) (*ListAutomationEventsResponse, error) {
+	return nil, status.Error(codes.Unimplemented, "method ListAutomationEvents not implemented")
+}
+func (UnimplementedNuzurProductServer) GetAutomationEvent(context.Context, *GetAutomationEventRequest) (*gen.AutomationEvent, error) {
+	return nil, status.Error(codes.Unimplemented, "method GetAutomationEvent not implemented")
+}
+func (UnimplementedNuzurProductServer) RetryAutomationEvent(context.Context, *RetryAutomationEventRequest) (*gen.AutomationEvent, error) {
+	return nil, status.Error(codes.Unimplemented, "method RetryAutomationEvent not implemented")
+}
+func (UnimplementedNuzurProductServer) MarkChangeRequestApplied(context.Context, *MarkChangeRequestAppliedRequest) (*MarkChangeRequestAppliedResponse, error) {
+	return nil, status.Error(codes.Unimplemented, "method MarkChangeRequestApplied not implemented")
 }
 func (UnimplementedNuzurProductServer) mustEmbedUnimplementedNuzurProductServer() {}
 func (UnimplementedNuzurProductServer) testEmbeddedByValue()                      {}
@@ -2481,6 +2737,24 @@ func _NuzurProduct_GetProjectVersionForUserCached_Handler(srv interface{}, ctx c
 	return interceptor(ctx, in, info, handler)
 }
 
+func _NuzurProduct_GetProjectVersionLeanForUser_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
+	in := new(GetProjectVersionForUserRequest)
+	if err := dec(in); err != nil {
+		return nil, err
+	}
+	if interceptor == nil {
+		return srv.(NuzurProductServer).GetProjectVersionLeanForUser(ctx, in)
+	}
+	info := &grpc.UnaryServerInfo{
+		Server:     srv,
+		FullMethod: NuzurProduct_GetProjectVersionLeanForUser_FullMethodName,
+	}
+	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
+		return srv.(NuzurProductServer).GetProjectVersionLeanForUser(ctx, req.(*GetProjectVersionForUserRequest))
+	}
+	return interceptor(ctx, in, info, handler)
+}
+
 func _NuzurProduct_GetLatestProjectVersion_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
 	in := new(GetLatestProjectVersionRequest)
 	if err := dec(in); err != nil {
@@ -2513,6 +2787,24 @@ func _NuzurProduct_GetLatestProjectVersionForUser_Handler(srv interface{}, ctx c
 	}
 	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
 		return srv.(NuzurProductServer).GetLatestProjectVersionForUser(ctx, req.(*GetLatestProjectVersionForUserRequest))
+	}
+	return interceptor(ctx, in, info, handler)
+}
+
+func _NuzurProduct_GetLatestProjectVersionLeanForUser_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
+	in := new(GetLatestProjectVersionForUserRequest)
+	if err := dec(in); err != nil {
+		return nil, err
+	}
+	if interceptor == nil {
+		return srv.(NuzurProductServer).GetLatestProjectVersionLeanForUser(ctx, in)
+	}
+	info := &grpc.UnaryServerInfo{
+		Server:     srv,
+		FullMethod: NuzurProduct_GetLatestProjectVersionLeanForUser_FullMethodName,
+	}
+	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
+		return srv.(NuzurProductServer).GetLatestProjectVersionLeanForUser(ctx, req.(*GetLatestProjectVersionForUserRequest))
 	}
 	return interceptor(ctx, in, info, handler)
 }
@@ -3885,6 +4177,240 @@ func _NuzurProduct_GetLocalAgentConnections_Handler(srv interface{}, ctx context
 	return interceptor(ctx, in, info, handler)
 }
 
+func _NuzurProduct_IssueProvisioningToken_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
+	in := new(IssueProvisioningTokenRequest)
+	if err := dec(in); err != nil {
+		return nil, err
+	}
+	if interceptor == nil {
+		return srv.(NuzurProductServer).IssueProvisioningToken(ctx, in)
+	}
+	info := &grpc.UnaryServerInfo{
+		Server:     srv,
+		FullMethod: NuzurProduct_IssueProvisioningToken_FullMethodName,
+	}
+	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
+		return srv.(NuzurProductServer).IssueProvisioningToken(ctx, req.(*IssueProvisioningTokenRequest))
+	}
+	return interceptor(ctx, in, info, handler)
+}
+
+func _NuzurProduct_ExchangeProvisioningToken_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
+	in := new(ExchangeProvisioningTokenRequest)
+	if err := dec(in); err != nil {
+		return nil, err
+	}
+	if interceptor == nil {
+		return srv.(NuzurProductServer).ExchangeProvisioningToken(ctx, in)
+	}
+	info := &grpc.UnaryServerInfo{
+		Server:     srv,
+		FullMethod: NuzurProduct_ExchangeProvisioningToken_FullMethodName,
+	}
+	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
+		return srv.(NuzurProductServer).ExchangeProvisioningToken(ctx, req.(*ExchangeProvisioningTokenRequest))
+	}
+	return interceptor(ctx, in, info, handler)
+}
+
+func _NuzurProduct_CreateAutomation_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
+	in := new(CreateAutomationRequest)
+	if err := dec(in); err != nil {
+		return nil, err
+	}
+	if interceptor == nil {
+		return srv.(NuzurProductServer).CreateAutomation(ctx, in)
+	}
+	info := &grpc.UnaryServerInfo{
+		Server:     srv,
+		FullMethod: NuzurProduct_CreateAutomation_FullMethodName,
+	}
+	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
+		return srv.(NuzurProductServer).CreateAutomation(ctx, req.(*CreateAutomationRequest))
+	}
+	return interceptor(ctx, in, info, handler)
+}
+
+func _NuzurProduct_RotateAutomationSecret_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
+	in := new(RotateAutomationSecretRequest)
+	if err := dec(in); err != nil {
+		return nil, err
+	}
+	if interceptor == nil {
+		return srv.(NuzurProductServer).RotateAutomationSecret(ctx, in)
+	}
+	info := &grpc.UnaryServerInfo{
+		Server:     srv,
+		FullMethod: NuzurProduct_RotateAutomationSecret_FullMethodName,
+	}
+	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
+		return srv.(NuzurProductServer).RotateAutomationSecret(ctx, req.(*RotateAutomationSecretRequest))
+	}
+	return interceptor(ctx, in, info, handler)
+}
+
+func _NuzurProduct_UpdateAutomation_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
+	in := new(UpdateAutomationRequest)
+	if err := dec(in); err != nil {
+		return nil, err
+	}
+	if interceptor == nil {
+		return srv.(NuzurProductServer).UpdateAutomation(ctx, in)
+	}
+	info := &grpc.UnaryServerInfo{
+		Server:     srv,
+		FullMethod: NuzurProduct_UpdateAutomation_FullMethodName,
+	}
+	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
+		return srv.(NuzurProductServer).UpdateAutomation(ctx, req.(*UpdateAutomationRequest))
+	}
+	return interceptor(ctx, in, info, handler)
+}
+
+func _NuzurProduct_DeleteAutomation_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
+	in := new(DeleteAutomationRequest)
+	if err := dec(in); err != nil {
+		return nil, err
+	}
+	if interceptor == nil {
+		return srv.(NuzurProductServer).DeleteAutomation(ctx, in)
+	}
+	info := &grpc.UnaryServerInfo{
+		Server:     srv,
+		FullMethod: NuzurProduct_DeleteAutomation_FullMethodName,
+	}
+	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
+		return srv.(NuzurProductServer).DeleteAutomation(ctx, req.(*DeleteAutomationRequest))
+	}
+	return interceptor(ctx, in, info, handler)
+}
+
+func _NuzurProduct_GetAutomation_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
+	in := new(GetAutomationRequest)
+	if err := dec(in); err != nil {
+		return nil, err
+	}
+	if interceptor == nil {
+		return srv.(NuzurProductServer).GetAutomation(ctx, in)
+	}
+	info := &grpc.UnaryServerInfo{
+		Server:     srv,
+		FullMethod: NuzurProduct_GetAutomation_FullMethodName,
+	}
+	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
+		return srv.(NuzurProductServer).GetAutomation(ctx, req.(*GetAutomationRequest))
+	}
+	return interceptor(ctx, in, info, handler)
+}
+
+func _NuzurProduct_ListAutomationsForProject_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
+	in := new(ListAutomationsForProjectRequest)
+	if err := dec(in); err != nil {
+		return nil, err
+	}
+	if interceptor == nil {
+		return srv.(NuzurProductServer).ListAutomationsForProject(ctx, in)
+	}
+	info := &grpc.UnaryServerInfo{
+		Server:     srv,
+		FullMethod: NuzurProduct_ListAutomationsForProject_FullMethodName,
+	}
+	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
+		return srv.(NuzurProductServer).ListAutomationsForProject(ctx, req.(*ListAutomationsForProjectRequest))
+	}
+	return interceptor(ctx, in, info, handler)
+}
+
+func _NuzurProduct_TestAutomation_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
+	in := new(TestAutomationRequest)
+	if err := dec(in); err != nil {
+		return nil, err
+	}
+	if interceptor == nil {
+		return srv.(NuzurProductServer).TestAutomation(ctx, in)
+	}
+	info := &grpc.UnaryServerInfo{
+		Server:     srv,
+		FullMethod: NuzurProduct_TestAutomation_FullMethodName,
+	}
+	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
+		return srv.(NuzurProductServer).TestAutomation(ctx, req.(*TestAutomationRequest))
+	}
+	return interceptor(ctx, in, info, handler)
+}
+
+func _NuzurProduct_ListAutomationEvents_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
+	in := new(ListAutomationEventsRequest)
+	if err := dec(in); err != nil {
+		return nil, err
+	}
+	if interceptor == nil {
+		return srv.(NuzurProductServer).ListAutomationEvents(ctx, in)
+	}
+	info := &grpc.UnaryServerInfo{
+		Server:     srv,
+		FullMethod: NuzurProduct_ListAutomationEvents_FullMethodName,
+	}
+	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
+		return srv.(NuzurProductServer).ListAutomationEvents(ctx, req.(*ListAutomationEventsRequest))
+	}
+	return interceptor(ctx, in, info, handler)
+}
+
+func _NuzurProduct_GetAutomationEvent_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
+	in := new(GetAutomationEventRequest)
+	if err := dec(in); err != nil {
+		return nil, err
+	}
+	if interceptor == nil {
+		return srv.(NuzurProductServer).GetAutomationEvent(ctx, in)
+	}
+	info := &grpc.UnaryServerInfo{
+		Server:     srv,
+		FullMethod: NuzurProduct_GetAutomationEvent_FullMethodName,
+	}
+	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
+		return srv.(NuzurProductServer).GetAutomationEvent(ctx, req.(*GetAutomationEventRequest))
+	}
+	return interceptor(ctx, in, info, handler)
+}
+
+func _NuzurProduct_RetryAutomationEvent_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
+	in := new(RetryAutomationEventRequest)
+	if err := dec(in); err != nil {
+		return nil, err
+	}
+	if interceptor == nil {
+		return srv.(NuzurProductServer).RetryAutomationEvent(ctx, in)
+	}
+	info := &grpc.UnaryServerInfo{
+		Server:     srv,
+		FullMethod: NuzurProduct_RetryAutomationEvent_FullMethodName,
+	}
+	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
+		return srv.(NuzurProductServer).RetryAutomationEvent(ctx, req.(*RetryAutomationEventRequest))
+	}
+	return interceptor(ctx, in, info, handler)
+}
+
+func _NuzurProduct_MarkChangeRequestApplied_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
+	in := new(MarkChangeRequestAppliedRequest)
+	if err := dec(in); err != nil {
+		return nil, err
+	}
+	if interceptor == nil {
+		return srv.(NuzurProductServer).MarkChangeRequestApplied(ctx, in)
+	}
+	info := &grpc.UnaryServerInfo{
+		Server:     srv,
+		FullMethod: NuzurProduct_MarkChangeRequestApplied_FullMethodName,
+	}
+	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
+		return srv.(NuzurProductServer).MarkChangeRequestApplied(ctx, req.(*MarkChangeRequestAppliedRequest))
+	}
+	return interceptor(ctx, in, info, handler)
+}
+
 // NuzurProduct_ServiceDesc is the grpc.ServiceDesc for NuzurProduct service.
 // It's only intended for direct use with grpc.RegisterService,
 // and not to be introspected or modified (even as a copy)
@@ -4025,12 +4551,20 @@ var NuzurProduct_ServiceDesc = grpc.ServiceDesc{
 			Handler:    _NuzurProduct_GetProjectVersionForUserCached_Handler,
 		},
 		{
+			MethodName: "GetProjectVersionLeanForUser",
+			Handler:    _NuzurProduct_GetProjectVersionLeanForUser_Handler,
+		},
+		{
 			MethodName: "GetLatestProjectVersion",
 			Handler:    _NuzurProduct_GetLatestProjectVersion_Handler,
 		},
 		{
 			MethodName: "GetLatestProjectVersionForUser",
 			Handler:    _NuzurProduct_GetLatestProjectVersionForUser_Handler,
+		},
+		{
+			MethodName: "GetLatestProjectVersionLeanForUser",
+			Handler:    _NuzurProduct_GetLatestProjectVersionLeanForUser_Handler,
 		},
 		{
 			MethodName: "GetLatestProjectVersionUUIDForUser",
@@ -4335,6 +4869,58 @@ var NuzurProduct_ServiceDesc = grpc.ServiceDesc{
 		{
 			MethodName: "GetLocalAgentConnections",
 			Handler:    _NuzurProduct_GetLocalAgentConnections_Handler,
+		},
+		{
+			MethodName: "IssueProvisioningToken",
+			Handler:    _NuzurProduct_IssueProvisioningToken_Handler,
+		},
+		{
+			MethodName: "ExchangeProvisioningToken",
+			Handler:    _NuzurProduct_ExchangeProvisioningToken_Handler,
+		},
+		{
+			MethodName: "CreateAutomation",
+			Handler:    _NuzurProduct_CreateAutomation_Handler,
+		},
+		{
+			MethodName: "RotateAutomationSecret",
+			Handler:    _NuzurProduct_RotateAutomationSecret_Handler,
+		},
+		{
+			MethodName: "UpdateAutomation",
+			Handler:    _NuzurProduct_UpdateAutomation_Handler,
+		},
+		{
+			MethodName: "DeleteAutomation",
+			Handler:    _NuzurProduct_DeleteAutomation_Handler,
+		},
+		{
+			MethodName: "GetAutomation",
+			Handler:    _NuzurProduct_GetAutomation_Handler,
+		},
+		{
+			MethodName: "ListAutomationsForProject",
+			Handler:    _NuzurProduct_ListAutomationsForProject_Handler,
+		},
+		{
+			MethodName: "TestAutomation",
+			Handler:    _NuzurProduct_TestAutomation_Handler,
+		},
+		{
+			MethodName: "ListAutomationEvents",
+			Handler:    _NuzurProduct_ListAutomationEvents_Handler,
+		},
+		{
+			MethodName: "GetAutomationEvent",
+			Handler:    _NuzurProduct_GetAutomationEvent_Handler,
+		},
+		{
+			MethodName: "RetryAutomationEvent",
+			Handler:    _NuzurProduct_RetryAutomationEvent_Handler,
+		},
+		{
+			MethodName: "MarkChangeRequestApplied",
+			Handler:    _NuzurProduct_MarkChangeRequestApplied_Handler,
 		},
 	},
 	Streams:  []grpc.StreamDesc{},

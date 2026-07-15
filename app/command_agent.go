@@ -1,11 +1,13 @@
 package app
 
 import (
+	"context"
 	"fmt"
 	"os"
 	"path"
 	"runtime"
 	"strings"
+	"time"
 
 	"github.com/nuzur/nuzur-cli/constants"
 	"github.com/nuzur/nuzur-cli/files"
@@ -51,6 +53,11 @@ func (i *Implementation) AgentPairCommand() cli.Command {
 				Name:  "force, f",
 				Usage: "re-pair even if this machine is already paired (the previous pairing is NOT revoked; use `nuzur agent unpair` first if you want a clean rotate)",
 			},
+			cli.StringFlag{
+				Name:   "provisioning-token",
+				EnvVar: "NUZUR_PROVISIONING_TOKEN",
+				Usage:  "pair headlessly (no interactive login) by exchanging a short-lived provisioning token minted from nuzur; intended for freshly provisioned servers",
+			},
 		},
 		Action: func(c *cli.Context) error {
 			// Refuse to silently overwrite an existing pairing — that creates
@@ -63,6 +70,11 @@ func (i *Implementation) AgentPairCommand() cli.Command {
 						"  or re-pair while keeping the old row: nuzur agent pair --force",
 					existing,
 				)
+			}
+
+			if token := strings.TrimSpace(c.String("provisioning-token")); token != "" {
+				_, err := i.pairLocalAgentWithProvisioningToken(token)
+				return err
 			}
 
 			_, err := i.pairLocalAgent()
@@ -108,6 +120,35 @@ func (i *Implementation) pairLocalAgent() (string, error) {
 	}
 
 	fmt.Printf("Paired local agent.\n  uuid: %s\n  machine: %s (%s)\n  credentials stored at: %s\n",
+		res.GetLocalAgentUuid(), hostname, runtime.GOOS, path.Dir(files.LocalAgentTokenFilePath()))
+	return res.GetLocalAgentUuid(), nil
+}
+
+// pairLocalAgentWithProvisioningToken registers this machine as a local agent
+// using a short-lived provisioning token instead of an interactive login. This
+// is the headless path for freshly provisioned servers (e.g. a droplet) that
+// have no logged-in nuzur session. The token is single-use; the exchange
+// returns permanent agent credentials, persisted exactly as manual pairing.
+func (i *Implementation) pairLocalAgentWithProvisioningToken(provisioningToken string) (string, error) {
+	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
+	defer cancel()
+
+	hostname, _ := os.Hostname()
+	res, err := i.productClient.ProductClient.ExchangeProvisioningToken(ctx, &pb.ExchangeProvisioningTokenRequest{
+		ProvisioningToken: provisioningToken,
+		MachineName:       hostname,
+		Os:                runtime.GOOS,
+		CliVersion:        constants.CLI_VERSION,
+	})
+	if err != nil {
+		return "", fmt.Errorf("error exchanging provisioning token: %v", err)
+	}
+
+	if err := writeLocalAgentCreds(res.GetLocalAgentUuid(), res.GetLocalAgentToken()); err != nil {
+		return "", fmt.Errorf("error writing local agent credentials: %v", err)
+	}
+
+	fmt.Printf("Paired local agent (headless).\n  uuid: %s\n  machine: %s (%s)\n  credentials stored at: %s\n",
 		res.GetLocalAgentUuid(), hostname, runtime.GOOS, path.Dir(files.LocalAgentTokenFilePath()))
 	return res.GetLocalAgentUuid(), nil
 }

@@ -59,6 +59,7 @@ type extRunFlags struct {
 	reuseConfig    bool
 	nonInteractive bool
 	jsonOutput     bool
+	confirmSteps   bool
 }
 
 // hasConfigInput reports whether the caller supplied a config non-interactively.
@@ -83,6 +84,7 @@ func extensionRunFlags() []cli.Flag {
 		cli.BoolFlag{Name: "reuse-config", Usage: "Reuse the last-used config for this extension without prompting"},
 		cli.BoolFlag{Name: "non-interactive", Usage: "Never prompt; fail if required input is missing (for scripts and AI agents)"},
 		cli.BoolFlag{Name: "json", Usage: "Emit machine-readable JSON output (implies non-interactive)"},
+		cli.BoolFlag{Name: "confirm-steps", Usage: "Auto-approve confirmation steps (e.g. the SQL-diff review in sql-push) so step-based extensions run non-interactively"},
 	}
 }
 
@@ -97,6 +99,7 @@ func extRunFlagsFromContext(c *cli.Context) extRunFlags {
 		reuseConfig:    c.Bool("reuse-config"),
 		nonInteractive: c.Bool("non-interactive"),
 		jsonOutput:     c.Bool("json"),
+		confirmSteps:   c.Bool("confirm-steps"),
 	}
 }
 
@@ -177,6 +180,7 @@ func (i *Implementation) runExtensionFlow(extensionIdentifier string, flags extR
 		ProjectVersionUUID: targets.projectVersion.Uuid,
 		ConfigValues:       configValues,
 		OutputPath:         outputPath,
+		AutoConfirmSteps:   flags.confirmSteps,
 	})
 	if err != nil {
 		return i.failRun(flags, err)

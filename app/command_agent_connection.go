@@ -33,42 +33,82 @@ func (i *Implementation) AgentConnectionCommand() cli.Command {
 func (i *Implementation) AgentConnectionAddCommand() cli.Command {
 	return cli.Command{
 		Name:      "add",
-		Usage:     "Add a new local DB connection (prompts for name + connection details, persists locally, pairs this machine if needed, and publishes the catalog to nuzur)",
+		Usage:     "Add a new local DB connection (persists locally, pairs this machine if needed, and publishes the catalog to nuzur). Prompts interactively, or pass --driver/--dsn for scripted/headless use.",
 		ArgsUsage: "[name]",
+		Flags: []cli.Flag{
+			cli.StringFlag{Name: "driver", Usage: "Connection driver (mysql|postgres); skips the driver prompt"},
+			cli.StringFlag{Name: "dsn", Usage: "Connection DSN; skips the connection-details prompt"},
+			cli.StringFlag{Name: "schema", Usage: "Default schema (postgres); optional"},
+			cli.StringFlag{Name: "uuid", Usage: "Use a specific connection UUID instead of generating one"},
+			cli.BoolFlag{Name: "no-publish", Usage: "Register locally only; do not publish the catalog to nuzur (headless boxes have no user login to publish with)"},
+			cli.BoolFlag{Name: "non-interactive", Usage: "Never prompt; requires [name], --driver and --dsn"},
+		},
 		Action: func(c *cli.Context) error {
 			reg, err := connections.Load()
 			if err != nil {
 				return err
 			}
 
-			name, err := readNameArg(c, reg)
-			if err != nil {
-				return err
-			}
+			driverFlag := c.String("driver")
+			dsnFlag := c.String("dsn")
+			scripted := c.Bool("non-interactive") || driverFlag != "" || dsnFlag != ""
 
-			driver, err := promptDriver()
-			if err != nil {
-				return err
-			}
-			dsn, database, err := promptDSNDetails(driver)
-			if err != nil {
-				return err
-			}
-
-			// MySQL LOCAL connections no longer pin a database in the DSN —
-			// the user picks the schema per query in the web. So default_schema
-			// stays empty for mysql and the picker forces a selection. Postgres
-			// still needs a default schema within the connected database, so we
-			// prompt for it (defaulting to `public`).
-			var defaultSchema string
-			if driver == "postgres" {
-				defaultSchema, err = promptShort("Default schema (within "+database+")", "public", false, requireNonEmpty)
+			var name string
+			if scripted {
+				if !c.Args().Present() {
+					return fmt.Errorf("a [name] argument is required for a non-interactive connection add")
+				}
+				name = c.Args().First()
+				// Idempotent: drop any existing entry with the same name or uuid
+				// so a re-run (e.g. redeploy, which rotates the DB password)
+				// upserts the connection instead of erroring on a duplicate.
+				if _, dup := reg.FindByName(name); dup {
+					_, _ = reg.Remove(name)
+				}
+				if u := c.String("uuid"); u != "" {
+					_, _ = reg.Remove(u)
+				}
+			} else {
+				name, err = readNameArg(c, reg)
 				if err != nil {
 					return err
 				}
 			}
 
+			var driver, dsn, defaultSchema string
+			if scripted {
+				driver = driverFlag
+				if driver != "mysql" && driver != "postgres" {
+					return fmt.Errorf("--driver must be mysql or postgres")
+				}
+				dsn = dsnFlag
+				if dsn == "" {
+					return fmt.Errorf("--dsn is required for a non-interactive connection add")
+				}
+				defaultSchema = c.String("schema")
+			} else {
+				driver, err = promptDriver()
+				if err != nil {
+					return err
+				}
+				var database string
+				dsn, database, err = promptDSNDetails(driver)
+				if err != nil {
+					return err
+				}
+				// MySQL LOCAL connections no longer pin a database in the DSN —
+				// the user picks the schema per query in the web, so default_schema
+				// stays empty for mysql. Postgres still needs a default schema.
+				if driver == "postgres" {
+					defaultSchema, err = promptShort("Default schema (within "+database+")", "public", false, requireNonEmpty)
+					if err != nil {
+						return err
+					}
+				}
+			}
+
 			entry, err := reg.Add(connections.Entry{
+				UUID:          c.String("uuid"),
 				Name:          name,
 				Driver:        driver,
 				DBType:        driverToDBType(driver),
@@ -83,6 +123,10 @@ func (i *Implementation) AgentConnectionAddCommand() cli.Command {
 			}
 			fmt.Printf("Added connection %q (uuid: %s, dsn: %s).\n", entry.Name, entry.UUID, maskDSN(entry.DSN))
 
+			if c.Bool("no-publish") {
+				fmt.Println("Registered locally (catalog not published).")
+				return nil
+			}
 			if err := i.publishCatalog(reg); err != nil {
 				fmt.Printf("Saved locally but publishing the catalog to nuzur failed: %v\n", err)
 				fmt.Println("Run `nuzur agent connection list` to retry; the entry is safe on disk.")

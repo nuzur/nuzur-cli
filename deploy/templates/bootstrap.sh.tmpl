@@ -1,0 +1,218 @@
+#!/usr/bin/env bash
+# nuzur deploy bootstrap for {{.Identifier}} (idempotent; Ubuntu/Debian).
+set -euo pipefail
+
+# Pin HOME and USER so the nuzur CLI's config path AND its keyring passphrase
+# (derived partly from $USER) are consistent between this bootstrap and the
+# systemd agent service. Without HOME, creds land in a fallback dir the daemon
+# can't find; without a matching USER, the daemon can't decrypt the stored DSN.
+export HOME=/root
+export USER=root
+
+echo "[nuzur-deploy] bootstrapping {{.Identifier}}"
+export DEBIAN_FRONTEND=noninteractive
+
+# A fresh box often has unattended-upgrades / apt-daily holding the dpkg lock at
+# boot. Without this, the first `apt-get` races the lock and, under `set -e`,
+# aborts the whole bootstrap. Make every apt-get wait for the lock instead.
+mkdir -p /etc/apt/apt.conf.d
+echo 'DPkg::Lock::Timeout "300";' > /etc/apt/apt.conf.d/99nuzur-lock-timeout
+
+# ── 1. Docker ────────────────────────────────────────────────────────────────
+if ! command -v docker >/dev/null 2>&1; then
+  echo "[nuzur-deploy] installing docker + base packages"
+  apt-get update -y
+  apt-get install -y ca-certificates curl gnupg ufw openssl docker.io
+  systemctl enable --now docker
+fi
+
+{{if eq .DBEngine "mysql"}}
+# ── 2. MySQL (localhost-only) ─────────────────────────────────────────────────
+if ! command -v mysqld >/dev/null 2>&1 && ! command -v mariadbd >/dev/null 2>&1; then
+  echo "[nuzur-deploy] installing mysql-server"
+  apt-get update -y
+  apt-get install -y default-mysql-server || apt-get install -y mysql-server
+fi
+mkdir -p /etc/mysql/conf.d
+cat > /etc/mysql/conf.d/nuzur.cnf <<'CNF'
+[mysqld]
+bind-address = 127.0.0.1
+innodb_buffer_pool_size = {{.InnoDBBufferMB}}M
+CNF
+systemctl enable --now mysql 2>/dev/null || systemctl enable --now mariadb 2>/dev/null || true
+systemctl restart mysql 2>/dev/null || systemctl restart mariadb 2>/dev/null || true
+
+# ── 3. App DB + least-privilege user. The password is PERSISTED on the box and
+#       reused on every run, so a re-deploy (or a retried, partially-failed one)
+#       never rotates it out from under the app config, the agent connection, or
+#       the already-published nuzur catalog. ALTER USER always converges MySQL to
+#       the persisted value, so a re-run is self-healing rather than destructive.
+mkdir -p /etc/nuzur
+DB_PASSWORD_FILE=/etc/nuzur/db_password
+if [ -s "$DB_PASSWORD_FILE" ]; then
+  DB_PASSWORD="$(cat "$DB_PASSWORD_FILE")"
+else
+  DB_PASSWORD="$(openssl rand -hex 24)"
+  ( umask 077; printf '%s' "$DB_PASSWORD" > "$DB_PASSWORD_FILE" )
+fi
+mysql <<SQL
+CREATE DATABASE IF NOT EXISTS \`{{.DBName}}\`;
+CREATE USER IF NOT EXISTS '{{.DBUser}}'@'localhost' IDENTIFIED BY '${DB_PASSWORD}';
+ALTER USER '{{.DBUser}}'@'localhost' IDENTIFIED BY '${DB_PASSWORD}';
+GRANT ALL PRIVILEGES ON \`{{.DBName}}\`.* TO '{{.DBUser}}'@'localhost';
+FLUSH PRIVILEGES;
+SQL
+{{end}}
+
+# ── 4. App config: base.yaml (from generated source) + prod.yaml overlay ──────
+mkdir -p {{.ConfigDir}}
+if [ -f "{{.RemoteSrcDir}}/config/base.yaml" ]; then
+  cp "{{.RemoteSrcDir}}/config/base.yaml" "{{.ConfigDir}}/base.yaml"
+fi
+{{if .JWTAuth}}
+# The generated base.yaml ships auth.jwt.key as a placeholder; generate a real
+# signing key so the JWT auth server can mint/verify tokens. Persisted and reused
+# across runs — a re-deploy that rotated the key would invalidate every issued
+# token, so keep the same key once set.
+JWT_KEY_FILE=/etc/nuzur/jwt_key
+if [ -s "$JWT_KEY_FILE" ]; then
+  JWT_KEY="$(cat "$JWT_KEY_FILE")"
+else
+  JWT_KEY="$(openssl rand -hex 32)"
+  ( umask 077; printf '%s' "$JWT_KEY" > "$JWT_KEY_FILE" )
+fi
+{{end}}
+cat > {{.ConfigDir}}/prod.yaml <<YAML
+db:
+  - name: {{.DBName}}
+    host: 127.0.0.1
+    port: 3306
+    user: {{.DBUser}}
+    pswd: ${DB_PASSWORD}
+    params: parseTime=true
+    driver: "{{.DBEngine}}"
+{{if .JWTAuth}}auth:
+  jwt:
+    key: ${JWT_KEY}
+{{end}}YAML
+chmod 600 {{.ConfigDir}}/prod.yaml
+
+# ── 5. Build + run the generated API (host networking → reaches localhost DB) ──
+echo "[nuzur-deploy] building app image"
+docker build -t {{.ImageName}} "{{.RemoteSrcDir}}"
+cat > /etc/systemd/system/{{.Identifier}}-api.service <<UNIT
+[Unit]
+Description=nuzur generated API ({{.Identifier}})
+After=docker.service network-online.target
+Requires=docker.service
+
+[Service]
+Restart=always
+ExecStartPre=-/usr/bin/docker rm -f {{.ContainerName}}
+ExecStart=/usr/bin/docker run --rm --name {{.ContainerName}} --network host \
+  -v {{.ConfigDir}}:{{.ConfigDir}}:ro \
+  -e CONFIG={{.ConfigDir}} -e ENV=prod \
+  {{.ImageName}}
+ExecStop=-/usr/bin/docker rm -f {{.ContainerName}}
+
+[Install]
+WantedBy=multi-user.target
+UNIT
+systemctl daemon-reload
+systemctl enable {{.Identifier}}-api.service
+# Always restart (not `enable --now`, which is a no-op when the unit is already
+# running) so a re-deploy picks up the freshly built image instead of leaving the
+# previous container in place. ExecStartPre recreates the container from :latest.
+systemctl restart {{.Identifier}}-api.service
+
+# ── 6. nuzur agent: headless pair + start against the localhost DB ────────────
+{{if .CLIInstallCmd}}{{.CLIInstallCmd}}{{else}}
+# install the nuzur CLI from GitHub releases (goreleaser assets)
+NUZUR_ARCH="$(uname -m)"
+case "$NUZUR_ARCH" in
+  x86_64|amd64) NUZUR_ARCH=x86_64 ;;
+  aarch64|arm64) NUZUR_ARCH=arm64 ;;
+  i386|i686) NUZUR_ARCH=i386 ;;
+  *) echo "[nuzur-deploy] unsupported architecture: $NUZUR_ARCH" >&2; exit 1 ;;
+esac
+curl -fsSL "https://github.com/nuzur/nuzur-cli/releases/latest/download/nuzur-cli_Linux_${NUZUR_ARCH}.tar.gz" -o /tmp/nuzur-cli.tar.gz
+tar -xzf /tmp/nuzur-cli.tar.gz -C /tmp nuzur-cli
+install -m 0755 /tmp/nuzur-cli {{.NuzurBin}}
+{{end}}
+{{.NuzurBin}} agent pair --provisioning-token '{{.ProvisioningToken}}'
+
+# register the localhost DB as a named connection (local-only; the deploy
+# command publishes the catalog to nuzur with the user's token).
+{{.NuzurBin}} agent connection add '{{.ConnName}}' --uuid '{{.ConnUUID}}' --driver {{.DBEngine}} --dsn "{{.DBUser}}:${DB_PASSWORD}@tcp(127.0.0.1:3306)/{{.DBName}}?parseTime=true" --no-publish --non-interactive
+
+install -m 600 /dev/null /etc/nuzur/agent.env
+cat > /etc/nuzur/agent.env <<ENV
+NUZUR_AGENT_DRIVER={{.DBEngine}}
+NUZUR_AGENT_DSN={{.DBUser}}:${DB_PASSWORD}@tcp(127.0.0.1:3306)/{{.DBName}}?parseTime=true
+ENV
+chmod 600 /etc/nuzur/agent.env
+cat > /etc/systemd/system/nuzur-agent.service <<UNIT
+[Unit]
+Description=nuzur local agent
+After=network-online.target
+
+[Service]
+Restart=always
+# HOME + USER must match the bootstrap (where creds/registry were written and
+# the DSN was encrypted): HOME locates the config dir, USER seeds the keyring
+# passphrase. Mismatch → daemon can't find its pairing or decrypt the DSN.
+Environment=HOME=/root
+Environment=USER=root
+EnvironmentFile=/etc/nuzur/agent.env
+ExecStart={{.NuzurBin}} agent start
+
+[Install]
+WantedBy=multi-user.target
+UNIT
+systemctl daemon-reload
+systemctl enable --now nuzur-agent.service
+
+# ── 7. Caddy front door: routes gRPC vs REST/auth/info on a single port. ──────
+# With a domain it serves HTTPS/443 with an automatic Let's Encrypt cert; with
+# no domain (IP-only) it serves plain HTTP/80 — no self-signed cert, so no TLS
+# trust warnings in browsers or tooling.
+if ! command -v caddy >/dev/null 2>&1; then
+  echo "[nuzur-deploy] installing caddy"
+  apt-get install -y debian-keyring debian-archive-keyring apt-transport-https curl gnupg
+  curl -1sLf 'https://dl.cloudsmith.io/public/caddy/stable/gpg.key' | gpg --dearmor -o /usr/share/keyrings/caddy-stable-archive-keyring.gpg
+  curl -1sLf 'https://dl.cloudsmith.io/public/caddy/stable/debian.deb.txt' | tee /etc/apt/sources.list.d/caddy-stable.list >/dev/null
+  apt-get update -y
+  apt-get install -y caddy
+fi
+mkdir -p /etc/caddy
+cat > /etc/caddy/Caddyfile <<'CADDY'
+{{if .Domain}}{{.Domain}} {
+{{else}}:80 {
+{{end}}	encode gzip
+{{if .GRPCEnabled}}	@grpc header Content-Type application/grpc*
+	handle @grpc {
+		reverse_proxy h2c://127.0.0.1:{{.GRPCPort}}
+	}
+{{end}}	handle {
+		reverse_proxy 127.0.0.1:{{.HTTPPort}}
+	}
+}
+CADDY
+systemctl enable --now caddy 2>/dev/null || true
+systemctl reload caddy 2>/dev/null || systemctl restart caddy
+
+# ── 8. Firewall: SSH + the Caddy front door only — app ports stay internal. ───
+ufw allow 22/tcp
+ufw allow 80/tcp
+{{if .Domain}}ufw allow 443/tcp
+{{end}}ufw --force enable
+
+{{if eq .DBEngine "mysql"}}
+# ── 8. Nightly backup (14-day local retention) ────────────────────────────────
+mkdir -p /var/backups/nuzur
+cat > /etc/cron.d/nuzur-backup <<'CRON'
+0 3 * * * root mysqldump {{.DBName}} 2>/dev/null | gzip > /var/backups/nuzur/{{.DBName}}-$(date +\%F).sql.gz; find /var/backups/nuzur -name '*.sql.gz' -mtime +14 -delete
+CRON
+{{end}}
+
+echo "[nuzur-deploy] bootstrap complete for {{.Identifier}}"

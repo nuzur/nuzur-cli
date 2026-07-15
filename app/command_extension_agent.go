@@ -157,7 +157,9 @@ func (i *Implementation) resolveRunTargets(flags extRunFlags, opts resolveOption
 	var extension *nemgen.Extension
 	switch {
 	case extIdentifier != "":
-		extension, err = i.FindGeneratorExtension(er, extIdentifier)
+		// Resolve any published extension by identifier (generator or not) so
+		// step-based extensions like sql-push-local are runnable too.
+		extension, err = er.FindExtensionByIdentifier(extIdentifier)
 	case opts.interactive:
 		extension, err = i.SelectPublicExtension(er)
 	default:

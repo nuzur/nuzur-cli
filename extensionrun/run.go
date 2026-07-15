@@ -36,6 +36,10 @@ type RunParams struct {
 	ProjectVersionUUID string
 	ConfigValues       map[string]interface{}
 	OutputPath         string
+	// AutoConfirmSteps auto-approves CONFIRMATION steps (e.g. the SQL-diff
+	// review in sql-push) so step-based extensions can run non-interactively.
+	// Without it, a confirmation step is an error on the non-interactive path.
+	AutoConfirmSteps bool
 }
 
 // RunResult is the structured outcome of an extension run, suitable for
@@ -92,12 +96,14 @@ func (i *Implementation) Run(params RunParams) (*RunResult, error) {
 		// synchronous — result is already available
 		return i.handleFinalResponse(resp.Data.Final, params.OutputPath, resp.ExecutionUuid)
 
-	case extensiongen.ExecutionResponseType_EXECUTION_RESPONSE_TYPE_ASYNC:
-		// async — poll the extension server until done
+	case extensiongen.ExecutionResponseType_EXECUTION_RESPONSE_TYPE_ASYNC,
+		extensiongen.ExecutionResponseType_EXECUTION_RESPONSE_TYPE_STEP:
+		// async or step-based — poll the extension server until done, handling
+		// any confirmation steps along the way.
 		if resp.Data != nil && resp.Data.Async != nil && resp.Data.Async.StatusMessage != "" {
 			fmt.Fprintf(os.Stderr, "Async execution: %s\n", resp.Data.Async.StatusMessage)
 		}
-		return i.pollExtensionExecution(extClient, tokenBytes, params.Extension.Identifier, resp.ExecutionUuid, params.OutputPath)
+		return i.pollExtensionExecution(extClient, tokenBytes, params.Extension.Identifier, resp.ExecutionUuid, params.OutputPath, params.AutoConfirmSteps)
 
 	default:
 		return nil, fmt.Errorf("unsupported execution response type: %v", resp.Type)
@@ -110,8 +116,10 @@ func (i *Implementation) pollExtensionExecution(
 	extensionIdentifier string,
 	executionUUID string,
 	outputPath string,
+	autoConfirm bool,
 ) (*RunResult, error) {
 	lastStatus := ""
+	submitted := map[string]bool{} // confirmation steps already answered
 	for {
 		ctx := metadata.NewOutgoingContext(
 			contextWithTimeout(30),
@@ -140,6 +148,23 @@ func (i *Implementation) pollExtensionExecution(
 		case extensiongen.ExecutionStatus_EXECUTION_STATUS_CANCELLED:
 			return nil, errors.New("execution was cancelled")
 		case extensiongen.ExecutionStatus_EXECUTION_STATUS_INPROGRESS:
+			// A CONFIRMATION step blocks until answered — auto-confirm it (once)
+			// so step-based extensions complete non-interactively.
+			if exec.Type == extensiongen.ExecutionResponseType_EXECUTION_RESPONSE_TYPE_STEP &&
+				exec.Data != nil && exec.Data.Step != nil &&
+				exec.Data.Step.Type == extensiongen.ExecutionStepType_EXECUTION_STEP_TYPE_CONFIRMATION {
+				stepID := exec.Data.Step.StepIdentifier
+				if !submitted[stepID] {
+					if !autoConfirm {
+						return nil, fmt.Errorf("extension is waiting on confirmation step %q and this run is non-interactive; enable step auto-confirmation to proceed", stepID)
+					}
+					fmt.Fprintf(os.Stderr, "Auto-confirming step: %s\n", stepID)
+					if err := i.submitStep(extClient, tokenBytes, extensionIdentifier, executionUUID, stepID); err != nil {
+						return nil, err
+					}
+					submitted[stepID] = true
+				}
+			}
 			msg := exec.StatusMsg
 			if exec.CurrentStepIdentifier != "" {
 				msg = fmt.Sprintf("%s (step: %s)", msg, exec.CurrentStepIdentifier)
@@ -160,6 +185,26 @@ func (i *Implementation) pollExtensionExecution(
 	}
 }
 
+// submitStep answers a confirmation step, confirming it so the extension can
+// proceed (used for non-interactive step-based runs like SQL push).
+func (i *Implementation) submitStep(extClient extensiongen.NuzurExtensionClient, tokenBytes []byte, extensionIdentifier, executionUUID, stepID string) error {
+	ctx := metadata.NewOutgoingContext(
+		contextWithTimeout(30),
+		metadata.New(map[string]string{
+			"authorization": fmt.Sprintf("bearer %s", string(tokenBytes)),
+			"extension":     extensionIdentifier,
+		}),
+	)
+	if _, err := extClient.SubmitExectuionStep(ctx, &extensiongen.SubmitExectuionStepRequest{
+		ExecutionUuid:  executionUUID,
+		StepIdentifier: stepID,
+		Confirmed:      true,
+	}); err != nil {
+		return fmt.Errorf("submitting confirmation step %q: %w", stepID, err)
+	}
+	return nil
+}
+
 func (i *Implementation) handleFinalResponse(final *extensiongen.ExecutionResponseTypeFinalData, outputPath, executionUUID string) (*RunResult, error) {
 	if final == nil {
 		return nil, errors.New("no final data in execution response")
@@ -168,7 +213,9 @@ func (i *Implementation) handleFinalResponse(final *extensiongen.ExecutionRespon
 		return nil, fmt.Errorf("execution failed: %s", final.StatusMessage)
 	}
 	if final.FileDownloadUrl == "" {
-		return nil, errors.New("execution succeeded but no download URL provided")
+		// Non-generator extensions (e.g. SQL push) produce no downloadable file;
+		// a successful terminal status is the outcome.
+		return &RunResult{Status: "succeeded", ExecutionUUID: executionUUID, OutputPath: outputPath}, nil
 	}
 
 	ctx, err := productclient.ClientContext()
