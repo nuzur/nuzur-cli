@@ -134,34 +134,29 @@ func (i *Implementation) runDeploy(c *cli.Context) error {
 	}
 
 	identifier := stringValue(configValues, "identifier", targets.project.Name)
-	// The generated app binds whatever the generated config/base.yaml says, and
-	// the generator's default (6009) has drifted from any hardcoded fallback
-	// here — so read the ports back from the generated source. Caddy's routes
-	// MUST match these exactly or the gRPC/HTTP proxy hits a dead port. Fall
-	// back to the extension config, then to the generator's own defaults.
-	genGRPCPort, genHTTPPort := readGeneratedPorts(sourceRoot)
 	jwtAuth := generatedHasJWTAuth(sourceRoot)
-	grpcPort := firstNonEmpty(genGRPCPort, stringValue(configValues, "grpc_port", ""), "6009")
-	// The HTTP port is always bound by the generated app (REST server, or the
-	// httpServer fallback that also serves JWT auth + the info page), so always
-	// expose it — not only when REST is enabled.
-	httpPort := firstNonEmpty(genHTTPPort, stringValue(configValues, "http_port", ""), "8080")
 
 	// The localhost DB is registered as a named agent connection with this
 	// UUID (locally on the box), then published to nuzur from here so the
-	// schema can be pushed to it.
+	// schema can be pushed to it. Ports are now allocated on the box (written
+	// into the project's prod.yaml) so N apps can coexist — the CLI no longer
+	// pins them.
 	dbName := sanitizeDBName(identifier)
 	connName := identifier + "-db"
+	host := c.String("host")
 
-	// Re-deploy detection: if this host+identifier was deployed before, reuse the
-	// existing agent + connection UUID rather than pairing a fresh agent. This
-	// keeps the box's identity, the published connection, and the data-manager
-	// link stable across re-deploys (and avoids orphaning the previous agent).
-	prior := findPriorDeployment(c.String("host"), identifier)
+	// Multi-project on one box: the box has ONE shared agent (reused for every
+	// project on it — box-level), while the connection UUID + deployment record
+	// are per-project (host+identifier).
+	prior := findPriorDeployment(host, identifier)
+	// Guard: refuse if this identifier on this host maps to a DIFFERENT project —
+	// they'd share the derived DB name/user and collide. Require a distinct id.
+	if prior != nil && prior.ProjectUUID != "" && prior.ProjectUUID != targets.project.Uuid {
+		return fmt.Errorf("host %s already runs a different project under identifier %q (project %s) — deploy the new project under a distinct identifier", host, identifier, prior.ProjectUUID)
+	}
+	reuseAgentUUID := findBoxAgent(host)
 	connUUID := ""
-	reuseAgentUUID := ""
 	if prior != nil {
-		reuseAgentUUID = prior.LocalAgentUUID
 		connUUID = prior.ConnUUID
 	}
 	if connUUID == "" {
@@ -172,7 +167,7 @@ func (i *Implementation) runDeploy(c *cli.Context) error {
 		connUUID = connU.String()
 	}
 	if reuseAgentUUID != "" {
-		outputtools.PrintlnColoredErr("Re-deploy: reusing the existing agent ("+reuseAgentUUID+") — no new pairing.", outputtools.Blue)
+		outputtools.PrintlnColoredErr("Reusing the box's existing agent ("+reuseAgentUUID+") — no new pairing.", outputtools.Blue)
 	}
 
 	// 4. Mint a single-use provisioning token for headless pairing.
@@ -239,8 +234,6 @@ func (i *Implementation) runDeploy(c *cli.Context) error {
 		DBEngine:          deploy.DBMySQL,
 		DBName:            dbName,
 		DBUser:            dbName + "_app",
-		GRPCPort:          grpcPort,
-		HTTPPort:          httpPort,
 		GRPCEnabled:       boolValue(configValues, "grpc_server_enabled"),
 		JWTAuth:           jwtAuth,
 		RemoteSrcDir:      remoteSrc,
@@ -249,6 +242,7 @@ func (i *Implementation) runDeploy(c *cli.Context) error {
 		ConnUUID:          connUUID,
 		ConnName:          connName,
 		Domain:            c.String("domain"),
+		Host:              host,
 	})
 	if err != nil {
 		return err
@@ -284,17 +278,29 @@ func (i *Implementation) runDeploy(c *cli.Context) error {
 		outputtools.PrintlnColoredErr("Schema auto-apply skipped: "+err.Error(), outputtools.Yellow)
 	}
 
-	// Everything is fronted by Caddy. With a --domain, Caddy serves HTTPS on 443
-	// with a real (Let's Encrypt) cert; without one, an IP-only box serves plain
-	// HTTP on 80 — no self-signed cert, so no browser/tooling TLS warnings.
-	pubHost := target.Host
-	useHTTPS := c.String("domain") != ""
-	if useHTTPS {
-		pubHost = c.String("domain")
+	// Read back the resolved front-door URL the bootstrap wrote: a domain project
+	// → https://{domain}; an IP-only project → http://{host}:{auto-assigned port}
+	// (the public port is allocated on the box so N projects can coexist). Falls
+	// back to a best-effort compose if the readback fails.
+	projectDir := "/etc/nuzur/" + identifier
+	publicURL, _ := runner.Capture(ctx, "cat "+projectDir+"/url 2>/dev/null")
+	publicURL = strings.TrimSpace(publicURL)
+	if publicURL == "" {
+		if c.String("domain") != "" {
+			publicURL = "https://" + c.String("domain")
+		} else {
+			publicURL = "http://" + target.Host
+		}
 	}
-	scheme := "http"
-	if useHTTPS {
-		scheme = "https"
+	useHTTPS := strings.HasPrefix(publicURL, "https://")
+	// gRPC dial target host:port (grpcurl needs an explicit port).
+	grpcTarget := strings.TrimPrefix(strings.TrimPrefix(publicURL, "https://"), "http://")
+	if !strings.Contains(grpcTarget, ":") {
+		if useHTTPS {
+			grpcTarget += ":443"
+		} else {
+			grpcTarget += ":80"
+		}
 	}
 
 	// 11. Build the data-manager deep link (opens the deployed DB directly,
@@ -322,7 +328,9 @@ func (i *Implementation) runDeploy(c *cli.Context) error {
 		LocalAgentUUID:     agentUUID,
 		ConnUUID:           connUUID,
 		DBEngine:           deploy.DBMySQL,
-		APIURL:             fmt.Sprintf("%s://%s", scheme, pubHost),
+		Domain:             c.String("domain"),
+		APIURL:             publicURL,
+		PublicURL:          publicURL,
 		DataManagerURL:     dataManagerURL,
 		CreatedAt:          time.Now(),
 	}
@@ -337,33 +345,33 @@ func (i *Implementation) runDeploy(c *cli.Context) error {
 	fmt.Printf("  connection:    %s (%s)\n", connName, connUUID)
 	fmt.Printf("  teardown:      nuzur destroy %s\n", dep.ID)
 
-	// What's deployed: everything is fronted by Caddy (HTTPS/443 with a domain,
-	// otherwise plain HTTP/80).
+	// What's deployed: this project's own Caddy front door (HTTPS via a domain,
+	// otherwise plain HTTP on its auto-assigned public port).
 	if useHTTPS {
-		outputtools.PrintlnColored("\nWhat's deployed (HTTPS via Caddy on 443):", outputtools.Green)
+		outputtools.PrintlnColored("\nWhat's deployed (HTTPS via Caddy):", outputtools.Green)
 	} else {
-		outputtools.PrintlnColored("\nWhat's deployed (HTTP via Caddy on 80):", outputtools.Green)
+		outputtools.PrintlnColored("\nWhat's deployed (HTTP via Caddy):", outputtools.Green)
 	}
 	if boolValue(configValues, "grpc_server_enabled") {
 		if useHTTPS {
-			fmt.Printf("  gRPC API:  %s:443 (TLS)\n", pubHost)
-			fmt.Printf("             grpcurl %s:443 list\n", pubHost)
+			fmt.Printf("  gRPC API:  %s (TLS)\n", grpcTarget)
+			fmt.Printf("             grpcurl %s list\n", grpcTarget)
 		} else {
-			fmt.Printf("  gRPC API:  %s:80 (plaintext)\n", pubHost)
-			fmt.Printf("             grpcurl -plaintext %s:80 list\n", pubHost)
+			fmt.Printf("  gRPC API:  %s (plaintext)\n", grpcTarget)
+			fmt.Printf("             grpcurl -plaintext %s list\n", grpcTarget)
 		}
 	}
 	if boolValue(configValues, "rest_enabled") {
 		base := stringValue(configValues, "rest_base_path", "/v1")
-		fmt.Printf("  REST API:  %s://%s%s\n", scheme, pubHost, base)
-		fmt.Printf("             curl %s://%s%s/<entity>\n", scheme, pubHost, base)
+		fmt.Printf("  REST API:  %s%s\n", publicURL, base)
+		fmt.Printf("             curl %s%s/<entity>\n", publicURL, base)
 	}
 	if jwtAuth {
 		fmt.Printf("  Auth:      jwt — data endpoints need a Bearer token.\n")
-		fmt.Printf("             sign in: POST %s://%s/signin {\"email\",\"password\"} (then /refresh, /validate)\n", scheme, pubHost)
+		fmt.Printf("             sign in: POST %s/signin {\"email\",\"password\"} (then /refresh, /validate)\n", publicURL)
 		fmt.Printf("             a signing key was generated on the box; sign-in needs a user row in your user entity.\n")
 	}
-	fmt.Printf("  Info page: %s://%s/\n", scheme, pubHost)
+	fmt.Printf("  Info page: %s/\n", publicURL)
 	if !useHTTPS {
 		outputtools.PrintlnColoredErr("  (IP-only deploy over plain HTTP — pass --domain <name> for automatic HTTPS with a trusted cert.)", outputtools.Yellow)
 	}
@@ -384,13 +392,34 @@ func (i *Implementation) publishAndApplySchema(targets *runTargets, agentUUID, c
 	if err != nil {
 		return err
 	}
+	// UpdateLocalAgentConnections REPLACES the agent's cloud catalog, and one box
+	// shares one agent across N projects — so publish the UNION of every project's
+	// connection on this agent, not just the current one, or a second project's
+	// deploy would wipe the first's connection from nuzur.
+	conns := []*nemgen.LocalAgentConnection{}
+	seen := map[string]bool{}
+	addConn := func(uuid, name string) {
+		if uuid == "" || seen[uuid] {
+			return
+		}
+		seen[uuid] = true
+		conns = append(conns, &nemgen.LocalAgentConnection{
+			Uuid:   uuid,
+			Name:   name,
+			DbType: nemgen.LocalAgentConnectionDbType_LOCAL_AGENT_CONNECTION_DB_TYPE_MYSQL,
+		})
+	}
+	addConn(connUUID, connName) // the project being deployed (its record isn't saved yet)
+	if deps, e := deploy.ListDeployments(); e == nil {
+		for _, d := range deps {
+			if d.LocalAgentUUID == agentUUID && d.ConnUUID != "" {
+				addConn(d.ConnUUID, d.Identifier+"-db")
+			}
+		}
+	}
 	if _, err := i.productClient.ProductClient.UpdateLocalAgentConnections(authCtx, &pb.UpdateLocalAgentConnectionsRequest{
 		LocalAgentUuid: agentUUID,
-		Connections: []*nemgen.LocalAgentConnection{{
-			Uuid:   connUUID,
-			Name:   connName,
-			DbType: nemgen.LocalAgentConnectionDbType_LOCAL_AGENT_CONNECTION_DB_TYPE_MYSQL,
-		}},
+		Connections:    conns,
 	}); err != nil {
 		return fmt.Errorf("publishing connection catalog: %w", err)
 	}
@@ -475,17 +504,33 @@ func (i *Implementation) DestroyCommand() cli.Command {
 			}
 			ctx := context.Background()
 
-			// 1. Server teardown: remove the nuzur-installed artifacts (services,
-			// container, image, config, secrets, agent pairing, Caddy site, backup
-			// cron). Best-effort — a gone/unreachable box still lets the cloud-side
-			// cleanup proceed so no ghost agent is left behind.
+			// A box can host multiple projects on one shared agent. This is the
+			// LAST project on the box iff no other deployment record shares its
+			// host. Only then do we tear down the shared agent + revoke it — while
+			// other projects are live, the agent must survive.
+			isLast := true
+			if deps, e := deploy.ListDeployments(); e == nil {
+				for _, d := range deps {
+					if d.ID != id && d.Host == dep.Host {
+						isLast = false
+						break
+					}
+				}
+			}
+
+			// 1. Server teardown: remove THIS project's artifacts (its service,
+			// container, image, /etc/nuzur/{id}, Caddy snippet, cron, connection);
+			// the shared agent + Caddy root go only when isLast. Best-effort — a
+			// gone/unreachable box still lets the cloud-side cleanup proceed.
 			if !c.Bool("skip-server") {
 				dbName := sanitizeDBName(dep.Identifier)
 				script, rerr := deploy.RenderTeardown(deploy.TeardownParams{
-					Identifier: dep.Identifier,
-					DBName:     dbName,
-					DBUser:     dbName + "_app",
-					Purge:      c.Bool("purge"),
+					Identifier:    dep.Identifier,
+					DBName:        dbName,
+					DBUser:        dbName + "_app",
+					ConnUUID:      dep.ConnUUID,
+					Purge:         c.Bool("purge"),
+					IsLastProject: isLast,
 				})
 				if rerr != nil {
 					return rerr
@@ -502,22 +547,46 @@ func (i *Implementation) DestroyCommand() cli.Command {
 				}
 				runner := deploy.NewSSHRunner(target)
 				runner.Sudo = c.Bool("sudo") || target.User != "root"
-				outputtools.PrintlnColoredErr("Cleaning up the server (services, container, config"+purgeSuffix(c.Bool("purge"))+")...", outputtools.Blue)
+				outputtools.PrintlnColoredErr("Cleaning up the server (this project's service, container, config"+purgeSuffix(c.Bool("purge"))+")...", outputtools.Blue)
 				if err := runner.RunScript(ctx, script); err != nil {
 					outputtools.PrintlnColoredErr(fmt.Sprintf("warning: server teardown failed (%v) — cleaning up nuzur state anyway. Re-run `nuzur destroy %s` once the box is reachable, or use --skip-server.", err, id), outputtools.Yellow)
 				}
 			}
 
-			// 2. Revoke the agent so no ghost row remains in nuzur.
+			// 2. Cloud-side agent cleanup.
 			if dep.LocalAgentUUID != "" {
 				authCtx, err := productclient.ClientContext()
 				if err != nil {
 					return err
 				}
-				if _, err := i.productClient.ProductClient.RevokeLocalAgent(authCtx, &pb.RevokeLocalAgentRequest{
-					LocalAgentUuid: dep.LocalAgentUUID,
-				}); err != nil {
-					outputtools.PrintlnColoredErr(fmt.Sprintf("warning: could not revoke agent %s: %v", dep.LocalAgentUUID, err), outputtools.Yellow)
+				if isLast {
+					// Last project on the box → revoke the shared agent.
+					if _, err := i.productClient.ProductClient.RevokeLocalAgent(authCtx, &pb.RevokeLocalAgentRequest{
+						LocalAgentUuid: dep.LocalAgentUUID,
+					}); err != nil {
+						outputtools.PrintlnColoredErr(fmt.Sprintf("warning: could not revoke agent %s: %v", dep.LocalAgentUUID, err), outputtools.Yellow)
+					}
+				} else {
+					// Other projects survive → keep the agent, but re-publish the
+					// remaining connections so this project's drops out of the catalog.
+					conns := []*nemgen.LocalAgentConnection{}
+					if deps, e := deploy.ListDeployments(); e == nil {
+						for _, d := range deps {
+							if d.ID != id && d.LocalAgentUUID == dep.LocalAgentUUID && d.ConnUUID != "" {
+								conns = append(conns, &nemgen.LocalAgentConnection{
+									Uuid:   d.ConnUUID,
+									Name:   d.Identifier + "-db",
+									DbType: nemgen.LocalAgentConnectionDbType_LOCAL_AGENT_CONNECTION_DB_TYPE_MYSQL,
+								})
+							}
+						}
+					}
+					if _, err := i.productClient.ProductClient.UpdateLocalAgentConnections(authCtx, &pb.UpdateLocalAgentConnectionsRequest{
+						LocalAgentUuid: dep.LocalAgentUUID,
+						Connections:    conns,
+					}); err != nil {
+						outputtools.PrintlnColoredErr(fmt.Sprintf("warning: could not refresh agent connections: %v", err), outputtools.Yellow)
+					}
 				}
 			}
 
@@ -525,7 +594,11 @@ func (i *Implementation) DestroyCommand() cli.Command {
 			if err := deploy.DeleteDeployment(id); err != nil {
 				return err
 			}
-			fmt.Printf("Destroyed deployment %s (server cleaned up, agent revoked).\n", id)
+			if isLast {
+				fmt.Printf("Destroyed deployment %s (server cleaned up, shared agent revoked — last project on the box).\n", id)
+			} else {
+				fmt.Printf("Destroyed deployment %s (this project removed; the box's shared agent stays for its other projects).\n", id)
+			}
 			if !c.Bool("purge") && !c.Bool("skip-server") {
 				fmt.Printf("  The database was kept — pass --purge to drop it.\n")
 			}
@@ -600,6 +673,30 @@ func findPriorDeployment(host, identifier string) *deploy.Deployment {
 		}
 	}
 	return match
+}
+
+// findBoxAgent returns the local-agent UUID already paired on this host (any
+// project's deployment), or "". A box has ONE shared agent serving all its
+// projects, so a second project reuses it rather than pairing a new one.
+func findBoxAgent(host string) string {
+	deps, err := deploy.ListDeployments()
+	if err != nil {
+		return ""
+	}
+	var latest *deploy.Deployment
+	for idx := range deps {
+		d := deps[idx]
+		if d.Host == host && d.LocalAgentUUID != "" {
+			if latest == nil || d.CreatedAt.After(latest.CreatedAt) {
+				m := d
+				latest = &m
+			}
+		}
+	}
+	if latest == nil {
+		return ""
+	}
+	return latest.LocalAgentUUID
 }
 
 // waitForAgentOnline polls until the given agent uuid reaches ONLINE. Returns
@@ -696,45 +793,6 @@ func firstNonEmpty(vals ...string) string {
 		}
 	}
 	return ""
-}
-
-// readGeneratedPorts reads ports.grpc / ports.http from the generated
-// config/base.yaml — the source of truth for what the app actually binds, so
-// the Caddy routes match. Best-effort: returns ("","") if the file is missing
-// or unparseable and the caller falls back to defaults. The generated block is:
-//
-//	ports:
-//	  grpc: 6009
-//	  http: 8080
-func readGeneratedPorts(sourceRoot string) (grpc, http string) {
-	data, err := os.ReadFile(filepath.Join(sourceRoot, "config", "base.yaml"))
-	if err != nil {
-		return "", ""
-	}
-	inPorts := false
-	for _, raw := range strings.Split(string(data), "\n") {
-		line := strings.TrimRight(raw, " \t\r")
-		trimmed := strings.TrimSpace(line)
-		if trimmed == "" || strings.HasPrefix(trimmed, "#") {
-			continue
-		}
-		// A top-level key (no leading indentation) other than a ports child ends
-		// the ports block.
-		indented := line != trimmed
-		if !indented {
-			inPorts = trimmed == "ports:"
-			continue
-		}
-		if !inPorts {
-			continue
-		}
-		if v, ok := strings.CutPrefix(trimmed, "grpc:"); ok {
-			grpc = strings.TrimSpace(v)
-		} else if v, ok := strings.CutPrefix(trimmed, "http:"); ok {
-			http = strings.TrimSpace(v)
-		}
-	}
-	return grpc, http
 }
 
 // generatedHasJWTAuth reports whether the generated app uses the JWT auth server

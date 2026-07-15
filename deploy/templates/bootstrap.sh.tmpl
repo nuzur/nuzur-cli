@@ -1,5 +1,7 @@
 #!/usr/bin/env bash
 # nuzur deploy bootstrap for {{.Identifier}} (idempotent; Ubuntu/Debian).
+# Multi-project safe: everything this project owns is namespaced under
+# {{.ProjectDir}} / {{.Identifier}}-*, so N projects can share one box.
 set -euo pipefail
 
 # Pin HOME and USER so the nuzur CLI's config path AND its keyring passphrase
@@ -11,6 +13,7 @@ export USER=root
 
 echo "[nuzur-deploy] bootstrapping {{.Identifier}}"
 export DEBIAN_FRONTEND=noninteractive
+mkdir -p /etc/nuzur {{.ProjectDir}}
 
 # A fresh box often has unattended-upgrades / apt-daily holding the dpkg lock at
 # boot. Without this, the first `apt-get` races the lock and, under `set -e`,
@@ -27,7 +30,7 @@ if ! command -v docker >/dev/null 2>&1; then
 fi
 
 {{if eq .DBEngine "mysql"}}
-# ── 2. MySQL (localhost-only) ─────────────────────────────────────────────────
+# ── 2. MySQL (localhost-only, shared by all projects on the box) ──────────────
 if ! command -v mysqld >/dev/null 2>&1 && ! command -v mariadbd >/dev/null 2>&1; then
   echo "[nuzur-deploy] installing mysql-server"
   apt-get update -y
@@ -42,13 +45,12 @@ CNF
 systemctl enable --now mysql 2>/dev/null || systemctl enable --now mariadb 2>/dev/null || true
 systemctl restart mysql 2>/dev/null || systemctl restart mariadb 2>/dev/null || true
 
-# ── 3. App DB + least-privilege user. The password is PERSISTED on the box and
-#       reused on every run, so a re-deploy (or a retried, partially-failed one)
-#       never rotates it out from under the app config, the agent connection, or
-#       the already-published nuzur catalog. ALTER USER always converges MySQL to
+# ── 3. This project's DB + least-privilege user. The password is PERSISTED
+#       per-project and reused every run, so a re-deploy (or a retried, partly
+#       failed one) never rotates it out from under the app config, the agent
+#       connection, or the published nuzur catalog. ALTER USER converges MySQL to
 #       the persisted value, so a re-run is self-healing rather than destructive.
-mkdir -p /etc/nuzur
-DB_PASSWORD_FILE=/etc/nuzur/db_password
+DB_PASSWORD_FILE={{.ProjectDir}}/db_password
 if [ -s "$DB_PASSWORD_FILE" ]; then
   DB_PASSWORD="$(cat "$DB_PASSWORD_FILE")"
 else
@@ -69,12 +71,14 @@ mkdir -p {{.ConfigDir}}
 if [ -f "{{.RemoteSrcDir}}/config/base.yaml" ]; then
   cp "{{.RemoteSrcDir}}/config/base.yaml" "{{.ConfigDir}}/base.yaml"
 fi
+PROD_YAML={{.ConfigDir}}/prod.yaml
+
 {{if .JWTAuth}}
 # The generated base.yaml ships auth.jwt.key as a placeholder; generate a real
-# signing key so the JWT auth server can mint/verify tokens. Persisted and reused
-# across runs — a re-deploy that rotated the key would invalidate every issued
+# signing key so the JWT auth server can mint/verify tokens. Persisted per-project
+# and reused — a re-deploy that rotated the key would invalidate every issued
 # token, so keep the same key once set.
-JWT_KEY_FILE=/etc/nuzur/jwt_key
+JWT_KEY_FILE={{.ProjectDir}}/jwt_key
 if [ -s "$JWT_KEY_FILE" ]; then
   JWT_KEY="$(cat "$JWT_KEY_FILE")"
 else
@@ -82,7 +86,29 @@ else
   ( umask 077; printf '%s' "$JWT_KEY" > "$JWT_KEY_FILE" )
 fi
 {{end}}
-cat > {{.ConfigDir}}/prod.yaml <<YAML
+
+# Allocate this project's internal HTTP/gRPC ports. Reuse if this project's
+# prod.yaml already carries them (idempotent re-deploy); otherwise pick the
+# lowest free port not used by another project's prod.yaml or a live listener —
+# distinct ports let N apps coexist under `--network host`. Written into prod.yaml,
+# which deep-merges over base.yaml (later source wins), so the app binds these.
+port_in_use() {
+  local p="$1"
+  grep -rhoE "^[[:space:]]*(grpc|http):[[:space:]]*${p}([[:space:]]|\$)" /etc/nuzur/*/config/prod.yaml 2>/dev/null | grep -q . && return 0
+  ss -ltnH 2>/dev/null | awk '{print $4}' | grep -qE "[:.]${p}\$" && return 0
+  return 1
+}
+alloc_port() { local p="$1"; while port_in_use "$p"; do p=$((p+1)); done; echo "$p"; }
+if [ -f "$PROD_YAML" ] && grep -qE '^[[:space:]]*grpc:' "$PROD_YAML"; then
+  GRPC_PORT="$(grep -E '^[[:space:]]*grpc:' "$PROD_YAML" | grep -oE '[0-9]+' | head -1)"
+  HTTP_PORT="$(grep -E '^[[:space:]]*http:' "$PROD_YAML" | grep -oE '[0-9]+' | head -1)"
+else
+  GRPC_PORT="$(alloc_port 6009)"
+  HTTP_PORT="$(alloc_port 8080)"
+fi
+echo "[nuzur-deploy] {{.Identifier}} internal ports: http=$HTTP_PORT grpc=$GRPC_PORT"
+
+cat > "$PROD_YAML" <<YAML
 db:
   - name: {{.DBName}}
     host: 127.0.0.1
@@ -91,13 +117,16 @@ db:
     pswd: ${DB_PASSWORD}
     params: parseTime=true
     driver: "{{.DBEngine}}"
+ports:
+  grpc: ${GRPC_PORT}
+  http: ${HTTP_PORT}
 {{if .JWTAuth}}auth:
   jwt:
     key: ${JWT_KEY}
 {{end}}YAML
-chmod 600 {{.ConfigDir}}/prod.yaml
+chmod 600 "$PROD_YAML"
 
-# ── 5. Build + run the generated API (host networking → reaches localhost DB) ──
+# ── 5. Build + run this project's API (host networking → reaches localhost DB) ─
 echo "[nuzur-deploy] building app image"
 docker build -t {{.ImageName}} "{{.RemoteSrcDir}}"
 cat > /etc/systemd/system/{{.Identifier}}-api.service <<UNIT
@@ -120,12 +149,11 @@ WantedBy=multi-user.target
 UNIT
 systemctl daemon-reload
 systemctl enable {{.Identifier}}-api.service
-# Always restart (not `enable --now`, which is a no-op when the unit is already
-# running) so a re-deploy picks up the freshly built image instead of leaving the
-# previous container in place. ExecStartPre recreates the container from :latest.
+# Always restart (not `enable --now`, a no-op when already running) so a re-deploy
+# picks up the freshly built image. ExecStartPre recreates the container.
 systemctl restart {{.Identifier}}-api.service
 
-# ── 6. nuzur agent: headless pair + start against the localhost DB ────────────
+# ── 6. nuzur agent: ONE shared agent per box; this project adds its connection ─
 {{if .CLIInstallCmd}}{{.CLIInstallCmd}}{{else}}
 # install the nuzur CLI from GitHub releases (goreleaser assets)
 NUZUR_ARCH="$(uname -m)"
@@ -139,27 +167,25 @@ curl -fsSL "https://github.com/nuzur/nuzur-cli/releases/latest/download/nuzur-cl
 tar -xzf /tmp/nuzur-cli.tar.gz -C /tmp nuzur-cli
 install -m 0755 /tmp/nuzur-cli {{.NuzurBin}}
 {{end}}
-# Pair only if this box isn't already paired — a re-deploy reuses the existing
-# agent (the deploy command reuses its uuid + connection), so re-pairing would
-# orphan the previous agent row and rotate the box's identity. `agent pair`
-# itself refuses to overwrite an existing pairing, so guard it here.
-# NB: capture the status output first rather than piping straight into `grep -q`.
-# Under `set -o pipefail`, grep -q exits on the first match and closes the pipe,
-# `agent status` then dies with SIGPIPE, and pipefail reports the pipeline as
-# failed — which would invert this guard and re-pair every time.
+# Pair only if this box isn't already paired — the box has ONE agent shared by
+# all its projects; each project just adds its own connection. Re-pairing would
+# orphan the previous agent row. NB: capture status first rather than piping into
+# `grep -q`; under `set -o pipefail` grep -q closes the pipe, `agent status` dies
+# with SIGPIPE, and pipefail would invert this guard and re-pair every time.
 AGENT_STATUS="$({{.NuzurBin}} agent status 2>/dev/null || true)"
 if printf '%s' "$AGENT_STATUS" | grep -q "uuid:"; then
-  echo "[nuzur-deploy] already paired; reusing existing agent"
+  echo "[nuzur-deploy] box already paired; reusing shared agent"
 else
   {{.NuzurBin}} agent pair --provisioning-token '{{.ProvisioningToken}}'
 fi
 
-# register the localhost DB as a named connection (local-only; the deploy
-# command publishes the catalog to nuzur with the user's token). Idempotent: on
-# a re-deploy this re-writes the DSN with the persisted password, self-healing
-# any drift.
+# register this project's localhost DB as its own named connection on the shared
+# agent (local-only; the deploy command publishes the catalog with the user's
+# token). Idempotent: re-writes the DSN with the persisted password.
 {{.NuzurBin}} agent connection add '{{.ConnName}}' --uuid '{{.ConnUUID}}' --driver {{.DBEngine}} --dsn "{{.DBUser}}:${DB_PASSWORD}@tcp(127.0.0.1:3306)/{{.DBName}}?parseTime=true" --no-publish --non-interactive
 
+# Shared agent default-DSN fallback (only used for queries without a connection
+# uuid; real queries specify the uuid). Last deploy wins — harmless.
 install -m 600 /dev/null /etc/nuzur/agent.env
 cat > /etc/nuzur/agent.env <<ENV
 NUZUR_AGENT_DRIVER={{.DBEngine}}
@@ -173,8 +199,8 @@ After=network-online.target
 
 [Service]
 Restart=always
-# HOME + USER must match the bootstrap (where creds/registry were written and
-# the DSN was encrypted): HOME locates the config dir, USER seeds the keyring
+# HOME + USER must match the bootstrap (where creds/registry were written and the
+# DSN was encrypted): HOME locates the config dir, USER seeds the keyring
 # passphrase. Mismatch → daemon can't find its pairing or decrypt the DSN.
 Environment=HOME=/root
 Environment=USER=root
@@ -186,15 +212,15 @@ WantedBy=multi-user.target
 UNIT
 systemctl daemon-reload
 systemctl enable nuzur-agent.service
-# Restart (not `enable --now`) so a re-deploy runs the freshly installed CLI
-# binary and re-reads its connection registry, rather than leaving the old
-# daemon process (and stale reported cli_version) in place.
+# Restart so it runs the freshly installed CLI binary and re-reads its connection
+# registry (now including this project's connection).
 systemctl restart nuzur-agent.service
 
-# ── 7. Caddy front door: routes gRPC vs REST/auth/info on a single port. ──────
-# With a domain it serves HTTPS/443 with an automatic Let's Encrypt cert; with
-# no domain (IP-only) it serves plain HTTP/80 — no self-signed cert, so no TLS
-# trust warnings in browsers or tooling.
+# ── 7. Caddy front door: one site per project via an import dir (non-destructive)
+# so adding/removing a project never rewrites another's routing. With a domain the
+# site serves HTTPS/443 (auto Let's Encrypt); without one the project gets its own
+# auto-assigned public port on the host IP (plain HTTP). Routes gRPC vs REST/auth/
+# info by Content-Type.
 if ! command -v caddy >/dev/null 2>&1; then
   echo "[nuzur-deploy] installing caddy"
   apt-get install -y debian-keyring debian-archive-keyring apt-transport-https curl gnupg
@@ -203,35 +229,70 @@ if ! command -v caddy >/dev/null 2>&1; then
   apt-get update -y
   apt-get install -y caddy
 fi
-mkdir -p /etc/caddy
-cat > /etc/caddy/Caddyfile <<'CADDY'
-{{if .Domain}}{{.Domain}} {
-{{else}}:80 {
-{{end}}	encode gzip
+mkdir -p /etc/caddy /etc/caddy/conf.d
+# Main Caddyfile just imports the per-project site snippets (idempotent).
+if ! grep -q 'import /etc/caddy/conf.d/\*.caddy' /etc/caddy/Caddyfile 2>/dev/null; then
+  echo 'import /etc/caddy/conf.d/*.caddy' > /etc/caddy/Caddyfile
+fi
+
+{{if .Domain}}
+SITE_ADDR="{{.Domain}}"
+PUBLIC_URL="https://{{.Domain}}"
+{{else}}
+# IP-only: allocate a free public port for this project's site (reuse this
+# project's existing one if present; base 8443).
+SNIPPET=/etc/caddy/conf.d/{{.Identifier}}.caddy
+PUBLIC_PORT=""
+if [ -f "$SNIPPET" ]; then
+  PUBLIC_PORT="$(grep -oE '^:[0-9]+' "$SNIPPET" | head -1 | tr -d ':')"
+fi
+if [ -z "${PUBLIC_PORT:-}" ]; then
+  pub_in_use() {
+    local p="$1"
+    grep -rhoE '^:[0-9]+' /etc/caddy/conf.d/*.caddy 2>/dev/null | tr -d ':' | grep -qx "$p" && return 0
+    ss -ltnH 2>/dev/null | awk '{print $4}' | grep -qE "[:.]${p}\$" && return 0
+    return 1
+  }
+  PUBLIC_PORT=8443
+  while pub_in_use "$PUBLIC_PORT"; do PUBLIC_PORT=$((PUBLIC_PORT+1)); done
+fi
+SITE_ADDR=":${PUBLIC_PORT}"
+PUBLIC_URL="http://{{.Host}}:${PUBLIC_PORT}"
+{{end}}
+
+cat > /etc/caddy/conf.d/{{.Identifier}}.caddy <<CADDY
+${SITE_ADDR} {
+	encode gzip
 {{if .GRPCEnabled}}	@grpc header Content-Type application/grpc*
 	handle @grpc {
-		reverse_proxy h2c://127.0.0.1:{{.GRPCPort}}
+		reverse_proxy h2c://127.0.0.1:${GRPC_PORT}
 	}
 {{end}}	handle {
-		reverse_proxy 127.0.0.1:{{.HTTPPort}}
+		reverse_proxy 127.0.0.1:${HTTP_PORT}
 	}
 }
 CADDY
 systemctl enable --now caddy 2>/dev/null || true
 systemctl reload caddy 2>/dev/null || systemctl restart caddy
 
-# ── 8. Firewall: SSH + the Caddy front door only — app ports stay internal. ───
+# Record the resolved front-door URL so the deploy command can read it back
+# (world-readable — it's just a URL, not a secret).
+printf '%s' "${PUBLIC_URL}" > {{.ProjectDir}}/url
+chmod 644 {{.ProjectDir}}/url
+
+# ── 8. Firewall: SSH + the Caddy front doors — app ports stay internal. ───────
 ufw allow 22/tcp
 ufw allow 80/tcp
-{{if .Domain}}ufw allow 443/tcp
+ufw allow 443/tcp
+{{if not .Domain}}ufw allow ${PUBLIC_PORT}/tcp
 {{end}}ufw --force enable
 
 {{if eq .DBEngine "mysql"}}
-# ── 8. Nightly backup (14-day local retention) ────────────────────────────────
+# ── 9. Nightly backup for this project (14-day local retention) ───────────────
 mkdir -p /var/backups/nuzur
-cat > /etc/cron.d/nuzur-backup <<'CRON'
-0 3 * * * root mysqldump {{.DBName}} 2>/dev/null | gzip > /var/backups/nuzur/{{.DBName}}-$(date +\%F).sql.gz; find /var/backups/nuzur -name '*.sql.gz' -mtime +14 -delete
+cat > /etc/cron.d/nuzur-backup-{{.Identifier}} <<'CRON'
+0 3 * * * root mysqldump {{.DBName}} 2>/dev/null | gzip > /var/backups/nuzur/{{.DBName}}-$(date +\%F).sql.gz; find /var/backups/nuzur -name '{{.DBName}}-*.sql.gz' -mtime +14 -delete
 CRON
 {{end}}
 
-echo "[nuzur-deploy] bootstrap complete for {{.Identifier}}"
+echo "[nuzur-deploy] bootstrap complete for {{.Identifier}} (${PUBLIC_URL})"

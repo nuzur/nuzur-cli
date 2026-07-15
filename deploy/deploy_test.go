@@ -14,9 +14,8 @@ func TestRenderBootstrap(t *testing.T) {
 		DBName:            "shop",
 		DBUser:            "shop_app",
 		GRPCEnabled:       true,
-		GRPCPort:          "50051",
-		HTTPPort:          "8080",
 		JWTAuth:           true,
+		Host:              "1.2.3.4",
 		RemoteSrcDir:      "/opt/nuzur/shop/src",
 		ProvisioningToken: "nzpt_test",
 		CLIInstallCmd:     "curl -fsSL https://example/install | sh",
@@ -27,51 +26,58 @@ func TestRenderBootstrap(t *testing.T) {
 		t.Fatalf("RenderBootstrap: %v", err)
 	}
 
-	// Spot-check the key steps are present and templated.
+	// Spot-check the key steps are present and per-project namespaced.
 	for _, want := range []string{
 		"set -euo pipefail",
 		"docker build -t nuzur/shop:latest \"/opt/nuzur/shop/src\"",
-		"bind-address = 127.0.0.1",
-		"innodb_buffer_pool_size = 256M",
 		"CREATE DATABASE IF NOT EXISTS",
 		"'shop_app'@'localhost'",
-		"/etc/nuzur/config/prod.yaml",
-		"DB_PASSWORD_FILE=/etc/nuzur/db_password", // password persisted + reused across runs
-		"JWT_KEY_FILE=/etc/nuzur/jwt_key",         // signing key persisted + reused across runs
+		// per-project config + secrets under /etc/nuzur/{id}
+		"PROD_YAML=/etc/nuzur/shop/config/prod.yaml",
+		"DB_PASSWORD_FILE=/etc/nuzur/shop/db_password",
+		"JWT_KEY_FILE=/etc/nuzur/shop/jwt_key",
 		"key: ${JWT_KEY}",
-		"AGENT_STATUS=\"$(/usr/local/bin/nuzur-cli agent status 2>/dev/null || true)\"", // idempotent guard (captured to dodge pipefail+SIGPIPE)
+		// on-box port allocation → prod.yaml
+		"GRPC_PORT=\"$(alloc_port 6009)\"",
+		"HTTP_PORT=\"$(alloc_port 8080)\"",
+		"grpc: ${GRPC_PORT}",
+		"http: ${HTTP_PORT}",
+		// idempotent pairing guard (shared agent)
+		"AGENT_STATUS=\"$(/usr/local/bin/nuzur-cli agent status 2>/dev/null || true)\"",
 		"printf '%s' \"$AGENT_STATUS\" | grep -q \"uuid:\"",
 		"agent pair --provisioning-token 'nzpt_test'",
 		"agent connection add 'shop-db' --uuid 'conn-uuid-1' --driver mysql",
 		"--no-publish --non-interactive",
 		"curl -fsSL https://example/install | sh",
-		"/etc/caddy/Caddyfile",
-		":80 {", // IP-only (no domain) → plain HTTP, no cert
-		"reverse_proxy h2c://127.0.0.1:50051",
-		"reverse_proxy 127.0.0.1:8080",
+		// Caddy import-dir + per-project snippet
+		"import /etc/caddy/conf.d/*.caddy",
+		"/etc/caddy/conf.d/shop.caddy",
+		"reverse_proxy h2c://127.0.0.1:${GRPC_PORT}",
+		"reverse_proxy 127.0.0.1:${HTTP_PORT}",
+		// IP-only: auto public port + URL uses the host
+		"PUBLIC_PORT=8443",
+		"PUBLIC_URL=\"http://1.2.3.4:${PUBLIC_PORT}\"",
+		"> /etc/nuzur/shop/url",
 		"ufw allow 22/tcp",
-		"ufw allow 80/tcp",
-		"nuzur-agent.service",
+		"ufw allow ${PUBLIC_PORT}/tcp",
+		// per-project backup cron
+		"/etc/cron.d/nuzur-backup-shop",
 		"mysqldump shop",
 	} {
 		if !strings.Contains(script, want) {
 			t.Errorf("bootstrap script missing %q", want)
 		}
 	}
-
-	// IP-only deploy serves plain HTTP: no TLS in the Caddyfile and no 443
-	// firewall rule (legit https:// download URLs elsewhere are fine).
-	for _, unwanted := range []string{"tls internal", "ufw allow 443/tcp"} {
-		if strings.Contains(script, unwanted) {
-			t.Errorf("IP-only bootstrap should not contain %q", unwanted)
-		}
+	// The main Caddyfile must NOT be overwritten wholesale (import-dir only).
+	if strings.Contains(script, "cat > /etc/caddy/Caddyfile") {
+		t.Error("bootstrap must not overwrite the shared main Caddyfile")
 	}
 }
 
 func TestRenderBootstrap_DomainAndNoGRPC(t *testing.T) {
 	script, err := RenderBootstrap(BootstrapParams{
 		Identifier: "api", DBEngine: DBMySQL, DBName: "api", DBUser: "api_app",
-		HTTPPort: "8080", GRPCEnabled: false,
+		GRPCEnabled:  false,
 		RemoteSrcDir: "/opt/nuzur/api/src", ProvisioningToken: "t",
 		Domain: "api.example.com",
 	})
@@ -79,40 +85,60 @@ func TestRenderBootstrap_DomainAndNoGRPC(t *testing.T) {
 		t.Fatalf("RenderBootstrap: %v", err)
 	}
 	if strings.Contains(script, "h2c://") {
-		t.Error("expected no gRPC route in the Caddyfile when GRPCEnabled is false")
+		t.Error("expected no gRPC route in the snippet when GRPCEnabled is false")
 	}
-	if strings.Contains(script, "tls internal") {
-		t.Error("expected a real (non-self-signed) cert when a domain is set")
-	}
-	for _, want := range []string{"api.example.com {", "reverse_proxy 127.0.0.1:8080"} {
+	for _, want := range []string{
+		"/etc/caddy/conf.d/api.caddy",
+		"SITE_ADDR=\"api.example.com\"",
+		"PUBLIC_URL=\"https://api.example.com\"",
+		"reverse_proxy 127.0.0.1:${HTTP_PORT}",
+		"ufw allow 443/tcp",
+	} {
 		if !strings.Contains(script, want) {
 			t.Errorf("missing %q", want)
 		}
 	}
+	// Domain mode must not allocate an IP-only public port.
+	if strings.Contains(script, "PUBLIC_PORT=8443") {
+		t.Error("domain mode should not allocate an IP-only public port")
+	}
 }
 
 func TestRenderTeardown(t *testing.T) {
-	// Default (keep data): tears down infra, no DB drop.
-	script, err := RenderTeardown(TeardownParams{Identifier: "shop", DBName: "shop", DBUser: "shop_app"})
+	// Default (keep data, not last project): tears down THIS project only.
+	script, err := RenderTeardown(TeardownParams{Identifier: "shop", DBName: "shop", DBUser: "shop_app", ConnUUID: "conn-1"})
 	if err != nil {
 		t.Fatalf("RenderTeardown: %v", err)
 	}
 	for _, want := range []string{
-		"systemctl stop \"$unit\"",
-		"shop-api.service nuzur-agent.service",
+		"systemctl stop shop-api.service",
 		"docker rm -f shop-api",
 		"docker rmi -f nuzur/shop:latest",
-		"rm -f /etc/caddy/Caddyfile",
-		"rm -rf /etc/nuzur",
-		"rm -rf /root/.config/nuzur",
-		"rm -f /etc/cron.d/nuzur-backup",
+		"rm -f /etc/caddy/conf.d/shop.caddy",
+		"rm -rf /etc/nuzur/shop",
+		"rm -f /etc/cron.d/nuzur-backup-shop",
+		"agent connection remove 'conn-1'",
 	} {
 		if !strings.Contains(script, want) {
 			t.Errorf("teardown missing %q", want)
 		}
 	}
-	if strings.Contains(script, "DROP DATABASE") {
-		t.Error("default teardown must not drop the database")
+	// Not the last project → the shared agent + Caddy root must be left alone.
+	for _, unwanted := range []string{"nuzur-agent.service", "rm -rf /root/.config/nuzur", "rm -f /etc/caddy/Caddyfile", "DROP DATABASE"} {
+		if strings.Contains(script, unwanted) {
+			t.Errorf("non-last teardown should not contain %q", unwanted)
+		}
+	}
+
+	// Last project → also removes the shared agent + Caddy root.
+	last, err := RenderTeardown(TeardownParams{Identifier: "shop", DBName: "shop", DBUser: "shop_app", ConnUUID: "conn-1", IsLastProject: true})
+	if err != nil {
+		t.Fatalf("RenderTeardown last: %v", err)
+	}
+	for _, want := range []string{"nuzur-agent.service", "rm -rf /root/.config/nuzur", "rm -f /etc/caddy/Caddyfile"} {
+		if !strings.Contains(last, want) {
+			t.Errorf("last-project teardown missing %q", want)
+		}
 	}
 
 	// Purge: also drops the DB + user.

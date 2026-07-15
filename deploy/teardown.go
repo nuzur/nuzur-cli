@@ -11,16 +11,24 @@ import (
 var teardownTemplate string
 
 // TeardownParams are the values rendered into the remote teardown script. It
-// removes the nuzur-installed artifacts (services, container, image, config,
-// secrets, agent pairing, Caddy site, backup cron); the box and shared packages
-// are left intact. The database is dropped only when Purge is set.
+// removes THIS project's artifacts (its systemd unit, container, image, its
+// /etc/nuzur/{id} config+secrets, its Caddy site snippet, its backup cron, and
+// its agent connection). The shared agent, MySQL, and packages are left intact
+// unless IsLastProject is set. The database is dropped only when Purge is set.
 type TeardownParams struct {
 	Identifier    string
 	ContainerName string
 	ImageName     string
+	ProjectDir    string // /etc/nuzur/{identifier}
 	DBName        string
 	DBUser        string
+	ConnUUID      string // this project's agent connection to remove from the shared agent
+	NuzurBin      string
 	Purge         bool
+	// IsLastProject: this is the only project left on the box, so also remove the
+	// shared agent (nuzur-agent.service + pairing creds) and the main Caddyfile.
+	// When false, the shared agent is kept for the surviving projects.
+	IsLastProject bool
 }
 
 func (p *TeardownParams) defaults() {
@@ -29,6 +37,12 @@ func (p *TeardownParams) defaults() {
 	}
 	if p.ContainerName == "" {
 		p.ContainerName = p.Identifier + "-api"
+	}
+	if p.ProjectDir == "" {
+		p.ProjectDir = "/etc/nuzur/" + p.Identifier
+	}
+	if p.NuzurBin == "" {
+		p.NuzurBin = "/usr/local/bin/nuzur-cli"
 	}
 }
 

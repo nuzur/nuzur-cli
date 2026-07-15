@@ -27,7 +27,9 @@ type Deployment struct {
 	LocalAgentUUID     string    `json:"local_agent_uuid"`
 	ConnUUID           string    `json:"conn_uuid,omitempty"`
 	DBEngine           DBEngine  `json:"db_engine"`
-	APIURL             string    `json:"api_url,omitempty"`
+	Domain             string    `json:"domain,omitempty"`      // set when deployed with --domain (HTTPS site)
+	APIURL             string    `json:"api_url,omitempty"`     // resolved front-door URL
+	PublicURL          string    `json:"public_url,omitempty"`  // same as APIURL; explicit alias
 	DataManagerURL     string    `json:"data_manager_url,omitempty"`
 	CreatedAt          time.Time `json:"created_at"`
 }

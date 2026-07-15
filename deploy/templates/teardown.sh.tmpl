@@ -1,7 +1,9 @@
 #!/usr/bin/env bash
 # nuzur deploy teardown for {{.Identifier}} (idempotent; safe to re-run). Removes
-# everything the bootstrap installed EXCEPT the box itself and shared packages
-# (docker/mysql/caddy stay installed). The database is dropped only with --purge.
+# THIS project's artifacts only; the shared agent, MySQL and packages
+# (docker/mysql/caddy) stay — unless this is the last project on the box
+# (IsLastProject), in which case the shared agent is removed too. The database is
+# dropped only with --purge.
 # Deliberately no `set -e`: teardown is best-effort — a missing unit or already
 # removed file must not stop the rest of the cleanup.
 set -uo pipefail
@@ -10,36 +12,55 @@ export USER=root
 
 echo "[nuzur-destroy] tearing down {{.Identifier}}"
 
-# ── 1. Stop + remove the app and agent systemd services ──────────────────────
-for unit in {{.Identifier}}-api.service nuzur-agent.service; do
-  systemctl stop "$unit" 2>/dev/null || true
-  systemctl disable "$unit" 2>/dev/null || true
-  rm -f "/etc/systemd/system/$unit"
-  systemctl reset-failed "$unit" 2>/dev/null || true
-done
+# ── 1. Stop + remove THIS project's app service ──────────────────────────────
+systemctl stop {{.Identifier}}-api.service 2>/dev/null || true
+systemctl disable {{.Identifier}}-api.service 2>/dev/null || true
+rm -f /etc/systemd/system/{{.Identifier}}-api.service
+systemctl reset-failed {{.Identifier}}-api.service 2>/dev/null || true
 systemctl daemon-reload 2>/dev/null || true
 
-# ── 2. Remove the app container + image ──────────────────────────────────────
+# ── 2. Remove this project's container + image ───────────────────────────────
 docker rm -f {{.ContainerName}} 2>/dev/null || true
 docker rmi -f {{.ImageName}} 2>/dev/null || true
 
-# ── 3. Remove the Caddy front-door site (the whole Caddyfile is nuzur's) ──────
-rm -f /etc/caddy/Caddyfile
+# ── 3. Remove this project's Caddy site snippet + reload (siblings untouched) ─
+# First free its public port from the firewall (IP-only sites bind :<port>).
+PUB_PORT="$(grep -oE '^:[0-9]+' /etc/caddy/conf.d/{{.Identifier}}.caddy 2>/dev/null | head -1 | tr -d ':')"
+rm -f /etc/caddy/conf.d/{{.Identifier}}.caddy
+if [ -n "${PUB_PORT:-}" ]; then ufw delete allow "${PUB_PORT}/tcp" 2>/dev/null || true; fi
 systemctl reload caddy 2>/dev/null || systemctl restart caddy 2>/dev/null || true
 
-# ── 4. Remove the backup cron, config, secrets and agent pairing creds ───────
-rm -f /etc/cron.d/nuzur-backup
-rm -rf /etc/nuzur
-rm -rf /root/.config/nuzur
+# ── 4. Remove this project's config, secrets, backup cron ────────────────────
+rm -f /etc/cron.d/nuzur-backup-{{.Identifier}}
+rm -rf {{.ProjectDir}}
+
+# ── 5. Remove this project's connection from the shared agent ────────────────
+{{if .ConnUUID}}{{.NuzurBin}} agent connection remove '{{.ConnUUID}}' 2>/dev/null || true
+{{end}}
 
 {{if .Purge}}
-# ── 5. Purge the database + app user (opt-in; irreversible) ───────────────────
+# ── 6. Purge this project's database + app user (opt-in; irreversible) ────────
 mysql <<SQL 2>/dev/null || true
 DROP DATABASE IF EXISTS \`{{.DBName}}\`;
 DROP USER IF EXISTS '{{.DBUser}}'@'localhost';
 FLUSH PRIVILEGES;
 SQL
 echo "[nuzur-destroy] purged database {{.DBName}}"
+{{end}}
+
+{{if .IsLastProject}}
+# ── 7. Last project on the box → tear down the shared agent + Caddy root ──────
+systemctl stop nuzur-agent.service 2>/dev/null || true
+systemctl disable nuzur-agent.service 2>/dev/null || true
+rm -f /etc/systemd/system/nuzur-agent.service
+systemctl reset-failed nuzur-agent.service 2>/dev/null || true
+systemctl daemon-reload 2>/dev/null || true
+rm -f /etc/nuzur/agent.env
+rm -rf /root/.config/nuzur
+rm -f /etc/caddy/Caddyfile
+rmdir /etc/nuzur 2>/dev/null || true
+systemctl reload caddy 2>/dev/null || true
+echo "[nuzur-destroy] removed the shared agent (last project on the box)"
 {{end}}
 
 echo "[nuzur-destroy] teardown complete for {{.Identifier}}"

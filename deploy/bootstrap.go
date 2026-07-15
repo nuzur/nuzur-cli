@@ -14,24 +14,27 @@ var bootstrapTemplate string
 // DB password is intentionally NOT here — it is generated on the box so the
 // plaintext secret never leaves the server.
 type BootstrapParams struct {
-	Identifier        string
-	DBEngine          DBEngine
-	DBName            string
-	DBUser            string
-	GRPCEnabled       bool
-	GRPCPort          string
-	HTTPPort          string // always set: REST server or httpServer fallback (auth/info)
+	Identifier  string
+	DBEngine    DBEngine
+	DBName      string
+	DBUser      string
+	GRPCEnabled bool
 	// JWTAuth means the generated app uses the JWT auth server, which reads its
 	// signing key from config (auth.jwt.key). The generated base.yaml ships a
 	// placeholder, so the bootstrap generates a real random key into prod.yaml —
 	// without it token creation is broken.
 	JWTAuth bool
 	// Domain, when set, makes Caddy serve HTTPS/443 with an automatic Let's
-	// Encrypt cert. Empty means IP-only: Caddy serves plain HTTP/80 (no cert), so
-	// there are no TLS trust warnings — pass a domain to get real HTTPS.
+	// Encrypt cert for this project's site. Empty means IP-only: the project gets
+	// its own auto-assigned public port on the host IP (plain HTTP), so multiple
+	// projects can coexist without domains.
 	Domain string
+	// Host is the box IP/hostname the CLI connected to; used to compose the
+	// IP-only public URL (http://{host}:{publicPort}) written back for the report.
+	Host              string
 	InnoDBBufferMB    int
-	ConfigDir         string // e.g. /etc/nuzur/config
+	ProjectDir        string // per-project dir, e.g. /etc/nuzur/{identifier} (holds secrets + url)
+	ConfigDir         string // per-project config, e.g. /etc/nuzur/{identifier}/config
 	RemoteSrcDir      string // where generated source was copied
 	ImageName         string
 	ContainerName     string
@@ -56,8 +59,11 @@ func (p *BootstrapParams) defaults() {
 	if p.InnoDBBufferMB == 0 {
 		p.InnoDBBufferMB = 256
 	}
+	if p.ProjectDir == "" {
+		p.ProjectDir = "/etc/nuzur/" + p.Identifier
+	}
 	if p.ConfigDir == "" {
-		p.ConfigDir = "/etc/nuzur/config"
+		p.ConfigDir = p.ProjectDir + "/config"
 	}
 	if p.NuzurBin == "" {
 		p.NuzurBin = "/usr/local/bin/nuzur-cli"
