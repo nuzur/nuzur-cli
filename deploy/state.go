@@ -25,6 +25,7 @@ type Deployment struct {
 	ProjectUUID        string    `json:"project_uuid"`
 	ProjectVersionUUID string    `json:"project_version_uuid"`
 	LocalAgentUUID     string    `json:"local_agent_uuid"`
+	ConnUUID           string    `json:"conn_uuid,omitempty"`
 	DBEngine           DBEngine  `json:"db_engine"`
 	APIURL             string    `json:"api_url,omitempty"`
 	DataManagerURL     string    `json:"data_manager_url,omitempty"`

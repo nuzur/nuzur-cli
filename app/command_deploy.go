@@ -152,11 +152,28 @@ func (i *Implementation) runDeploy(c *cli.Context) error {
 	// schema can be pushed to it.
 	dbName := sanitizeDBName(identifier)
 	connName := identifier + "-db"
-	connU, err := uuid.NewV4()
-	if err != nil {
-		return err
+
+	// Re-deploy detection: if this host+identifier was deployed before, reuse the
+	// existing agent + connection UUID rather than pairing a fresh agent. This
+	// keeps the box's identity, the published connection, and the data-manager
+	// link stable across re-deploys (and avoids orphaning the previous agent).
+	prior := findPriorDeployment(c.String("host"), identifier)
+	connUUID := ""
+	reuseAgentUUID := ""
+	if prior != nil {
+		reuseAgentUUID = prior.LocalAgentUUID
+		connUUID = prior.ConnUUID
 	}
-	connUUID := connU.String()
+	if connUUID == "" {
+		connU, err := uuid.NewV4()
+		if err != nil {
+			return err
+		}
+		connUUID = connU.String()
+	}
+	if reuseAgentUUID != "" {
+		outputtools.PrintlnColoredErr("Re-deploy: reusing the existing agent ("+reuseAgentUUID+") — no new pairing.", outputtools.Blue)
+	}
 
 	// 4. Mint a single-use provisioning token for headless pairing.
 	authCtx, err := productclient.ClientContext()
@@ -241,9 +258,17 @@ func (i *Implementation) runDeploy(c *cli.Context) error {
 		return err
 	}
 
-	// 9. Verify the agent paired + connected (a new agent UUID appears).
+	// 9. Verify the agent connected. First deploy → a new agent UUID appears;
+	// re-deploy → the existing (reused) agent should come back ONLINE.
 	outputtools.PrintlnColoredErr(i.localize.Localize("deploy_verifying", "Waiting for the agent to connect..."), outputtools.Blue)
-	agentUUID, online, err := i.waitForNewOnlineAgent(existing, 150*time.Second)
+	var agentUUID string
+	var online bool
+	if reuseAgentUUID != "" {
+		agentUUID = reuseAgentUUID
+		online, err = i.waitForAgentOnline(reuseAgentUUID, 150*time.Second)
+	} else {
+		agentUUID, online, err = i.waitForNewOnlineAgent(existing, 150*time.Second)
+	}
 	if err != nil {
 		return err
 	}
@@ -290,6 +315,7 @@ func (i *Implementation) runDeploy(c *cli.Context) error {
 		ProjectUUID:        targets.project.Uuid,
 		ProjectVersionUUID: targets.projectVersion.Uuid,
 		LocalAgentUUID:     agentUUID,
+		ConnUUID:           connUUID,
 		DBEngine:           deploy.DBMySQL,
 		APIURL:             fmt.Sprintf("%s://%s", scheme, pubHost),
 		DataManagerURL:     dataManagerURL,
@@ -495,6 +521,53 @@ func findSourceRoot(root string) (string, error) {
 		return "", fmt.Errorf("no Dockerfile found in generated output — enable the Dockerfile option in the generator config")
 	}
 	return found, nil
+}
+
+// findPriorDeployment returns the most recent recorded deployment for this
+// host+identifier, or nil. Used to detect a re-deploy so the existing agent and
+// connection are reused instead of pairing a fresh agent.
+func findPriorDeployment(host, identifier string) *deploy.Deployment {
+	deps, err := deploy.ListDeployments()
+	if err != nil {
+		return nil
+	}
+	var match *deploy.Deployment
+	for idx := range deps {
+		d := deps[idx]
+		if d.Host == host && d.Identifier == identifier && d.LocalAgentUUID != "" {
+			if match == nil || d.CreatedAt.After(match.CreatedAt) {
+				m := d
+				match = &m
+			}
+		}
+	}
+	return match
+}
+
+// waitForAgentOnline polls until the given agent uuid reaches ONLINE. Returns
+// (true) when observed online, (false) if the timeout passes while it exists but
+// stays not-online (the caller warns rather than hard-fails, matching the
+// new-agent path).
+func (i *Implementation) waitForAgentOnline(uuid string, timeout time.Duration) (bool, error) {
+	deadline := time.Now().Add(timeout)
+	for {
+		authCtx, err := productclient.ClientContext()
+		if err != nil {
+			return false, err
+		}
+		res, err := i.productClient.ProductClient.ListLocalAgents(authCtx, &pb.ListLocalAgentsRequest{})
+		if err == nil {
+			for _, a := range res.GetLocalAgents() {
+				if a.GetUuid() == uuid && a.GetStatus() == nemgen.LocalAgentStatus_LOCAL_AGENT_STATUS_ONLINE {
+					return true, nil
+				}
+			}
+		}
+		if time.Now().After(deadline) {
+			return false, nil
+		}
+		time.Sleep(3 * time.Second)
+	}
 }
 
 func (i *Implementation) listAgentUUIDs() (map[string]bool, error) {

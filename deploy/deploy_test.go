@@ -39,7 +39,9 @@ func TestRenderBootstrap(t *testing.T) {
 		"DB_PASSWORD_FILE=/etc/nuzur/db_password", // password persisted + reused across runs
 		"JWT_KEY_FILE=/etc/nuzur/jwt_key",         // signing key persisted + reused across runs
 		"key: ${JWT_KEY}",
-		"/usr/local/bin/nuzur-cli agent pair --provisioning-token 'nzpt_test'",
+		"AGENT_STATUS=\"$(/usr/local/bin/nuzur-cli agent status 2>/dev/null || true)\"", // idempotent guard (captured to dodge pipefail+SIGPIPE)
+		"printf '%s' \"$AGENT_STATUS\" | grep -q \"uuid:\"",
+		"agent pair --provisioning-token 'nzpt_test'",
 		"agent connection add 'shop-db' --uuid 'conn-uuid-1' --driver mysql",
 		"--no-publish --non-interactive",
 		"curl -fsSL https://example/install | sh",

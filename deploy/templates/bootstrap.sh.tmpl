@@ -139,10 +139,25 @@ curl -fsSL "https://github.com/nuzur/nuzur-cli/releases/latest/download/nuzur-cl
 tar -xzf /tmp/nuzur-cli.tar.gz -C /tmp nuzur-cli
 install -m 0755 /tmp/nuzur-cli {{.NuzurBin}}
 {{end}}
-{{.NuzurBin}} agent pair --provisioning-token '{{.ProvisioningToken}}'
+# Pair only if this box isn't already paired — a re-deploy reuses the existing
+# agent (the deploy command reuses its uuid + connection), so re-pairing would
+# orphan the previous agent row and rotate the box's identity. `agent pair`
+# itself refuses to overwrite an existing pairing, so guard it here.
+# NB: capture the status output first rather than piping straight into `grep -q`.
+# Under `set -o pipefail`, grep -q exits on the first match and closes the pipe,
+# `agent status` then dies with SIGPIPE, and pipefail reports the pipeline as
+# failed — which would invert this guard and re-pair every time.
+AGENT_STATUS="$({{.NuzurBin}} agent status 2>/dev/null || true)"
+if printf '%s' "$AGENT_STATUS" | grep -q "uuid:"; then
+  echo "[nuzur-deploy] already paired; reusing existing agent"
+else
+  {{.NuzurBin}} agent pair --provisioning-token '{{.ProvisioningToken}}'
+fi
 
 # register the localhost DB as a named connection (local-only; the deploy
-# command publishes the catalog to nuzur with the user's token).
+# command publishes the catalog to nuzur with the user's token). Idempotent: on
+# a re-deploy this re-writes the DSN with the persisted password, self-healing
+# any drift.
 {{.NuzurBin}} agent connection add '{{.ConnName}}' --uuid '{{.ConnUUID}}' --driver {{.DBEngine}} --dsn "{{.DBUser}}:${DB_PASSWORD}@tcp(127.0.0.1:3306)/{{.DBName}}?parseTime=true" --no-publish --non-interactive
 
 install -m 600 /dev/null /etc/nuzur/agent.env
@@ -170,7 +185,11 @@ ExecStart={{.NuzurBin}} agent start
 WantedBy=multi-user.target
 UNIT
 systemctl daemon-reload
-systemctl enable --now nuzur-agent.service
+systemctl enable nuzur-agent.service
+# Restart (not `enable --now`) so a re-deploy runs the freshly installed CLI
+# binary and re-reads its connection registry, rather than leaving the old
+# daemon process (and stale reported cli_version) in place.
+systemctl restart nuzur-agent.service
 
 # ── 7. Caddy front door: routes gRPC vs REST/auth/info on a single port. ──────
 # With a domain it serves HTTPS/443 with an automatic Let's Encrypt cert; with
