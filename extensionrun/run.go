@@ -12,6 +12,7 @@ import (
 	"net/http"
 	"os"
 	"path/filepath"
+	"strings"
 	"time"
 
 	"google.golang.org/grpc/codes"
@@ -330,13 +331,24 @@ func contextWithTimeout(seconds int) context.Context {
 	return ctx
 }
 
-// extractZip writes every file in the archive under outputPath and returns the
-// slash-separated relative paths written, in archive order.
+// extractZip writes the archive under outputPath and returns the slash-separated
+// relative paths written.
+//
+// When the archive carries a generation manifest it follows the
+// generated-marker convention, so extraction PRESERVES user-owned files: a file
+// that already exists locally and whose incoming entry is neither the manifest
+// nor a generated (marked) file is left untouched. This is what lets a persistent
+// workspace keep the user's custom app zone (app/grpc.go, app/rest.go,
+// custom.proto) across re-generations — generation runs server-side and the zip
+// always contains empty custom stubs, so the client must not clobber local edits.
+// Archives without a manifest keep the simple overwrite-everything behavior.
 func extractZip(data []byte, outputPath string) ([]string, error) {
 	r, err := zip.NewReader(bytes.NewReader(data), int64(len(data)))
 	if err != nil {
 		return nil, fmt.Errorf("failed to open zip archive: %w", err)
 	}
+
+	preserveUserFiles := zipHasManifest(r)
 
 	var written []string
 	for _, f := range r.File {
@@ -356,6 +368,16 @@ func extractZip(data []byte, outputPath string) ([]string, error) {
 			return nil, fmt.Errorf("failed to create parent directory: %w", err)
 		}
 
+		// Preserve an existing user-owned file: the manifest and generated
+		// (marked) files are always refreshed; anything else that already exists
+		// locally is left as the user edited it.
+		if preserveUserFiles &&
+			filepath.Base(f.Name) != files.GeneratedManifestFileName &&
+			!zipEntryHasGeneratedMarker(f) &&
+			regularFileExists(destPath) {
+			continue
+		}
+
 		if err := writeZipFile(f, destPath); err != nil {
 			return nil, err
 		}
@@ -363,6 +385,39 @@ func extractZip(data []byte, outputPath string) ([]string, error) {
 	}
 
 	return written, nil
+}
+
+// zipHasManifest reports whether the archive contains a generation manifest,
+// which signals it follows the generated-marker convention (and thus supports
+// user-owned-file preservation).
+func zipHasManifest(r *zip.Reader) bool {
+	for _, f := range r.File {
+		if filepath.Base(f.Name) == files.GeneratedManifestFileName {
+			return true
+		}
+	}
+	return false
+}
+
+// zipEntryHasGeneratedMarker reports whether a zip entry's content carries the
+// "Code generated ... DO NOT EDIT" marker (mirrors files.IsGeneratedFile, but on
+// the incoming archive entry rather than a file on disk).
+func zipEntryHasGeneratedMarker(f *zip.File) bool {
+	rc, err := f.Open()
+	if err != nil {
+		return false
+	}
+	defer rc.Close()
+	buf := make([]byte, 512)
+	n, _ := io.ReadFull(rc, buf) // short read is fine; the marker sits at the top
+	head := string(buf[:n])
+	return strings.Contains(head, "Code generated") && strings.Contains(head, "DO NOT EDIT")
+}
+
+// regularFileExists reports whether path exists and is a regular file.
+func regularFileExists(path string) bool {
+	info, err := os.Stat(path)
+	return err == nil && info.Mode().IsRegular()
 }
 
 // sanitizeZipPath prevents zip-slip path traversal attacks

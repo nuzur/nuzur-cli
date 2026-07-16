@@ -51,6 +51,7 @@ func (i *Implementation) DeployCommand() cli.Command {
 			cli.StringFlag{Name: "api", Usage: "API surface to generate: rest | grpc | both. Pick by the consumer — REST for JS/web/browser clients, gRPC for Go/backend clients (leave unset to use the project's last/provided config)"},
 			cli.StringFlag{Name: "auth", Usage: "Auth middleware: disabled | jwt | keycloak (leave unset to use the project's last/provided config)"},
 			cli.BoolFlag{Name: "custom", Usage: "Generate the custom application layer (app package for custom endpoints)"},
+			cli.StringFlag{Name: "source-dir", Usage: "Directory for the app's source (the workspace deploy generates + builds from; you edit custom endpoints here). Default: ./nuzur-<identifier>. Re-deploys reuse it and preserve your edits."},
 			cli.StringFlag{Name: "config-file", Usage: "Path to a JSON go-code-gen config (else the last-used config for this project is reused)"},
 			cli.StringFlag{Name: "cli-install-cmd", Usage: "Command to install the nuzur CLI on the box (must leave `nuzur` on PATH)"},
 			cli.StringFlag{Name: "schema-push-extension", Value: "sql-push-local", Usage: "Identifier of the SQL-push extension used to auto-apply the schema"},
@@ -140,6 +141,7 @@ func (i *Implementation) runDeploy(c *cli.Context) error {
 	// config required, so it works for any project).
 	var configValues map[string]interface{}
 	var sourceRoot string
+	var workspaceDir string // persistent app-source workspace (full-app deploys)
 	jwtAuth := false
 	if !dbOnly {
 		provided, err := loadDeployConfig(c.String("config-file"))
@@ -179,28 +181,8 @@ func (i *Implementation) runDeploy(c *cli.Context) error {
 		if err != nil {
 			return fmt.Errorf("building generator config (pass --config-file, or run `nuzur go-code-gen` once): %w", err)
 		}
-
-		outDir, err := os.MkdirTemp("", "nuzur-deploy-*")
-		if err != nil {
-			return err
-		}
-		defer os.RemoveAll(outDir)
-		outputtools.PrintlnColoredErr(i.localize.Localize("deploy_generating", "Generating application code..."), outputtools.Blue)
-		if _, err := targets.er.Run(extensionrun.RunParams{
-			Extension:          targets.extension,
-			ExtensionVersion:   targets.extensionVersion,
-			ProjectUUID:        targets.project.Uuid,
-			ProjectVersionUUID: targets.projectVersion.Uuid,
-			ConfigValues:       configValues,
-			OutputPath:         outDir,
-		}); err != nil {
-			return fmt.Errorf("generating code: %w", err)
-		}
-		sourceRoot, err = findSourceRoot(outDir)
-		if err != nil {
-			return err
-		}
-		jwtAuth = generatedHasJWTAuth(sourceRoot)
+		// Generation happens below (step 2), once the identifier + any prior
+		// deployment are known — so it targets the persistent workspace.
 	}
 
 	// Identifier: --identifier override, else the go-code-gen config's identifier,
@@ -266,6 +248,39 @@ func (i *Implementation) runDeploy(c *cli.Context) error {
 	}
 	if reuseAgentUUID != "" {
 		outputtools.PrintlnColoredErr("Reusing the box's existing agent ("+reuseAgentUUID+") — no new pairing.", outputtools.Blue)
+	}
+
+	// 2. Generate the app into the PERSISTENT workspace (full-app deploys only) —
+	// the editable source of truth deploy builds from. Re-deploys regenerate in
+	// place, refreshing generated code while preserving the user's custom
+	// endpoints (see extensionrun's user-file-preserving extraction).
+	if !dbOnly {
+		workspaceDir, err = resolveWorkspace(c.String("source-dir"), prior, identifier)
+		if err != nil {
+			return err
+		}
+		outputtools.PrintlnColoredErr("Generating application code into "+workspaceDir+" ...", outputtools.Blue)
+		if _, err := targets.er.Run(extensionrun.RunParams{
+			Extension:          targets.extension,
+			ExtensionVersion:   targets.extensionVersion,
+			ProjectUUID:        targets.project.Uuid,
+			ProjectVersionUUID: targets.projectVersion.Uuid,
+			ConfigValues:       configValues,
+			OutputPath:         workspaceDir,
+		}); err != nil {
+			return fmt.Errorf("generating code: %w", err)
+		}
+		sourceRoot, err = findSourceRoot(workspaceDir)
+		if err != nil {
+			return err
+		}
+		jwtAuth = generatedHasJWTAuth(sourceRoot)
+		// Ignore files go at the project root (where the Dockerfile + go.mod live,
+		// which the generator nests under <identifier>) — that's the docker build
+		// context root and the natural `git init` root.
+		if gerr := writeWorkspaceGitignore(sourceRoot); gerr != nil {
+			outputtools.PrintlnColoredErr("warning: could not write .gitignore in the workspace: "+gerr.Error(), outputtools.Yellow)
+		}
 	}
 
 	// 4. Mint a single-use provisioning token for headless pairing.
@@ -481,6 +496,7 @@ func (i *Implementation) runDeploy(c *cli.Context) error {
 		ConnUUID:           connUUID,
 		DBEngine:           dbEngine,
 		ExternalDB:         externalDB,
+		SourceDir:          workspaceDir,
 		Domain:             c.String("domain"),
 		APIURL:             publicURL,
 		PublicURL:          publicURL,
@@ -581,6 +597,25 @@ func (i *Implementation) runDeploy(c *cli.Context) error {
 		// The DB + agent connection are live either way — retry, or apply the
 		// schema from nuzur (SQL Push / change request).
 		outputtools.PrintlnColoredErr("\nSchema auto-apply was skipped (see the error above). The database + agent connection are live — re-run the deploy to retry, or apply the schema from nuzur (SQL Push / change request).", outputtools.Yellow)
+	}
+
+	// Point the user at their editable app source (the workspace) — this is the
+	// code that was deployed. Re-running deploy regenerates it in place, refreshing
+	// generated code while keeping their custom endpoints, then ships it.
+	if workspaceDir != "" {
+		appDir := sourceRoot // the project dir (go.mod/Dockerfile); may be nested under the workspace
+		if appDir == "" {
+			appDir = workspaceDir
+		}
+		outputtools.PrintlnColored("\nYour app source:", outputtools.Green)
+		fmt.Printf("  %s\n", appDir)
+		fmt.Printf("  Re-run the same deploy to ship changes from here.\n")
+		if c.Bool("custom") {
+			fmt.Printf("  Add custom endpoints: edit app/grpc.go (override/extend gRPC) or app/rest.go\n")
+			fmt.Printf("  (custom REST routes); add RPCs in app/idl/proto/custom.proto then run app/idl/proto/gen.sh.\n")
+		}
+		fmt.Printf("  Tip: run `git init` here (or commit) to track your changes and see what codegen\n")
+		fmt.Printf("  refreshes each deploy — secrets are already covered by the generated .gitignore.\n")
 	}
 
 	// Optionally register a raw --db-dsn database as a team connection so the whole
@@ -1128,6 +1163,75 @@ func parseDeployDSN(dsn string) (engine deploy.DBEngine, host, port, user, pass,
 		params = dsn[q+1:]
 	}
 	return deploy.DBMySQL, host, port, cfg.User, cfg.Passwd, cfg.DBName, params, nil
+}
+
+// resolveWorkspace picks the persistent app-source directory deploy generates
+// into and builds from: --source-dir if given, else the prior deployment's
+// recorded dir (so a re-deploy reuses it without re-passing the flag), else the
+// default ./nuzur-<identifier>. The path is returned absolute.
+func resolveWorkspace(flagDir string, prior *deploy.Deployment, identifier string) (string, error) {
+	dir := strings.TrimSpace(flagDir)
+	if dir == "" && prior != nil {
+		dir = prior.SourceDir
+	}
+	if dir == "" {
+		dir = "nuzur-" + identifier
+	}
+	return filepath.Abs(dir)
+}
+
+// workspaceGitignore keeps secrets and build artifacts out of git so the
+// workspace is safe to commit/push. It excludes the box-only prod config,
+// key/cert material, env files, and build output.
+const workspaceGitignore = `# nuzur deploy — keep secrets and build artifacts out of git
+config/prod.yaml
+*.local.yaml
+.env
+.env.*
+*.key
+*.pem
+*.p12
+/bin/
+*.exe
+.DS_Store
+`
+
+// workspaceDockerignore keeps git history + secrets + build artifacts out of the
+// docker build context (and thus the image), and keeps the build lean — the
+// generated Dockerfile builds from this dir, so docker reads this file here.
+const workspaceDockerignore = `# nuzur deploy — keep git history, secrets, and artifacts out of the image
+.git
+.gitignore
+config/prod.yaml
+*.local.yaml
+.env
+.env.*
+*.key
+*.pem
+*.p12
+/bin/
+*.exe
+.DS_Store
+`
+
+// writeWorkspaceGitignore writes a .gitignore and a .dockerignore into the
+// workspace on first creation, so it's safe to commit and its build stays lean +
+// secret-free. Neither clobbers an existing file (the user owns them).
+func writeWorkspaceGitignore(dir string) error {
+	if err := writeIfAbsent(filepath.Join(dir, ".gitignore"), workspaceGitignore); err != nil {
+		return err
+	}
+	return writeIfAbsent(filepath.Join(dir, ".dockerignore"), workspaceDockerignore)
+}
+
+// writeIfAbsent writes content to path only when the file doesn't already exist.
+func writeIfAbsent(path, content string) error {
+	if _, err := os.Stat(path); err == nil {
+		return nil // present — leave it
+	} else if !os.IsNotExist(err) {
+		return err
+	}
+	return os.WriteFile(path, []byte(content), 0o644)
 }
 
 // firstNonEmpty returns the first non-empty string in vals, or "".
