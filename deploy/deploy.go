@@ -16,7 +16,18 @@ type Provider string
 
 const (
 	// ProviderSSH is bring-your-own-server: the user supplies an existing host.
+	// It doubles as the universal fallback for any Linux box.
 	ProviderSSH Provider = "ssh"
+	// Managed providers create the VM for the user by shelling out to the
+	// provider's own (already-authenticated) CLI.
+	ProviderDigitalOcean Provider = "digitalocean"
+	ProviderHetzner      Provider = "hetzner"
+	ProviderAWS          Provider = "aws"
+	ProviderGCP          Provider = "gcp"
+	ProviderAzure        Provider = "azure"
+	ProviderVultr        Provider = "vultr"
+	ProviderLinode       Provider = "linode"
+	ProviderScaleway     Provider = "scaleway"
 )
 
 // DBEngine is the database engine. Both MySQL and Postgres are supported as a
@@ -39,11 +50,24 @@ type Target struct {
 	KeyPath string
 }
 
+// ProviderConfig holds the managed-provisioning inputs for a cloud provider.
+// Ignored by the BYO-SSH provider. Provider auth is deliberately NOT here — the
+// adapters shell out to the user's already-authenticated provider CLI, so nuzur
+// never handles provider tokens.
+type ProviderConfig struct {
+	Region     string // provider region/location (e.g. "nyc3", "nbg1")
+	Size       string // instance size/type (provider-specific; empty → adapter default)
+	Image      string // OS image (empty → adapter default, an Ubuntu LTS)
+	SSHKeyName string // name/id of an SSH key already registered with the provider;
+	// empty → the adapter uploads the public half of Target.KeyPath (or the default key).
+}
+
 // Spec is the fully-resolved input to a deployment.
 type Spec struct {
 	Provider           Provider
 	Target             Target
-	Identifier         string // app identifier (image/service name, DB name)
+	ProviderConfig     ProviderConfig // managed-provisioning inputs (cloud providers only)
+	Identifier         string         // app identifier (image/service name, DB name)
 	ProjectUUID        string
 	ProjectVersionUUID string
 	DBEngine           DBEngine
@@ -55,16 +79,38 @@ type Spec struct {
 	SourceDir string
 }
 
+// Provisioned is the result of Provision: a reachable Target plus the identifiers
+// a cloud teardown needs. For BYO-SSH, InstanceID/Region are empty (nothing to
+// delete). These are persisted on the Deployment record so `destroy` can find and
+// delete the VM later.
+type Provisioned struct {
+	Target     Target
+	InstanceID string // provider VM/instance id
+	Region     string // provider region the VM lives in
+}
+
+// FirewallRule is one inbound-TCP allowance for a cloud provider firewall. A
+// single port sets Port (PortEnd == 0); a contiguous range sets both. These
+// mirror the box's own ufw rules (SSH + the Caddy front doors) as defense in
+// depth — the on-box ufw remains the authoritative gate.
+type FirewallRule struct {
+	Port    int
+	PortEnd int // inclusive range end; 0 → single port
+}
+
 // Provisioner is the per-provider seam: everything else (the bootstrap) is
-// shared. For BYO-SSH these are near-trivial; a cloud adapter implements them
-// via the provider's CLI.
+// shared. For BYO-SSH these are near-trivial; a cloud adapter implements them by
+// shelling out to the provider's CLI.
 type Provisioner interface {
-	// Provision returns a reachable Target. BYO-SSH validates and returns the
-	// user-supplied host; a cloud provider creates a VM and returns its address.
-	Provision(ctx context.Context, spec Spec) (Target, error)
-	// ConfigureFirewall opens only the API (443) and SSH (22) ports.
-	ConfigureFirewall(ctx context.Context, t Target) error
+	// Provision returns a reachable, SSH-ready Target. BYO-SSH validates and
+	// returns the user-supplied host; a cloud provider creates a VM, waits for
+	// SSH, and returns its address + instance id.
+	Provision(ctx context.Context, spec Spec) (Provisioned, error)
+	// ConfigureFirewall restricts inbound to the given TCP rules (SSH + the Caddy
+	// front doors). BYO-SSH is a no-op (the box's ufw does it); cloud adapters
+	// create a provider security group/firewall for the instance.
+	ConfigureFirewall(ctx context.Context, p Provisioned, rules []FirewallRule) error
 	// Destroy tears down provider-created infrastructure. BYO-SSH is a no-op
-	// (the user owns the box); a cloud provider deletes the VM.
-	Destroy(ctx context.Context, t Target) error
+	// (the user owns the box); a cloud provider deletes the VM by instance id.
+	Destroy(ctx context.Context, p Provisioned) error
 }

@@ -18,6 +18,7 @@ import (
 // runDeploy; this just gathers it so reportDeployment can stay declarative.
 type deploymentReportInput struct {
 	Runner         *deploy.SSHRunner // for the on-box ports read-back (full-app only)
+	Provider       deploy.Provider   // where it's deployed: ssh (BYO) or a managed provider
 	Identifier     string
 	ProjectUUID    string
 	ProjectVersion string
@@ -55,7 +56,7 @@ func (i *Implementation) reportDeployment(ctx context.Context, in deploymentRepo
 		ConnectionUuid:     in.ConnUUID,
 		Identifier:         in.Identifier,
 		Host:               in.Host,
-		Provider:           string(deploy.ProviderSSH),
+		Provider:           deploymentProvider(in.Provider),
 		DbEngine:           agentConnDbType(in.DBEngine),
 		DbLocation:         deploymentDBLocation(in.ExternalDB),
 		Mode:               deploymentMode(in.DBOnly),
@@ -150,6 +151,15 @@ func dbPortForRecord(externalDB bool, extPort string, engine deploy.DBEngine) in
 		return 5432
 	}
 	return 3306
+}
+
+// deploymentProvider records where the deployment runs, defaulting to ssh
+// (bring-your-own-server) for older callers / an unset provider.
+func deploymentProvider(p deploy.Provider) string {
+	if strings.TrimSpace(string(p)) == "" {
+		return string(deploy.ProviderSSH)
+	}
+	return string(p)
 }
 
 func deploymentDBLocation(externalDB bool) nemgen.DeploymentDbLocation {

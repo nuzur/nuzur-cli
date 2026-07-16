@@ -144,10 +144,10 @@ type SSHProvisioner struct{}
 
 func NewSSHProvisioner() *SSHProvisioner { return &SSHProvisioner{} }
 
-func (p *SSHProvisioner) Provision(ctx context.Context, spec Spec) (Target, error) {
+func (p *SSHProvisioner) Provision(ctx context.Context, spec Spec) (Provisioned, error) {
 	t := spec.Target
 	if strings.TrimSpace(t.Host) == "" {
-		return Target{}, fmt.Errorf("--host is required for the ssh provider")
+		return Provisioned{}, fmt.Errorf("--host is required for the ssh provider")
 	}
 	if t.User == "" {
 		t.User = "root"
@@ -155,14 +155,16 @@ func (p *SSHProvisioner) Provision(ctx context.Context, spec Spec) (Target, erro
 	if t.Port == 0 {
 		t.Port = 22
 	}
-	return t, nil
+	return Provisioned{Target: t}, nil
 }
 
 // ConfigureFirewall is a no-op for BYO-SSH: the firewall (ufw, 443+22 only) is
 // applied on the box as part of the bootstrap. Cloud adapters use this for
 // provider-level security groups.
-func (p *SSHProvisioner) ConfigureFirewall(ctx context.Context, t Target) error { return nil }
+func (p *SSHProvisioner) ConfigureFirewall(ctx context.Context, prov Provisioned, rules []FirewallRule) error {
+	return nil
+}
 
 // Destroy is a no-op for BYO-SSH: the user owns the box. Agent revocation and
 // local-state cleanup are handled by the destroy command, not the provisioner.
-func (p *SSHProvisioner) Destroy(ctx context.Context, t Target) error { return nil }
+func (p *SSHProvisioner) Destroy(ctx context.Context, prov Provisioned) error { return nil }

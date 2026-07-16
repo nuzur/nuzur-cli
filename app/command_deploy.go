@@ -28,8 +28,12 @@ func (i *Implementation) DeployCommand() cli.Command {
 		Name:  "deploy",
 		Usage: i.localize.Localize("deploy_desc", "Deploy a project to a server: self-host its database and pair it back to nuzur"),
 		Flags: []cli.Flag{
-			cli.StringFlag{Name: "provider", Value: "ssh", Usage: "Deploy target provider (v1: ssh = bring-your-own-server)"},
+			cli.StringFlag{Name: "provider", Value: "ssh", Usage: "Where to deploy: ssh (bring-your-own-server), or a managed provider that creates the VM for you — digitalocean | hetzner (more coming). Managed providers shell out to your already-authenticated provider CLI."},
 			cli.StringFlag{Name: "host", Usage: "Target server IP/hostname (ssh provider)"},
+			cli.StringFlag{Name: "region", Usage: "Managed providers: region/location to create the VM in (e.g. nyc3, fra1 for DigitalOcean; nbg1, fsn1 for Hetzner)"},
+			cli.StringFlag{Name: "size", Usage: "Managed providers: instance size/type (default: a small instance per provider)"},
+			cli.StringFlag{Name: "image", Usage: "Managed providers: OS image (default: Ubuntu 22.04)"},
+			cli.StringFlag{Name: "ssh-key-name", Usage: "Managed providers: name/id of an SSH key already registered with the provider. Omit to upload the public half of --ssh-key (or your default ~/.ssh key)."},
 			cli.StringFlag{Name: "user", Value: "root", Usage: "SSH user"},
 			cli.StringFlag{Name: "ssh-key", Usage: "Path to an SSH private key (default: ssh-agent / ~/.ssh/config)"},
 			cli.IntFlag{Name: "port", Value: 22, Usage: "SSH port"},
@@ -61,11 +65,19 @@ func (i *Implementation) DeployCommand() cli.Command {
 }
 
 func (i *Implementation) runDeploy(c *cli.Context) error {
-	if deploy.Provider(c.String("provider")) != deploy.ProviderSSH {
-		return fmt.Errorf("only the 'ssh' provider is supported in v1")
+	provider := deploy.Provider(strings.TrimSpace(c.String("provider")))
+	if provider == "" {
+		provider = deploy.ProviderSSH
 	}
-	if strings.TrimSpace(c.String("host")) == "" {
+	provisioner, err := deploy.NewProvisioner(provider)
+	if err != nil {
+		return err
+	}
+	if provider == deploy.ProviderSSH && strings.TrimSpace(c.String("host")) == "" {
 		return fmt.Errorf("--host is required for the ssh provider")
+	}
+	if provider != deploy.ProviderSSH && strings.TrimSpace(c.String("region")) == "" {
+		return fmt.Errorf("--region is required for the %s provider", provider)
 	}
 	ctx := context.Background()
 	dbOnly := c.Bool("db-only")
@@ -274,12 +286,20 @@ func (i *Implementation) runDeploy(c *cli.Context) error {
 		return err
 	}
 
-	// 6. Provision (validate host) + preflight SSH.
+	// 6. Provision: BYO-SSH validates the host; a managed provider creates the VM
+	// (over its own CLI) and waits for SSH. Everything after the returned Target is
+	// provider-agnostic.
 	spec := deploy.Spec{
-		Provider: deploy.ProviderSSH,
+		Provider: provider,
 		Target: deploy.Target{
 			Host: c.String("host"), User: c.String("user"),
 			Port: c.Int("port"), KeyPath: c.String("ssh-key"),
+		},
+		ProviderConfig: deploy.ProviderConfig{
+			Region:     c.String("region"),
+			Size:       c.String("size"),
+			Image:      c.String("image"),
+			SSHKeyName: c.String("ssh-key-name"),
 		},
 		Identifier:         identifier,
 		ProjectUUID:        targets.project.Uuid,
@@ -288,11 +308,30 @@ func (i *Implementation) runDeploy(c *cli.Context) error {
 		ProvisioningToken:  tokRes.GetProvisioningToken(),
 		SourceDir:          sourceRoot,
 	}
-	provisioner := deploy.NewSSHProvisioner()
-	target, err := provisioner.Provision(ctx, spec)
+	if provider != deploy.ProviderSSH {
+		outputtools.PrintlnColoredErr("Creating the server on "+string(provider)+" (this can take a minute)...", outputtools.Blue)
+	}
+	prov, err := provisioner.Provision(ctx, spec)
 	if err != nil {
 		return err
 	}
+	target := prov.Target
+	// Managed providers create the host, so --host (and thus `host`) was empty.
+	// Adopt the provisioned address so the bootstrap URL, ports readback, public
+	// URL, and deployment record all use the real VM IP.
+	if strings.TrimSpace(host) == "" {
+		host = target.Host
+	}
+
+	// Restrict inbound at the provider level to mirror the box's ufw (SSH + the
+	// Caddy front doors). Best-effort — the on-box ufw is the authoritative gate,
+	// so a firewall hiccup must not fail an otherwise-good deploy. No-op for BYO-SSH.
+	if provider != deploy.ProviderSSH {
+		if err := provisioner.ConfigureFirewall(ctx, prov, deployFirewallRules(dbOnly, c.String("domain"))); err != nil {
+			outputtools.PrintlnColoredErr("Provider firewall not fully configured (the box's own ufw still applies): "+err.Error(), outputtools.Yellow)
+		}
+	}
+
 	runner := deploy.NewSSHRunner(target)
 	// Non-root SSH users need sudo for the privileged bootstrap steps.
 	runner.Sudo = c.Bool("sudo") || target.User != "root"
@@ -431,7 +470,9 @@ func (i *Implementation) runDeploy(c *cli.Context) error {
 	}
 	dep := &deploy.Deployment{
 		ID:                 depID,
-		Provider:           deploy.ProviderSSH,
+		Provider:           provider,
+		ProviderInstanceID: prov.InstanceID,
+		Region:             prov.Region,
 		Host:               target.Host, User: target.User, Port: target.Port,
 		Identifier:         identifier,
 		ProjectUUID:        targets.project.Uuid,
@@ -455,6 +496,7 @@ func (i *Implementation) runDeploy(c *cli.Context) error {
 	// for destroy, so a cloud hiccup must not fail an otherwise-good deploy.
 	if err := i.reportDeployment(ctx, deploymentReportInput{
 		Runner:         runner,
+		Provider:       provider,
 		Identifier:     identifier,
 		ProjectUUID:    targets.project.Uuid,
 		ProjectVersion: targets.projectVersion.Uuid,
@@ -689,6 +731,7 @@ func (i *Implementation) DestroyCommand() cli.Command {
 			cli.BoolFlag{Name: "sudo", Usage: "Run the teardown with sudo (auto-enabled for non-root users)"},
 			cli.BoolFlag{Name: "purge", Usage: "Also DROP the database and app user on the box (irreversible; default keeps the data)"},
 			cli.BoolFlag{Name: "skip-server", Usage: "Only revoke the agent + remove local state; leave the server untouched"},
+			cli.BoolFlag{Name: "keep-vm", Usage: "For a managed-provider deployment, keep the created VM instead of deleting it (default: the VM nuzur created is deleted when the last project on it is destroyed)"},
 		},
 		Action: func(c *cli.Context) error {
 			if !c.Args().Present() {
@@ -810,12 +853,40 @@ func (i *Implementation) DestroyCommand() cli.Command {
 				}
 			}
 
+			// 2c. Delete the managed-provider VM nuzur created — only when this is the
+			// last project on the box (others still need it) and the user didn't ask
+			// to keep it. Runs before local-state removal so the instance id is still
+			// available. BYO-SSH has no VM to delete. Best-effort.
+			vmDeleted := false
+			if isLast && !c.Bool("keep-vm") && !c.Bool("skip-server") &&
+				dep.Provider != deploy.ProviderSSH && dep.Provider != "" && dep.ProviderInstanceID != "" {
+				if provisioner, perr := deploy.NewProvisioner(dep.Provider); perr != nil {
+					outputtools.PrintlnColoredErr(fmt.Sprintf("warning: cannot delete the %s VM (%v) — delete instance %s manually.", dep.Provider, perr, dep.ProviderInstanceID), outputtools.Yellow)
+				} else {
+					outputtools.PrintlnColoredErr(fmt.Sprintf("Deleting the %s VM (instance %s)...", dep.Provider, dep.ProviderInstanceID), outputtools.Blue)
+					prov := deploy.Provisioned{
+						Target:     deploy.Target{Host: dep.Host, User: dep.User, Port: dep.Port, KeyPath: c.String("ssh-key")},
+						InstanceID: dep.ProviderInstanceID,
+						Region:     dep.Region,
+					}
+					if err := provisioner.Destroy(ctx, prov); err != nil {
+						outputtools.PrintlnColoredErr(fmt.Sprintf("warning: could not delete the %s VM %s (%v) — delete it manually to avoid charges.", dep.Provider, dep.ProviderInstanceID, err), outputtools.Yellow)
+					} else {
+						vmDeleted = true
+					}
+				}
+			}
+
 			// 3. Remove local deployment state.
 			if err := deploy.DeleteDeployment(id); err != nil {
 				return err
 			}
 			if isLast {
-				fmt.Printf("Destroyed deployment %s (server cleaned up, shared agent revoked — last project on the box).\n", id)
+				if vmDeleted {
+					fmt.Printf("Destroyed deployment %s (VM deleted, shared agent revoked — last project on the box).\n", id)
+				} else {
+					fmt.Printf("Destroyed deployment %s (server cleaned up, shared agent revoked — last project on the box).\n", id)
+				}
 			} else {
 				fmt.Printf("Destroyed deployment %s (this project removed; the box's shared agent stays for its other projects).\n", id)
 			}
@@ -1003,6 +1074,21 @@ func stringValue(m map[string]interface{}, key, def string) string {
 		}
 	}
 	return def
+}
+
+// deployFirewallRules is the inbound-TCP allowlist a managed provider's firewall
+// should open, mirroring the box's own ufw: always SSH (22); for a full app also
+// 80 + 443, plus the IP-only auto-assigned public-port range (8443+, one per
+// project on the box) when there's no --domain. A --db-only box exposes only SSH.
+func deployFirewallRules(dbOnly bool, domain string) []deploy.FirewallRule {
+	rules := []deploy.FirewallRule{{Port: 22}}
+	if !dbOnly {
+		rules = append(rules, deploy.FirewallRule{Port: 80}, deploy.FirewallRule{Port: 443})
+		if strings.TrimSpace(domain) == "" {
+			rules = append(rules, deploy.FirewallRule{Port: 8443, PortEnd: 8542})
+		}
+	}
+	return rules
 }
 
 // parseDeployDSN parses a MySQL DSN (user:pass@tcp(host:port)/db?params) or a

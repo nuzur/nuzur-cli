@@ -18,6 +18,8 @@ import (
 type Deployment struct {
 	ID                 string    `json:"id"`
 	Provider           Provider  `json:"provider"`
+	ProviderInstanceID string    `json:"provider_instance_id,omitempty"` // cloud VM/instance id (for destroy); empty for BYO-SSH
+	Region             string    `json:"region,omitempty"`               // cloud region the VM lives in
 	Host               string    `json:"host"`
 	User               string    `json:"user"`
 	Port               int       `json:"port"`
