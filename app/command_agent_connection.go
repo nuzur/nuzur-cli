@@ -168,6 +168,9 @@ func (i *Implementation) AgentConnectionRemoveCommand() cli.Command {
 		Name:      "remove",
 		Usage:     "Remove a local DB connection by name or uuid (and republish the catalog)",
 		ArgsUsage: "<name-or-uuid>",
+		Flags: []cli.Flag{
+			cli.BoolFlag{Name: "no-publish", Usage: "Only remove the connection locally; don't republish the catalog to nuzur (the box has no user token — the CLI running the teardown updates nuzur itself)"},
+		},
 		Action: func(c *cli.Context) error {
 			if !c.Args().Present() {
 				return fmt.Errorf("missing name or uuid")
@@ -187,6 +190,10 @@ func (i *Implementation) AgentConnectionRemoveCommand() cli.Command {
 			}
 			fmt.Printf("Removed connection %q (uuid: %s).\n", removed.Name, removed.UUID)
 
+			if c.Bool("no-publish") {
+				fmt.Println("Removed locally (catalog not published).")
+				return nil
+			}
 			if err := i.publishCatalog(reg); err != nil {
 				fmt.Printf("Removed locally but publishing the catalog to nuzur failed: %v\n", err)
 				return nil

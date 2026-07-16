@@ -53,6 +53,44 @@ type deploymentReportInput struct {
 	SourceDir string
 	// revision: the uniquely-tagged image built for this deploy
 	ImageName string
+
+	// Two-phase progress reporting. The deploy reports IN_PROGRESS as soon as the
+	// box exists, then finalizes the SAME revision (RevisionUUID) once the ports,
+	// URLs and agent are known — so a half-finished or failed deploy is visible in
+	// nuzur instead of silent.
+	RevisionUUID  string // empty → insert a new revision; set → update that one
+	Status        nemgen.DeploymentRevisionStatus
+	StatusMessage string
+}
+
+// maxStatusMessage matches the schema's status_message varchar(512).
+const maxStatusMessage = 512
+
+func truncateStatusMessage(msg string) string {
+	if len(msg) <= maxStatusMessage {
+		return msg
+	}
+	return msg[:maxStatusMessage-1] + "…"
+}
+
+// updateDeployRevision moves an in-flight revision along: a status_message per
+// phase, or a terminal status. Best-effort by design — progress reporting must
+// never fail an otherwise-good deploy, and the local record is authoritative for
+// teardown regardless.
+func (i *Implementation) updateDeployRevision(ctx context.Context, revisionUUID string, st nemgen.DeploymentRevisionStatus, msg string) {
+	if revisionUUID == "" {
+		return
+	}
+	authCtx, err := productclient.ClientContext()
+	if err != nil {
+		return
+	}
+	_, _ = i.productClient.ProductClient.UpdateDeploymentRevisionStatus(authCtx, &pb.UpdateDeploymentRevisionStatusRequest{
+		RevisionUuid:  revisionUUID,
+		Status:        st,
+		StatusMessage: truncateStatusMessage(msg),
+	})
+	_ = ctx
 }
 
 // reportDeployment records the deployment in nuzur (UpsertDeployment) so it shows
@@ -64,7 +102,10 @@ type deploymentReportInput struct {
 // read-back. The UpsertDeployment RPC gets its OWN fresh short-lived auth
 // context (a deploy runs for minutes through the docker build, so any context
 // minted at the start of the deploy would already be past its 10s deadline).
-func (i *Implementation) reportDeployment(ctx context.Context, in deploymentReportInput) error {
+// reportDeployment records the deploy in nuzur and returns the revision's uuid,
+// so an in-progress report can be finalized (or failed) later via the same
+// revision. See deploymentReportInput's two-phase notes.
+func (i *Implementation) reportDeployment(ctx context.Context, in deploymentReportInput) (string, error) {
 	// Core identity: the stable (user, host, identifier) row. user/status/uuid/
 	// audit/active_revision are server-owned.
 	d := &nemgen.Deployment{
@@ -112,13 +153,15 @@ func (i *Implementation) reportDeployment(ctx context.Context, in deploymentRepo
 		},
 	}
 	if !in.DBOnly {
-		image := in.ImageName
-		if image == "" {
-			image = "nuzur/" + in.Identifier + ":latest"
-		}
-		rev.ImageName = image
 		rev.Server.ContainerName = in.Identifier + "-api"
-		rev.Server.ImageName = image
+		// image_name is recorded only once the image has actually been built (i.e.
+		// the finalizing report). An in-progress or failed revision must not claim
+		// an image that never existed — the tag is minted before the build, so
+		// reporting it early would put a phantom artifact in the history.
+		if in.ImageName != "" {
+			rev.ImageName = in.ImageName
+			rev.Server.ImageName = in.ImageName
+		}
 		httpP, grpcP, dbP := readBackPorts(ctx, in.Runner, in.Identifier)
 		rev.Server.HttpPort = httpP
 		rev.Server.GrpcPort = grpcP
@@ -127,12 +170,22 @@ func (i *Implementation) reportDeployment(ctx context.Context, in deploymentRepo
 		}
 	}
 
+	rev.Status = in.Status
+	rev.StatusMessage = truncateStatusMessage(in.StatusMessage)
+
 	authCtx, err := productclient.ClientContext()
 	if err != nil {
-		return err
+		return "", err
 	}
-	_, err = i.productClient.ProductClient.UpsertDeployment(authCtx, &pb.UpsertDeploymentRequest{Deployment: d, Revision: rev})
-	return err
+	res, err := i.productClient.ProductClient.UpsertDeployment(authCtx, &pb.UpsertDeploymentRequest{
+		Deployment:   d,
+		Revision:     rev,
+		RevisionUuid: in.RevisionUUID,
+	})
+	if err != nil {
+		return "", err
+	}
+	return res.GetActiveRevision().GetUuid(), nil
 }
 
 // readBackPorts reads the box-allocated ports the bootstrap recorded at

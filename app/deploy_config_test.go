@@ -43,7 +43,6 @@ func deployContext(t *testing.T, args []string) *cli.Context {
 	set.Bool("custom", false, "")
 	set.String("source-dir", "", "")
 	set.String("cli-install-cmd", "", "")
-	set.String("schema-push-extension", "sql-push-local", "")
 	set.Bool("sudo", false, "")
 	set.String("web-url", "", "")
 	if err := set.Parse(args); err != nil {
@@ -91,7 +90,7 @@ func TestResolveDeploySettings_FileOnly(t *testing.T) {
 		t.Fatalf("port not from file: %d", s.Port)
 	}
 	// Unset-in-file fields fall back to defaults.
-	if s.User != "root" || s.SchemaPushExtension != "sql-push-local" {
+	if s.User != "root" {
 		t.Fatalf("defaults not applied: %+v", s)
 	}
 }
@@ -119,7 +118,7 @@ func TestResolveDeploySettings_Defaults(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if s.Provider != "ssh" || s.User != "root" || s.Port != 22 || s.DB != "mysql" || s.SchemaPushExtension != "sql-push-local" {
+	if s.Provider != "ssh" || s.User != "root" || s.Port != 22 || s.DB != "mysql" {
 		t.Fatalf("unexpected defaults: %+v", s)
 	}
 	if s.Custom || s.DBOnly {

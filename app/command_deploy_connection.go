@@ -25,19 +25,27 @@ import (
 //
 // The team is the deployed project's team (targets.project.TeamUuid); a
 // connection that doesn't belong to that team resolves as not-found.
-func (i *Implementation) resolveConnectionForDeploy(connUUID, teamUUID string) (engine deploy.DBEngine, host, port, user, pass, name, params string, err error) {
+//
+// store is the connection's store uuid — needed by the REMOTE sql-push extension,
+// which applies the schema to a team connection directly from nuzur (rather than
+// through the box's agent). See publishAndApplySchema.
+func (i *Implementation) resolveConnectionForDeploy(connUUID, teamUUID string) (engine deploy.DBEngine, host, port, user, pass, name, params, store string, err error) {
 	authCtx, err := productclient.ClientContext()
 	if err != nil {
-		return "", "", "", "", "", "", "", err
+		return "", "", "", "", "", "", "", "", err
 	}
 	conn, err := i.productClient.ProductClient.GetConnectionWithSecret(authCtx, &pb.GetConnectionWithSecretRequest{
 		ConnectionUuid: connUUID,
 		TeamUuid:       teamUUID,
 	})
 	if err != nil {
-		return "", "", "", "", "", "", "", fmt.Errorf("connection %s not found in this project's team: %w", connUUID, err)
+		return "", "", "", "", "", "", "", "", fmt.Errorf("connection %s not found in this project's team: %w", connUUID, err)
 	}
-	return connectionToDSNParts(conn)
+	engine, host, port, user, pass, name, params, err = connectionToDSNParts(conn)
+	if err != nil {
+		return "", "", "", "", "", "", "", "", err
+	}
+	return engine, host, port, user, pass, name, params, conn.GetStoreUuid(), nil
 }
 
 // connectionToDSNParts maps a nem Connection into the seven DSN pieces the deploy

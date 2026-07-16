@@ -56,7 +56,6 @@ func (i *Implementation) DeployCommand() cli.Command {
 			cli.BoolFlag{Name: "print-config", Usage: "Print the effective deploy config (as JSON) resolved from flags + --deploy-config, then exit without deploying. Use it to snapshot an invocation into a reusable deploy-config file."},
 			cli.StringFlag{Name: "gen-config", Usage: "Path to a JSON go-code-gen config (overrides the deploy-config's `codegen` block; else the last-used config for this project is reused)"},
 			cli.StringFlag{Name: "cli-install-cmd", Usage: "Command to install the nuzur CLI on the box (must leave `nuzur` on PATH)"},
-			cli.StringFlag{Name: "schema-push-extension", Value: "sql-push-local", Usage: "Identifier of the SQL-push extension used to auto-apply the schema"},
 			cli.BoolFlag{Name: "sudo", Usage: "Run the bootstrap via sudo (auto-enabled for non-root SSH users; the box needs passwordless sudo)"},
 			cli.StringFlag{Name: "web-url", Value: constants.WEB_PROD_URL, Usage: "nuzur web app base URL (for the data-manager deep link)"},
 		},
@@ -67,7 +66,18 @@ func (i *Implementation) DeployCommand() cli.Command {
 	}
 }
 
-func (i *Implementation) runDeploy(c *cli.Context) error {
+func (i *Implementation) runDeploy(c *cli.Context) (rerr error) {
+	// Set once the deploy is recorded in nuzur (right after the box exists). If
+	// anything fails after that, mark the revision FAILED with the error — a broken
+	// deploy should be visible in nuzur, not look like it never happened.
+	var deployRevUUID string
+	defer func() {
+		if rerr != nil && deployRevUUID != "" {
+			i.updateDeployRevision(context.Background(), deployRevUUID,
+				nemgen.DeploymentRevisionStatus_DEPLOYMENT_REVISION_STATUS_FAILED, rerr.Error())
+		}
+	}()
+
 	// Resolve the effective settings from the --deploy-config file merged with the
 	// CLI flags (explicit flags win). Everything below reads from `s`.
 	s, err := resolveDeploySettings(c)
@@ -115,6 +125,9 @@ func (i *Implementation) runDeploy(c *cli.Context) error {
 	externalDB := dbDSN != "" || fromConnection
 	dbEngine := deploy.DBMySQL
 	var extHost, extPort, extUser, extPass, extName, extParams string
+	// connStore is the team connection's store uuid (only set for --connection);
+	// the remote sql-push extension needs it to target the connection.
+	var connStore string
 	if dbDSN != "" {
 		var perr error
 		dbEngine, extHost, extPort, extUser, extPass, extName, extParams, perr = parseDeployDSN(dbDSN)
@@ -149,7 +162,7 @@ func (i *Implementation) runDeploy(c *cli.Context) error {
 	// --connection: resolve the DSN parts from the stored team connection now that
 	// the project's team is known. Drives the same external-DB path as --db-dsn.
 	if fromConnection {
-		dbEngine, extHost, extPort, extUser, extPass, extName, extParams, err = i.resolveConnectionForDeploy(connFlag, targets.project.TeamUuid)
+		dbEngine, extHost, extPort, extUser, extPass, extName, extParams, connStore, err = i.resolveConnectionForDeploy(connFlag, targets.project.TeamUuid)
 		if err != nil {
 			return err
 		}
@@ -277,6 +290,14 @@ func (i *Implementation) runDeploy(c *cli.Context) error {
 		outputtools.PrintlnColoredErr("Reusing the box's existing agent ("+reuseAgentUUID+") — no new pairing.", outputtools.Blue)
 	}
 
+	// Deployment id: reuse the prior record on a re-deploy, else mint one now. The
+	// record is written as soon as the box exists (step 6b) rather than at the end,
+	// so an interrupted deploy still leaves something `nuzur destroy` can clean up.
+	depID := identifier + "-" + shortID()
+	if prior != nil {
+		depID = prior.ID
+	}
+
 	// 2. Generate the app into the PERSISTENT workspace (full-app deploys only) —
 	// the editable source of truth deploy builds from. Re-deploys regenerate in
 	// place, refreshing generated code while preserving the user's custom
@@ -365,6 +386,74 @@ func (i *Implementation) runDeploy(c *cli.Context) error {
 		host = target.Host
 	}
 
+	// 6b. Record the deployment AS SOON AS THE BOX EXISTS — before the long
+	// bootstrap/build/pairing steps. If anything after this fails (or the run is
+	// interrupted), the record still carries the provider instance id, so
+	// `nuzur destroy <id>` can tear the VM down instead of orphaning a billing
+	// server nuzur has no memory of. Step 12 fills in the rest (agent, URLs).
+	dep := &deploy.Deployment{
+		ID:                 depID,
+		Provider:           provider,
+		ProviderInstanceID: prov.InstanceID,
+		Region:             prov.Region,
+		Host:               target.Host, User: target.User, Port: target.Port,
+		Identifier:         identifier,
+		ProjectUUID:        targets.project.Uuid,
+		ProjectVersionUUID: targets.projectVersion.Uuid,
+		ConnUUID:           connUUID,
+		DBEngine:           dbEngine,
+		ExternalDB:         externalDB,
+		SourceDir:          workspaceDir,
+		Domain:             s.Domain,
+		CreatedAt:          time.Now(),
+	}
+	if prior != nil {
+		dep.CreatedAt = prior.CreatedAt
+	}
+	if err := deploy.SaveDeployment(dep); err != nil {
+		return err
+	}
+
+	// 6c. Report the deploy to nuzur as IN_PROGRESS — same reasoning as the local
+	// record above, for the cloud side: the box exists, so it should be visible
+	// (and watchable, and seen failing) while the slow bootstrap/build/pair steps
+	// run. Everything except the box-allocated ports, URLs and agent is already
+	// known; step 12b finalizes THIS revision with the rest. Best-effort: progress
+	// reporting must never fail an otherwise-good deploy.
+	reportIn := deploymentReportInput{
+		Provider:       provider,
+		Identifier:     identifier,
+		ProjectUUID:    targets.project.Uuid,
+		ProjectVersion: targets.projectVersion.Uuid,
+		ConnUUID:       connUUID,
+		Host:           target.Host,
+		DBEngine:       dbEngine,
+		ExternalDB:     externalDB,
+		DBOnly:         dbOnly,
+		Domain:         s.Domain,
+		ExtDBPort:      extPort,
+		RESTEnabled:    boolValue(configValues, "rest_enabled"),
+		GRPCEnabled:    boolValue(configValues, "grpc_server_enabled"),
+		JWTAuth:        jwtAuth,
+		AuthConfig:     stringValue(configValues, "auth", ""),
+		Region:         s.Region,
+		Size:           s.Size,
+		Image:          s.Image,
+		SSHKeyName:     s.SSHKeyName,
+		SSHUser:        target.User,
+		SSHPort:        target.Port,
+		DBSchema:       schema,
+		Custom:         s.Custom,
+		SourceDir:      workspaceDir,
+		Status:         nemgen.DeploymentRevisionStatus_DEPLOYMENT_REVISION_STATUS_IN_PROGRESS,
+		StatusMessage:  "server ready — bootstrapping",
+	}
+	if rev, err := i.reportDeployment(ctx, reportIn); err != nil {
+		outputtools.PrintlnColoredErr("Deploy not reported to nuzur (continuing): "+err.Error(), outputtools.Yellow)
+	} else {
+		deployRevUUID = rev
+	}
+
 	// Restrict inbound at the provider level to mirror the box's ufw (SSH + the
 	// Caddy front doors). Best-effort — the on-box ufw is the authoritative gate,
 	// so a firewall hiccup must not fail an otherwise-good deploy. No-op for BYO-SSH.
@@ -438,6 +527,8 @@ func (i *Implementation) runDeploy(c *cli.Context) error {
 		bootMsg = "Bootstrapping the server (" + dbLabel + " + agent, database-only)..."
 	}
 	outputtools.PrintlnColoredErr(i.localize.Localize("deploy_bootstrapping", bootMsg), outputtools.Blue)
+	i.updateDeployRevision(ctx, deployRevUUID,
+		nemgen.DeploymentRevisionStatus_DEPLOYMENT_REVISION_STATUS_IN_PROGRESS, bootMsg)
 	if err := runner.RunScript(ctx, script); err != nil {
 		return err
 	}
@@ -445,6 +536,8 @@ func (i *Implementation) runDeploy(c *cli.Context) error {
 	// 9. Verify the agent connected. First deploy → a new agent UUID appears;
 	// re-deploy → the existing (reused) agent should come back ONLINE.
 	outputtools.PrintlnColoredErr(i.localize.Localize("deploy_verifying", "Waiting for the agent to connect..."), outputtools.Blue)
+	i.updateDeployRevision(ctx, deployRevUUID,
+		nemgen.DeploymentRevisionStatus_DEPLOYMENT_REVISION_STATUS_IN_PROGRESS, "waiting for the agent to connect")
 	var agentUUID string
 	var online bool
 	if reuseAgentUUID != "" {
@@ -463,7 +556,9 @@ func (i *Implementation) runDeploy(c *cli.Context) error {
 	// 10. Publish the connection catalog (needs the user token — the box can't)
 	// and auto-apply the schema to the empty DB.
 	schemaApplied := true
-	if err := i.publishAndApplySchema(targets, agentUUID, connUUID, connName, dbEngine, schema, s.SchemaPushExtension); err != nil {
+	i.updateDeployRevision(ctx, deployRevUUID,
+		nemgen.DeploymentRevisionStatus_DEPLOYMENT_REVISION_STATUS_IN_PROGRESS, "applying the schema to the database")
+	if err := i.publishAndApplySchema(targets, agentUUID, connUUID, connName, dbEngine, schema, connFlag, connStore); err != nil {
 		schemaApplied = false
 		outputtools.PrintlnColoredErr("Schema auto-apply skipped: "+err.Error(), outputtools.Yellow)
 	}
@@ -505,71 +600,32 @@ func (i *Implementation) runDeploy(c *cli.Context) error {
 		agentUUID, connUUID, url.QueryEscape(schema),
 	)
 
-	// 12. Record state. A re-deploy updates the existing record in place (same
-	// ID) rather than accumulating a new one per deploy.
-	depID := identifier + "-" + shortID()
-	if prior != nil {
-		depID = prior.ID
-	}
-	dep := &deploy.Deployment{
-		ID:                 depID,
-		Provider:           provider,
-		ProviderInstanceID: prov.InstanceID,
-		Region:             prov.Region,
-		Host:               target.Host, User: target.User, Port: target.Port,
-		Identifier:         identifier,
-		ProjectUUID:        targets.project.Uuid,
-		ProjectVersionUUID: targets.projectVersion.Uuid,
-		LocalAgentUUID:     agentUUID,
-		ConnUUID:           connUUID,
-		DBEngine:           dbEngine,
-		ExternalDB:         externalDB,
-		SourceDir:          workspaceDir,
-		Domain:             s.Domain,
-		APIURL:             publicURL,
-		PublicURL:          publicURL,
-		DataManagerURL:     dataManagerURL,
-		CreatedAt:          time.Now(),
-	}
+	// 12. Finalize the record: the row was written right after provisioning (6b)
+	// so the box was never un-destroyable; fill in what only exists now that
+	// pairing + the front door are up. A re-deploy updates the same ID in place.
+	dep.LocalAgentUUID = agentUUID
+	dep.APIURL = publicURL
+	dep.PublicURL = publicURL
+	dep.DataManagerURL = dataManagerURL
 	if err := deploy.SaveDeployment(dep); err != nil {
 		return err
 	}
 
-	// 12b. Report the deployment to nuzur so it appears in the web (with its
-	// config + live health). Best-effort: the local record above is authoritative
-	// for destroy, so a cloud hiccup must not fail an otherwise-good deploy.
-	if err := i.reportDeployment(ctx, deploymentReportInput{
-		Runner:         runner,
-		Provider:       provider,
-		Identifier:     identifier,
-		ProjectUUID:    targets.project.Uuid,
-		ProjectVersion: targets.projectVersion.Uuid,
-		LocalAgentUUID: agentUUID,
-		ConnUUID:       connUUID,
-		Host:           target.Host,
-		DBEngine:       dbEngine,
-		ExternalDB:     externalDB,
-		DBOnly:         dbOnly,
-		Domain:         s.Domain,
-		PublicURL:      publicURL,
-		DataManagerURL: dataManagerURL,
-		UseHTTPS:       useHTTPS,
-		ExtDBPort:      extPort,
-		RESTEnabled:    boolValue(configValues, "rest_enabled"),
-		GRPCEnabled:    boolValue(configValues, "grpc_server_enabled"),
-		JWTAuth:        jwtAuth,
-		AuthConfig:     stringValue(configValues, "auth", ""),
-		Region:         s.Region,
-		Size:           s.Size,
-		Image:          s.Image,
-		SSHKeyName:     s.SSHKeyName,
-		SSHUser:        target.User,
-		SSHPort:        target.Port,
-		DBSchema:       schema,
-		Custom:         s.Custom,
-		SourceDir:      workspaceDir,
-		ImageName:      imageName,
-	}); err != nil {
+	// 12b. Finalize the nuzur-side revision: fill in what only exists now (the
+	// box-allocated ports, the front-door URL, the agent) and flip it ACTIVE, which
+	// supersedes the previously-current revision. Updates the SAME revision opened
+	// at 6c rather than stacking a duplicate. Best-effort: the local record is
+	// authoritative for destroy, so a cloud hiccup must not fail a good deploy.
+	reportIn.Runner = runner
+	reportIn.LocalAgentUUID = agentUUID
+	reportIn.PublicURL = publicURL
+	reportIn.DataManagerURL = dataManagerURL
+	reportIn.UseHTTPS = useHTTPS
+	reportIn.RevisionUUID = deployRevUUID
+	reportIn.ImageName = imageName // built by now — safe to pin in the history
+	reportIn.Status = nemgen.DeploymentRevisionStatus_DEPLOYMENT_REVISION_STATUS_ACTIVE
+	reportIn.StatusMessage = ""
+	if _, err := i.reportDeployment(ctx, reportIn); err != nil {
 		outputtools.PrintlnColoredErr("Deployment recorded locally but not reported to nuzur: "+err.Error(), outputtools.Yellow)
 	}
 
@@ -702,7 +758,20 @@ func agentConnDbType(engine deploy.DBEngine) nemgen.LocalAgentConnectionDbType {
 	return nemgen.LocalAgentConnectionDbType_LOCAL_AGENT_CONNECTION_DB_TYPE_MYSQL
 }
 
-func (i *Implementation) publishAndApplySchema(targets *runTargets, agentUUID, connUUID, connName string, dbEngine deploy.DBEngine, schema, sqlPushExtID string) error {
+// SQL-push extensions. Which one applies the schema is derived from the
+// deployment's topology, never configured — see publishAndApplySchema.
+const (
+	sqlPushLocalExtensionIdentifier = "sql-push-local" // via the box's agent
+	sqlPushExtensionIdentifier      = "sql-push"       // direct from nuzur to a team connection
+)
+
+// publishAndApplySchema publishes the box's DB as a named agent connection (so
+// nuzur can serve it in the data manager) and then applies the project's schema to
+// the freshly-provisioned, empty database.
+//
+// teamConnUUID/teamConnStore are set only for a --connection deploy (an existing
+// team connection).
+func (i *Implementation) publishAndApplySchema(targets *runTargets, agentUUID, connUUID, connName string, dbEngine deploy.DBEngine, schema, teamConnUUID, teamConnStore string) error {
 	authCtx, err := productclient.ClientContext()
 	if err != nil {
 		return err
@@ -739,6 +808,26 @@ func (i *Implementation) publishAndApplySchema(targets *runTargets, agentUUID, c
 		return fmt.Errorf("publishing connection catalog: %w", err)
 	}
 
+	// Pick the push path from the topology, not from a flag. A self-hosted (or raw
+	// --db-dsn) database lives behind the box, so it's only reachable through the
+	// agent → sql-push-local. An existing team connection is reachable from nuzur
+	// directly, so push remotely → sql-push, which keeps the shared connection in
+	// sync the same way any other schema change to it would.
+	sqlPushExtID := sqlPushLocalExtensionIdentifier
+	configValues := map[string]interface{}{
+		"local_agent":            agentUUID,
+		"local_agent_connection": connUUID,
+		"local_agent_schema":     schema,
+	}
+	if teamConnUUID != "" {
+		sqlPushExtID = sqlPushExtensionIdentifier
+		configValues = map[string]interface{}{
+			"store":      teamConnStore,
+			"connection": teamConnUUID,
+			"schema":     schema,
+		}
+	}
+
 	ext, err := targets.er.FindExtensionByIdentifier(sqlPushExtID)
 	if err != nil {
 		return fmt.Errorf("resolving %q: %w", sqlPushExtID, err)
@@ -759,13 +848,9 @@ func (i *Implementation) publishAndApplySchema(targets *runTargets, agentUUID, c
 		ExtensionVersion:   ver,
 		ProjectUUID:        targets.project.Uuid,
 		ProjectVersionUUID: targets.projectVersion.Uuid,
-		ConfigValues: map[string]interface{}{
-			"local_agent":            agentUUID,
-			"local_agent_connection": connUUID,
-			"local_agent_schema":     schema,
-		},
-		AutoConfirmSteps: true,
-		OutputPath:       outDir,
+		ConfigValues:       configValues,
+		AutoConfirmSteps:   true,
+		OutputPath:         outDir,
 	})
 	return err
 }

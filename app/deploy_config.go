@@ -49,11 +49,10 @@ type DeployConfig struct {
 	Auth   *string `json:"auth,omitempty"`
 	Custom *bool   `json:"custom,omitempty"`
 
-	SourceDir           *string `json:"source_dir,omitempty"`
-	CLIInstallCmd       *string `json:"cli_install_cmd,omitempty"`
-	SchemaPushExtension *string `json:"schema_push_extension,omitempty"`
-	Sudo                *bool   `json:"sudo,omitempty"`
-	WebURL              *string `json:"web_url,omitempty"`
+	SourceDir     *string `json:"source_dir,omitempty"`
+	CLIInstallCmd *string `json:"cli_install_cmd,omitempty"`
+	Sudo          *bool   `json:"sudo,omitempty"`
+	WebURL        *string `json:"web_url,omitempty"`
 
 	Codegen map[string]interface{} `json:"codegen,omitempty"`
 }
@@ -122,11 +121,10 @@ type deploySettings struct {
 	Auth   string
 	Custom bool
 
-	SourceDir           string
-	CLIInstallCmd       string
-	SchemaPushExtension string
-	Sudo                bool
-	WebURL              string
+	SourceDir     string
+	CLIInstallCmd string
+	Sudo          bool
+	WebURL        string
 
 	// Codegen is the go-code-gen config map: the deploy-config's `codegen` block
 	// as the base, overlaid by a --gen-config file when given.
@@ -173,11 +171,10 @@ func resolveDeploySettings(c *cli.Context) (*deploySettings, error) {
 		Auth:   strSetting(c, "auth", cfg.Auth, ""),
 		Custom: boolSetting(c, "custom", cfg.Custom),
 
-		SourceDir:           strSetting(c, "source-dir", cfg.SourceDir, ""),
-		CLIInstallCmd:       strSetting(c, "cli-install-cmd", cfg.CLIInstallCmd, ""),
-		SchemaPushExtension: strSetting(c, "schema-push-extension", cfg.SchemaPushExtension, "sql-push-local"),
-		Sudo:                boolSetting(c, "sudo", cfg.Sudo),
-		WebURL:              strSetting(c, "web-url", cfg.WebURL, constants.WEB_PROD_URL),
+		SourceDir:     strSetting(c, "source-dir", cfg.SourceDir, ""),
+		CLIInstallCmd: strSetting(c, "cli-install-cmd", cfg.CLIInstallCmd, ""),
+		Sudo:          boolSetting(c, "sudo", cfg.Sudo),
+		WebURL:        strSetting(c, "web-url", cfg.WebURL, constants.WEB_PROD_URL),
 	}
 
 	// Codegen: start from the deploy-config's nested `codegen` block, then overlay
@@ -255,34 +252,33 @@ func (s *deploySettings) toDeployConfig() *DeployConfig {
 		return &v
 	}
 	cfg := &DeployConfig{
-		Provider:            sp(s.Provider),
-		Host:                sp(s.Host),
-		Region:              sp(s.Region),
-		Size:                sp(s.Size),
-		Image:               sp(s.Image),
-		SSHKeyName:          sp(s.SSHKeyName),
-		User:                sp(s.User),
-		SSHKey:              sp(s.SSHKey),
-		Port:                ip(s.Port),
-		Domain:              sp(s.Domain),
-		Project:             sp(s.Project),
-		Version:             sp(s.Version),
-		Identifier:          sp(s.Identifier),
-		DBOnly:              bp(s.DBOnly),
-		DB:                  sp(s.DB),
-		DBSchema:            sp(s.DBSchema),
-		DBDSN:               sp(s.DBDSN),
-		Connection:          sp(s.Connection),
-		SaveConnection:      bp(s.SaveConnection),
-		NoSaveConnection:    bp(s.NoSaveConnection),
-		API:                 sp(s.API),
-		Auth:                sp(s.Auth),
-		Custom:              bp(s.Custom),
-		SourceDir:           sp(s.SourceDir),
-		CLIInstallCmd:       sp(s.CLIInstallCmd),
-		SchemaPushExtension: sp(s.SchemaPushExtension),
-		Sudo:                bp(s.Sudo),
-		WebURL:              sp(s.WebURL),
+		Provider:         sp(s.Provider),
+		Host:             sp(s.Host),
+		Region:           sp(s.Region),
+		Size:             sp(s.Size),
+		Image:            sp(s.Image),
+		SSHKeyName:       sp(s.SSHKeyName),
+		User:             sp(s.User),
+		SSHKey:           sp(s.SSHKey),
+		Port:             ip(s.Port),
+		Domain:           sp(s.Domain),
+		Project:          sp(s.Project),
+		Version:          sp(s.Version),
+		Identifier:       sp(s.Identifier),
+		DBOnly:           bp(s.DBOnly),
+		DB:               sp(s.DB),
+		DBSchema:         sp(s.DBSchema),
+		DBDSN:            sp(s.DBDSN),
+		Connection:       sp(s.Connection),
+		SaveConnection:   bp(s.SaveConnection),
+		NoSaveConnection: bp(s.NoSaveConnection),
+		API:              sp(s.API),
+		Auth:             sp(s.Auth),
+		Custom:           bp(s.Custom),
+		SourceDir:        sp(s.SourceDir),
+		CLIInstallCmd:    sp(s.CLIInstallCmd),
+		Sudo:             bp(s.Sudo),
+		WebURL:           sp(s.WebURL),
 	}
 	if len(s.Codegen) > 0 {
 		cfg.Codegen = s.Codegen

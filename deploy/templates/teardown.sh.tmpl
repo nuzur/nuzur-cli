@@ -35,7 +35,7 @@ rm -f /etc/cron.d/nuzur-backup-{{.Identifier}}
 rm -rf {{.ProjectDir}}
 
 # ── 5. Remove this project's connection from the shared agent ────────────────
-{{if .ConnUUID}}{{.NuzurBin}} agent connection remove '{{.ConnUUID}}' 2>/dev/null || true
+{{if .ConnUUID}}{{.NuzurBin}} agent connection remove '{{.ConnUUID}}' --no-publish 2>/dev/null || true
 {{end}}
 
 {{if .Purge}}
