@@ -39,6 +39,9 @@ func (i *Implementation) DeployCommand() cli.Command {
 			cli.StringFlag{Name: "identifier", Usage: "Deployment identifier (names the DB/service/config on the box; default: from the go-code-gen config, or the project name for --db-only)"},
 			cli.BoolFlag{Name: "db-only", Usage: "Database-only: install the DB engine (--db), pair the agent, register the connection, and apply the schema — but do NOT generate/build/run the app or Caddy. Manage the DB entirely through nuzur."},
 			cli.StringFlag{Name: "db-dsn", Usage: "Use an EXISTING database instead of self-hosting one. MySQL DSN (user:pass@tcp(host:port)/db?params) or Postgres URL (postgres://user:pass@host:port/db?sslmode=require). The app + agent connect to it; MySQL install/creation is skipped."},
+			cli.StringFlag{Name: "connection", Usage: "Deploy against an EXISTING nuzur team connection (by UUID) instead of --db-dsn. The DSN is resolved server-side from the connection's stored credentials — no plaintext secret on the command line. Mutually exclusive with --db-dsn."},
+			cli.BoolFlag{Name: "save-connection", Usage: "After an external (--db-dsn) deploy, register the database as a team connection so your team can use the data manager on it. Requires a team admin. (Non-interactive opt-in; a TTY otherwise prompts.)"},
+			cli.BoolFlag{Name: "no-save-connection", Usage: "Never prompt to save the deployed external database as a team connection."},
 			cli.StringFlag{Name: "db-schema", Usage: "Postgres schema/namespace to target (default: public). Ignored for MySQL, where the database IS the schema."},
 			cli.StringFlag{Name: "db", Value: "mysql", Usage: "Self-hosted database engine: mysql | postgres"},
 			cli.StringFlag{Name: "api", Usage: "API surface to generate: rest | grpc | both. Pick by the consumer — REST for JS/web/browser clients, gRPC for Go/backend clients (leave unset to use the project's last/provided config)"},
@@ -67,14 +70,20 @@ func (i *Implementation) runDeploy(c *cli.Context) error {
 	ctx := context.Background()
 	dbOnly := c.Bool("db-only")
 
-	// --db-dsn: connect to an EXISTING database (local or remote, MySQL or
-	// Postgres) instead of self-hosting one. Parse it up front so it can drive
-	// the generated app's engine, the app config, and the agent connection.
+	// --db-dsn / --connection: connect to an EXISTING database instead of
+	// self-hosting one. --db-dsn takes a raw DSN; --connection resolves the DSN
+	// server-side from a stored team connection (no plaintext secret on the CLI).
+	// Both feed the same external-DB path below.
 	dbDSN := strings.TrimSpace(c.String("db-dsn"))
-	externalDB := dbDSN != ""
+	connFlag := strings.TrimSpace(c.String("connection"))
+	if connFlag != "" && dbDSN != "" {
+		return fmt.Errorf("--connection and --db-dsn are mutually exclusive")
+	}
+	fromConnection := connFlag != ""
+	externalDB := dbDSN != "" || fromConnection
 	dbEngine := deploy.DBMySQL
 	var extHost, extPort, extUser, extPass, extName, extParams string
-	if externalDB {
+	if dbDSN != "" {
 		var perr error
 		dbEngine, extHost, extPort, extUser, extPass, extName, extParams, perr = parseDeployDSN(dbDSN)
 		if perr != nil {
@@ -83,7 +92,7 @@ func (i *Implementation) runDeploy(c *cli.Context) error {
 		if extName == "" {
 			return fmt.Errorf("--db-dsn must include a database name")
 		}
-	} else if c.String("db") == "postgres" {
+	} else if !fromConnection && c.String("db") == "postgres" {
 		// Self-hosted Postgres: install + provision PG on the box (parallels the
 		// MySQL local tier). The engine drives the bootstrap install/create branch,
 		// the app config driver, and the agent connection's --driver/--schema.
@@ -103,6 +112,15 @@ func (i *Implementation) runDeploy(c *cli.Context) error {
 	})
 	if err != nil {
 		return err
+	}
+
+	// --connection: resolve the DSN parts from the stored team connection now that
+	// the project's team is known. Drives the same external-DB path as --db-dsn.
+	if fromConnection {
+		dbEngine, extHost, extPort, extUser, extPass, extName, extParams, err = i.resolveConnectionForDeploy(connFlag, targets.project.TeamUuid)
+		if err != nil {
+			return err
+		}
 	}
 
 	// 2 + 3. Generate the app (skipped entirely for --db-only, which self-hosts
@@ -184,8 +202,21 @@ func (i *Implementation) runDeploy(c *cli.Context) error {
 	dbName := sanitizeDBName(identifier)
 	dbUser := dbName + "_app"
 	if externalDB {
-		dbName = extName
+		// external DB name/user come from the DSN/connection. A MySQL connection is
+		// server-level (no database name), so fall back to the identifier-derived
+		// name — the app targets that database on the connection's server.
+		if extName != "" {
+			dbName = extName
+		}
 		dbUser = extUser
+	}
+	if externalDB && extName == "" {
+		extName = dbName
+	}
+	// --connection has no raw DSN yet: assemble one from the resolved parts so the
+	// external-DB bootstrap can inject it into the on-box agent connection.
+	if fromConnection {
+		dbDSN = assembleDeployDSN(dbEngine, extHost, extPort, extUser, extPass, extName, extParams)
 	}
 	// Schema vs database: in MySQL the database IS the schema; in Postgres a
 	// database contains schemas (default `public`). `schema` is what the diff
@@ -508,6 +539,28 @@ func (i *Implementation) runDeploy(c *cli.Context) error {
 		// The DB + agent connection are live either way — retry, or apply the
 		// schema from nuzur (SQL Push / change request).
 		outputtools.PrintlnColoredErr("\nSchema auto-apply was skipped (see the error above). The database + agent connection are live — re-run the deploy to retry, or apply the schema from nuzur (SQL Push / change request).", outputtools.Yellow)
+	}
+
+	// Optionally register a raw --db-dsn database as a team connection so the whole
+	// team can use the data manager on it. Opt-in only (flag or TTY prompt), and
+	// skipped for --connection (already a team connection) and self-hosted DBs
+	// (unreachable from nuzur cloud). Best-effort — never fails the deploy.
+	if c.Bool("save-connection") && (!externalDB || fromConnection) {
+		outputtools.PrintlnColoredErr("--save-connection applies only to an external --db-dsn deploy; ignoring.", outputtools.Yellow)
+	}
+	if externalDB && !fromConnection && shouldSaveTeamConnection(c.Bool("no-save-connection"), c.Bool("save-connection")) {
+		i.saveTeamConnection(saveConnectionInput{
+			TeamUUID:    targets.project.TeamUuid,
+			ProjectName: targets.project.Name,
+			Identifier:  identifier,
+			Engine:      dbEngine,
+			Host:        extHost,
+			Port:        extPort,
+			User:        extUser,
+			Pass:        extPass,
+			Name:        extName,
+			Params:      extParams,
+		})
 	}
 	return nil
 }
