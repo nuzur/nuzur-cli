@@ -34,6 +34,47 @@ if ! command -v docker >/dev/null 2>&1; then
   apt-get install -y docker.io
   systemctl enable --now docker
 fi
+# Ensure the Docker buildx plugin is present: the generated Dockerfile uses
+# BuildKit cache mounts (RUN --mount=type=cache) that require buildx. Ubuntu's
+# docker.io package doesn't bundle it, and Docker may already have been installed
+# (skipping the branch above), so ensure it here regardless — installed from
+# Docker's signed apt repo, where the plugin coexists with any existing engine.
+if ! docker buildx version >/dev/null 2>&1; then
+  echo "[nuzur-deploy] installing docker buildx plugin"
+  install -m 0755 -d /etc/apt/keyrings
+  if [ ! -f /etc/apt/keyrings/docker.gpg ]; then
+    curl -fsSL https://download.docker.com/linux/ubuntu/gpg | gpg --dearmor -o /etc/apt/keyrings/docker.gpg
+    chmod a+r /etc/apt/keyrings/docker.gpg
+  fi
+  . /etc/os-release
+  echo "deb [arch=$(dpkg --print-architecture) signed-by=/etc/apt/keyrings/docker.gpg] https://download.docker.com/linux/ubuntu ${VERSION_CODENAME} stable" > /etc/apt/sources.list.d/docker.list
+  apt-get update -y
+  apt-get install -y docker-buildx-plugin
+fi
+# BuildKit resolves DNS via the Docker daemon; on Ubuntu/systemd-resolved the
+# box's resolv.conf points at the 127.0.0.53 stub, which the build sandbox can't
+# reach — so in-build package fetches (apk/apt) fail DNS. Point the daemon at the
+# real upstream resolvers (public fallback). Idempotent: acts only when dns isn't
+# already configured.
+if ! grep -q '"dns"' /etc/docker/daemon.json 2>/dev/null; then
+  echo "[nuzur-deploy] configuring docker daemon DNS for BuildKit builds"
+  DNS1=$(awk '/^nameserver/ && $2 !~ /^127\./ {print $2}' /run/systemd/resolve/resolv.conf 2>/dev/null | sed -n 1p)
+  DNS2=$(awk '/^nameserver/ && $2 !~ /^127\./ {print $2}' /run/systemd/resolve/resolv.conf 2>/dev/null | sed -n 2p)
+  [ -z "$DNS1" ] && DNS1=8.8.8.8
+  [ -z "$DNS2" ] && DNS2=1.1.1.1
+  mkdir -p /etc/docker
+  if [ -s /etc/docker/daemon.json ]; then
+    apt-get install -y jq >/dev/null 2>&1 || true
+    if command -v jq >/dev/null 2>&1; then
+      DTMP=$(mktemp)
+      jq --arg d1 "$DNS1" --arg d2 "$DNS2" '. + {dns: [$d1, $d2]}' /etc/docker/daemon.json > "$DTMP" && mv "$DTMP" /etc/docker/daemon.json
+    fi
+  else
+    printf '{ "dns": ["%s", "%s"] }\n' "$DNS1" "$DNS2" > /etc/docker/daemon.json
+  fi
+  systemctl restart docker 2>/dev/null || service docker restart 2>/dev/null || true
+  sleep 3
+fi
 {{end}}
 
 {{if .ExternalDB}}
@@ -196,6 +237,11 @@ chmod 600 "$PROD_YAML"
 # It's the default in modern Docker; set it explicitly so older engines use it too.
 echo "[nuzur-deploy] building app image"
 DOCKER_BUILDKIT=1 docker build -t {{.ImageName}} "{{.RemoteSrcDir}}"
+# Each deploy builds a uniquely-tagged image (pinned by the deployment revision
+# for audit/rollback). Keep only the 3 most-recent for this app so the tags don't
+# fill the disk; removing an in-use image fails harmlessly.
+OLD_IMAGES=$(docker images "nuzur/{{.Identifier}}" -q | awk 'NR>3')
+[ -n "$OLD_IMAGES" ] && docker rmi $OLD_IMAGES 2>/dev/null || true
 cat > /etc/systemd/system/{{.Identifier}}-api.service <<UNIT
 [Unit]
 Description=nuzur generated API ({{.Identifier}})

@@ -37,6 +37,22 @@ type deploymentReportInput struct {
 	GRPCEnabled    bool
 	JWTAuth        bool
 	AuthConfig     string // resolved go-code-gen `auth` config value (for keycloak)
+
+	// provider embed (managed-provider provisioning spec)
+	Region     string
+	Size       string
+	Image      string
+	SSHKeyName string
+	// server embed
+	SSHUser string
+	SSHPort int
+	// database embed
+	DBSchema string
+	// codegen embed
+	Custom    bool
+	SourceDir string
+	// revision: the uniquely-tagged image built for this deploy
+	ImageName string
 }
 
 // reportDeployment records the deployment in nuzur (UpsertDeployment) so it shows
@@ -49,35 +65,65 @@ type deploymentReportInput struct {
 // context (a deploy runs for minutes through the docker build, so any context
 // minted at the start of the deploy would already be past its 10s deadline).
 func (i *Implementation) reportDeployment(ctx context.Context, in deploymentReportInput) error {
+	// Core identity: the stable (user, host, identifier) row. user/status/uuid/
+	// audit/active_revision are server-owned.
 	d := &nemgen.Deployment{
-		ProjectUuid:        in.ProjectUUID,
+		ProjectUuid: in.ProjectUUID,
+		Identifier:  in.Identifier,
+		Host:        in.Host,
+	}
+
+	// Revision: the full config that shipped in this deploy, grouped into the four
+	// embeds. project_version/cli_version/image live here (they change per deploy);
+	// status/deployed_at/audit are server-owned.
+	rev := &nemgen.DeploymentRevision{
 		ProjectVersionUuid: in.ProjectVersion,
-		LocalAgentUuid:     in.LocalAgentUUID,
-		ConnectionUuid:     in.ConnUUID,
-		Identifier:         in.Identifier,
-		Host:               in.Host,
-		Provider:           deploymentProvider(in.Provider),
-		DbEngine:           agentConnDbType(in.DBEngine),
-		DbLocation:         deploymentDBLocation(in.ExternalDB),
-		Mode:               deploymentMode(in.DBOnly),
-		RestEnabled:        in.RESTEnabled && !in.DBOnly,
-		GrpcEnabled:        in.GRPCEnabled && !in.DBOnly,
-		AuthType:           deploymentAuthType(in.JWTAuth, in.AuthConfig),
-		Domain:             in.Domain,
-		PublicUrl:          in.PublicURL,
-		DataManagerUrl:     in.DataManagerURL,
-		PublicPort:         publicPortFromURL(in.PublicURL, in.UseHTTPS),
-		DbPort:             dbPortForRecord(in.ExternalDB, in.ExtDBPort, in.DBEngine),
 		CliVersion:         constants.CLI_VERSION,
+		Provider: &nemgen.DeploymentProvider{
+			Name:       deploymentProvider(in.Provider),
+			Region:     in.Region,
+			Size:       in.Size,
+			Image:      in.Image,
+			SshKeyName: in.SSHKeyName,
+		},
+		Server: &nemgen.DeploymentServer{
+			SshUser:        in.SSHUser,
+			SshPort:        int64(in.SSHPort),
+			PublicPort:     publicPortFromURL(in.PublicURL, in.UseHTTPS),
+			Domain:         in.Domain,
+			PublicUrl:      in.PublicURL,
+			DataManagerUrl: in.DataManagerURL,
+			LocalAgentUuid: in.LocalAgentUUID,
+		},
+		Database: &nemgen.DeploymentDatabase{
+			Engine:         agentConnDbType(in.DBEngine),
+			Location:       deploymentDBLocation(in.ExternalDB),
+			Port:           dbPortForRecord(in.ExternalDB, in.ExtDBPort, in.DBEngine),
+			Schema:         in.DBSchema,
+			ConnectionUuid: in.ConnUUID,
+		},
+		Codegen: &nemgen.DeploymentCodegen{
+			Mode:        deploymentMode(in.DBOnly),
+			RestEnabled: in.RESTEnabled && !in.DBOnly,
+			GrpcEnabled: in.GRPCEnabled && !in.DBOnly,
+			AuthType:    deploymentAuthType(in.JWTAuth, in.AuthConfig),
+			Custom:      in.Custom,
+			SourceDir:   in.SourceDir,
+		},
 	}
 	if !in.DBOnly {
-		d.ContainerName = in.Identifier + "-api"
-		d.ImageName = "nuzur/" + in.Identifier + ":latest"
+		image := in.ImageName
+		if image == "" {
+			image = "nuzur/" + in.Identifier + ":latest"
+		}
+		rev.ImageName = image
+		rev.Server.ContainerName = in.Identifier + "-api"
+		rev.Server.ImageName = image
 		httpP, grpcP, dbP := readBackPorts(ctx, in.Runner, in.Identifier)
-		d.HttpPort = httpP
-		d.GrpcPort = grpcP
+		rev.Server.HttpPort = httpP
+		rev.Server.GrpcPort = grpcP
 		if dbP > 0 {
-			d.DbPort = dbP
+			rev.Database.Port = dbP
 		}
 	}
 
@@ -85,7 +131,7 @@ func (i *Implementation) reportDeployment(ctx context.Context, in deploymentRepo
 	if err != nil {
 		return err
 	}
-	_, err = i.productClient.ProductClient.UpsertDeployment(authCtx, &pb.UpsertDeploymentRequest{Deployment: d})
+	_, err = i.productClient.ProductClient.UpsertDeployment(authCtx, &pb.UpsertDeploymentRequest{Deployment: d, Revision: rev})
 	return err
 }
 

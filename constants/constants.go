@@ -1,6 +1,6 @@
 package constants
 
-const CLI_VERSION = "1.2.2"
+const CLI_VERSION = "1.2.3"
 const TOKEN_FILE = "token.txt"
 const LOCAL_AGENT_UUID_FILE = "local_agent_uuid.txt"
 const LOCAL_AGENT_TOKEN_FILE = "local_agent_token.txt"

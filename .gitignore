@@ -30,3 +30,4 @@ nuzur-cli
 .DS_Store
 test/*
 runtest/*
+bin/nuzur-cli-dev

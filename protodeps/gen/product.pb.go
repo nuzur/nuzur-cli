@@ -9067,12 +9067,18 @@ func (x *GetLocalAgentConnectionsResponse) GetConnections() []*gen.LocalAgentCon
 // deployments
 type UpsertDeploymentRequest struct {
 	state protoimpl.MessageState `protogen:"open.v1"`
-	// The deployment to record. The server stamps user_uuid + created_by/
-	// updated_by + status from the authed token; uuid is minted on create and
-	// preserved on update. Idempotent by (user_uuid, host, identifier): a second
-	// deploy of the same app on the same box updates the existing row (bumping
-	// project_version_uuid, ports, urls, last_deployed_at) instead of inserting.
-	Deployment    *gen.Deployment `protobuf:"bytes,1,opt,name=deployment,proto3" json:"deployment,omitempty"`
+	// The deployment identity to record: host + identifier + project_uuid. The
+	// server stamps user_uuid + created_by/updated_by + status from the authed
+	// token; uuid is minted on create and preserved on update. Idempotent by
+	// (user_uuid, host, identifier): a second deploy of the same app on the same
+	// box reuses the existing deployment row.
+	Deployment *gen.Deployment `protobuf:"bytes,1,opt,name=deployment,proto3" json:"deployment,omitempty"`
+	// The config that shipped in THIS deploy — inserted as a new revision, marked
+	// active, and pointed to by the deployment's active_revision_uuid. Prior
+	// active revisions for the deployment are flipped to superseded. Carries the
+	// project_version, cli_version, image_name, and the provider/server/database/
+	// codegen embeds. The server owns uuid/status/deployed_at/audit here too.
+	Revision      *gen.DeploymentRevision `protobuf:"bytes,2,opt,name=revision,proto3" json:"revision,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
@@ -9114,12 +9120,21 @@ func (x *UpsertDeploymentRequest) GetDeployment() *gen.Deployment {
 	return nil
 }
 
+func (x *UpsertDeploymentRequest) GetRevision() *gen.DeploymentRevision {
+	if x != nil {
+		return x.Revision
+	}
+	return nil
+}
+
 type UpsertDeploymentResponse struct {
 	state protoimpl.MessageState `protogen:"open.v1"`
-	// The persisted row, including the server-minted uuid.
-	Deployment    *gen.Deployment `protobuf:"bytes,1,opt,name=deployment,proto3" json:"deployment,omitempty"`
-	unknownFields protoimpl.UnknownFields
-	sizeCache     protoimpl.SizeCache
+	// The persisted deployment row (server-minted uuid, updated active_revision).
+	Deployment *gen.Deployment `protobuf:"bytes,1,opt,name=deployment,proto3" json:"deployment,omitempty"`
+	// The revision just inserted for this deploy (now the active one).
+	ActiveRevision *gen.DeploymentRevision `protobuf:"bytes,2,opt,name=active_revision,json=activeRevision,proto3" json:"active_revision,omitempty"`
+	unknownFields  protoimpl.UnknownFields
+	sizeCache      protoimpl.SizeCache
 }
 
 func (x *UpsertDeploymentResponse) Reset() {
@@ -9159,6 +9174,67 @@ func (x *UpsertDeploymentResponse) GetDeployment() *gen.Deployment {
 	return nil
 }
 
+func (x *UpsertDeploymentResponse) GetActiveRevision() *gen.DeploymentRevision {
+	if x != nil {
+		return x.ActiveRevision
+	}
+	return nil
+}
+
+// DeploymentWithRevision pairs a deployment with its current (active) revision so
+// a caller can render current state without a second round-trip.
+type DeploymentWithRevision struct {
+	state          protoimpl.MessageState  `protogen:"open.v1"`
+	Deployment     *gen.Deployment         `protobuf:"bytes,1,opt,name=deployment,proto3" json:"deployment,omitempty"`
+	ActiveRevision *gen.DeploymentRevision `protobuf:"bytes,2,opt,name=active_revision,json=activeRevision,proto3" json:"active_revision,omitempty"`
+	unknownFields  protoimpl.UnknownFields
+	sizeCache      protoimpl.SizeCache
+}
+
+func (x *DeploymentWithRevision) Reset() {
+	*x = DeploymentWithRevision{}
+	mi := &file_product_proto_msgTypes[170]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *DeploymentWithRevision) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*DeploymentWithRevision) ProtoMessage() {}
+
+func (x *DeploymentWithRevision) ProtoReflect() protoreflect.Message {
+	mi := &file_product_proto_msgTypes[170]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use DeploymentWithRevision.ProtoReflect.Descriptor instead.
+func (*DeploymentWithRevision) Descriptor() ([]byte, []int) {
+	return file_product_proto_rawDescGZIP(), []int{170}
+}
+
+func (x *DeploymentWithRevision) GetDeployment() *gen.Deployment {
+	if x != nil {
+		return x.Deployment
+	}
+	return nil
+}
+
+func (x *DeploymentWithRevision) GetActiveRevision() *gen.DeploymentRevision {
+	if x != nil {
+		return x.ActiveRevision
+	}
+	return nil
+}
+
 type ListDeploymentsRequest struct {
 	state         protoimpl.MessageState `protogen:"open.v1"`
 	unknownFields protoimpl.UnknownFields
@@ -9167,7 +9243,7 @@ type ListDeploymentsRequest struct {
 
 func (x *ListDeploymentsRequest) Reset() {
 	*x = ListDeploymentsRequest{}
-	mi := &file_product_proto_msgTypes[170]
+	mi := &file_product_proto_msgTypes[171]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -9179,7 +9255,7 @@ func (x *ListDeploymentsRequest) String() string {
 func (*ListDeploymentsRequest) ProtoMessage() {}
 
 func (x *ListDeploymentsRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_product_proto_msgTypes[170]
+	mi := &file_product_proto_msgTypes[171]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -9192,20 +9268,20 @@ func (x *ListDeploymentsRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use ListDeploymentsRequest.ProtoReflect.Descriptor instead.
 func (*ListDeploymentsRequest) Descriptor() ([]byte, []int) {
-	return file_product_proto_rawDescGZIP(), []int{170}
+	return file_product_proto_rawDescGZIP(), []int{171}
 }
 
 type ListDeploymentsResponse struct {
 	state protoimpl.MessageState `protogen:"open.v1"`
-	// Newest-first, scoped to the authed user.
-	Deployments   []*gen.Deployment `protobuf:"bytes,1,rep,name=deployments,proto3" json:"deployments,omitempty"`
+	// Newest-first, scoped to the authed user, each with its active revision.
+	Deployments   []*DeploymentWithRevision `protobuf:"bytes,1,rep,name=deployments,proto3" json:"deployments,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
 
 func (x *ListDeploymentsResponse) Reset() {
 	*x = ListDeploymentsResponse{}
-	mi := &file_product_proto_msgTypes[171]
+	mi := &file_product_proto_msgTypes[172]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -9217,7 +9293,7 @@ func (x *ListDeploymentsResponse) String() string {
 func (*ListDeploymentsResponse) ProtoMessage() {}
 
 func (x *ListDeploymentsResponse) ProtoReflect() protoreflect.Message {
-	mi := &file_product_proto_msgTypes[171]
+	mi := &file_product_proto_msgTypes[172]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -9230,12 +9306,102 @@ func (x *ListDeploymentsResponse) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use ListDeploymentsResponse.ProtoReflect.Descriptor instead.
 func (*ListDeploymentsResponse) Descriptor() ([]byte, []int) {
-	return file_product_proto_rawDescGZIP(), []int{171}
+	return file_product_proto_rawDescGZIP(), []int{172}
 }
 
-func (x *ListDeploymentsResponse) GetDeployments() []*gen.Deployment {
+func (x *ListDeploymentsResponse) GetDeployments() []*DeploymentWithRevision {
 	if x != nil {
 		return x.Deployments
+	}
+	return nil
+}
+
+// ListDeploymentRevisions returns the full production history of one deployment
+// (newest-first) so the UI can show what changed across deploys.
+type ListDeploymentRevisionsRequest struct {
+	state          protoimpl.MessageState `protogen:"open.v1"`
+	DeploymentUuid string                 `protobuf:"bytes,1,opt,name=deployment_uuid,json=deploymentUuid,proto3" json:"deployment_uuid,omitempty"`
+	unknownFields  protoimpl.UnknownFields
+	sizeCache      protoimpl.SizeCache
+}
+
+func (x *ListDeploymentRevisionsRequest) Reset() {
+	*x = ListDeploymentRevisionsRequest{}
+	mi := &file_product_proto_msgTypes[173]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *ListDeploymentRevisionsRequest) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*ListDeploymentRevisionsRequest) ProtoMessage() {}
+
+func (x *ListDeploymentRevisionsRequest) ProtoReflect() protoreflect.Message {
+	mi := &file_product_proto_msgTypes[173]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use ListDeploymentRevisionsRequest.ProtoReflect.Descriptor instead.
+func (*ListDeploymentRevisionsRequest) Descriptor() ([]byte, []int) {
+	return file_product_proto_rawDescGZIP(), []int{173}
+}
+
+func (x *ListDeploymentRevisionsRequest) GetDeploymentUuid() string {
+	if x != nil {
+		return x.DeploymentUuid
+	}
+	return ""
+}
+
+type ListDeploymentRevisionsResponse struct {
+	state         protoimpl.MessageState    `protogen:"open.v1"`
+	Revisions     []*gen.DeploymentRevision `protobuf:"bytes,1,rep,name=revisions,proto3" json:"revisions,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *ListDeploymentRevisionsResponse) Reset() {
+	*x = ListDeploymentRevisionsResponse{}
+	mi := &file_product_proto_msgTypes[174]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *ListDeploymentRevisionsResponse) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*ListDeploymentRevisionsResponse) ProtoMessage() {}
+
+func (x *ListDeploymentRevisionsResponse) ProtoReflect() protoreflect.Message {
+	mi := &file_product_proto_msgTypes[174]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use ListDeploymentRevisionsResponse.ProtoReflect.Descriptor instead.
+func (*ListDeploymentRevisionsResponse) Descriptor() ([]byte, []int) {
+	return file_product_proto_rawDescGZIP(), []int{174}
+}
+
+func (x *ListDeploymentRevisionsResponse) GetRevisions() []*gen.DeploymentRevision {
+	if x != nil {
+		return x.Revisions
 	}
 	return nil
 }
@@ -9253,7 +9419,7 @@ type MarkDeploymentDestroyedRequest struct {
 
 func (x *MarkDeploymentDestroyedRequest) Reset() {
 	*x = MarkDeploymentDestroyedRequest{}
-	mi := &file_product_proto_msgTypes[172]
+	mi := &file_product_proto_msgTypes[175]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -9265,7 +9431,7 @@ func (x *MarkDeploymentDestroyedRequest) String() string {
 func (*MarkDeploymentDestroyedRequest) ProtoMessage() {}
 
 func (x *MarkDeploymentDestroyedRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_product_proto_msgTypes[172]
+	mi := &file_product_proto_msgTypes[175]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -9278,7 +9444,7 @@ func (x *MarkDeploymentDestroyedRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use MarkDeploymentDestroyedRequest.ProtoReflect.Descriptor instead.
 func (*MarkDeploymentDestroyedRequest) Descriptor() ([]byte, []int) {
-	return file_product_proto_rawDescGZIP(), []int{172}
+	return file_product_proto_rawDescGZIP(), []int{175}
 }
 
 func (x *MarkDeploymentDestroyedRequest) GetHost() string {
@@ -9303,7 +9469,7 @@ type MarkDeploymentDestroyedResponse struct {
 
 func (x *MarkDeploymentDestroyedResponse) Reset() {
 	*x = MarkDeploymentDestroyedResponse{}
-	mi := &file_product_proto_msgTypes[173]
+	mi := &file_product_proto_msgTypes[176]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -9315,7 +9481,7 @@ func (x *MarkDeploymentDestroyedResponse) String() string {
 func (*MarkDeploymentDestroyedResponse) ProtoMessage() {}
 
 func (x *MarkDeploymentDestroyedResponse) ProtoReflect() protoreflect.Message {
-	mi := &file_product_proto_msgTypes[173]
+	mi := &file_product_proto_msgTypes[176]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -9328,7 +9494,7 @@ func (x *MarkDeploymentDestroyedResponse) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use MarkDeploymentDestroyedResponse.ProtoReflect.Descriptor instead.
 func (*MarkDeploymentDestroyedResponse) Descriptor() ([]byte, []int) {
-	return file_product_proto_rawDescGZIP(), []int{173}
+	return file_product_proto_rawDescGZIP(), []int{176}
 }
 
 type IssueProvisioningTokenRequest struct {
@@ -9341,7 +9507,7 @@ type IssueProvisioningTokenRequest struct {
 
 func (x *IssueProvisioningTokenRequest) Reset() {
 	*x = IssueProvisioningTokenRequest{}
-	mi := &file_product_proto_msgTypes[174]
+	mi := &file_product_proto_msgTypes[177]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -9353,7 +9519,7 @@ func (x *IssueProvisioningTokenRequest) String() string {
 func (*IssueProvisioningTokenRequest) ProtoMessage() {}
 
 func (x *IssueProvisioningTokenRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_product_proto_msgTypes[174]
+	mi := &file_product_proto_msgTypes[177]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -9366,7 +9532,7 @@ func (x *IssueProvisioningTokenRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use IssueProvisioningTokenRequest.ProtoReflect.Descriptor instead.
 func (*IssueProvisioningTokenRequest) Descriptor() ([]byte, []int) {
-	return file_product_proto_rawDescGZIP(), []int{174}
+	return file_product_proto_rawDescGZIP(), []int{177}
 }
 
 func (x *IssueProvisioningTokenRequest) GetProjectUuid() string {
@@ -9388,7 +9554,7 @@ type IssueProvisioningTokenResponse struct {
 
 func (x *IssueProvisioningTokenResponse) Reset() {
 	*x = IssueProvisioningTokenResponse{}
-	mi := &file_product_proto_msgTypes[175]
+	mi := &file_product_proto_msgTypes[178]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -9400,7 +9566,7 @@ func (x *IssueProvisioningTokenResponse) String() string {
 func (*IssueProvisioningTokenResponse) ProtoMessage() {}
 
 func (x *IssueProvisioningTokenResponse) ProtoReflect() protoreflect.Message {
-	mi := &file_product_proto_msgTypes[175]
+	mi := &file_product_proto_msgTypes[178]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -9413,7 +9579,7 @@ func (x *IssueProvisioningTokenResponse) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use IssueProvisioningTokenResponse.ProtoReflect.Descriptor instead.
 func (*IssueProvisioningTokenResponse) Descriptor() ([]byte, []int) {
-	return file_product_proto_rawDescGZIP(), []int{175}
+	return file_product_proto_rawDescGZIP(), []int{178}
 }
 
 func (x *IssueProvisioningTokenResponse) GetProvisioningToken() string {
@@ -9443,7 +9609,7 @@ type ExchangeProvisioningTokenRequest struct {
 
 func (x *ExchangeProvisioningTokenRequest) Reset() {
 	*x = ExchangeProvisioningTokenRequest{}
-	mi := &file_product_proto_msgTypes[176]
+	mi := &file_product_proto_msgTypes[179]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -9455,7 +9621,7 @@ func (x *ExchangeProvisioningTokenRequest) String() string {
 func (*ExchangeProvisioningTokenRequest) ProtoMessage() {}
 
 func (x *ExchangeProvisioningTokenRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_product_proto_msgTypes[176]
+	mi := &file_product_proto_msgTypes[179]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -9468,7 +9634,7 @@ func (x *ExchangeProvisioningTokenRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use ExchangeProvisioningTokenRequest.ProtoReflect.Descriptor instead.
 func (*ExchangeProvisioningTokenRequest) Descriptor() ([]byte, []int) {
-	return file_product_proto_rawDescGZIP(), []int{176}
+	return file_product_proto_rawDescGZIP(), []int{179}
 }
 
 func (x *ExchangeProvisioningTokenRequest) GetProvisioningToken() string {
@@ -9510,7 +9676,7 @@ type ExchangeProvisioningTokenResponse struct {
 
 func (x *ExchangeProvisioningTokenResponse) Reset() {
 	*x = ExchangeProvisioningTokenResponse{}
-	mi := &file_product_proto_msgTypes[177]
+	mi := &file_product_proto_msgTypes[180]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -9522,7 +9688,7 @@ func (x *ExchangeProvisioningTokenResponse) String() string {
 func (*ExchangeProvisioningTokenResponse) ProtoMessage() {}
 
 func (x *ExchangeProvisioningTokenResponse) ProtoReflect() protoreflect.Message {
-	mi := &file_product_proto_msgTypes[177]
+	mi := &file_product_proto_msgTypes[180]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -9535,7 +9701,7 @@ func (x *ExchangeProvisioningTokenResponse) ProtoReflect() protoreflect.Message 
 
 // Deprecated: Use ExchangeProvisioningTokenResponse.ProtoReflect.Descriptor instead.
 func (*ExchangeProvisioningTokenResponse) Descriptor() ([]byte, []int) {
-	return file_product_proto_rawDescGZIP(), []int{177}
+	return file_product_proto_rawDescGZIP(), []int{180}
 }
 
 func (x *ExchangeProvisioningTokenResponse) GetLocalAgentUuid() string {
@@ -9562,7 +9728,7 @@ type CheckExtensionExecutionLimitRequest struct {
 
 func (x *CheckExtensionExecutionLimitRequest) Reset() {
 	*x = CheckExtensionExecutionLimitRequest{}
-	mi := &file_product_proto_msgTypes[178]
+	mi := &file_product_proto_msgTypes[181]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -9574,7 +9740,7 @@ func (x *CheckExtensionExecutionLimitRequest) String() string {
 func (*CheckExtensionExecutionLimitRequest) ProtoMessage() {}
 
 func (x *CheckExtensionExecutionLimitRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_product_proto_msgTypes[178]
+	mi := &file_product_proto_msgTypes[181]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -9587,7 +9753,7 @@ func (x *CheckExtensionExecutionLimitRequest) ProtoReflect() protoreflect.Messag
 
 // Deprecated: Use CheckExtensionExecutionLimitRequest.ProtoReflect.Descriptor instead.
 func (*CheckExtensionExecutionLimitRequest) Descriptor() ([]byte, []int) {
-	return file_product_proto_rawDescGZIP(), []int{178}
+	return file_product_proto_rawDescGZIP(), []int{181}
 }
 
 func (x *CheckExtensionExecutionLimitRequest) GetProjectUuid() string {
@@ -9615,7 +9781,7 @@ type CheckExtensionExecutionLimitResponse struct {
 
 func (x *CheckExtensionExecutionLimitResponse) Reset() {
 	*x = CheckExtensionExecutionLimitResponse{}
-	mi := &file_product_proto_msgTypes[179]
+	mi := &file_product_proto_msgTypes[182]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -9627,7 +9793,7 @@ func (x *CheckExtensionExecutionLimitResponse) String() string {
 func (*CheckExtensionExecutionLimitResponse) ProtoMessage() {}
 
 func (x *CheckExtensionExecutionLimitResponse) ProtoReflect() protoreflect.Message {
-	mi := &file_product_proto_msgTypes[179]
+	mi := &file_product_proto_msgTypes[182]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -9640,7 +9806,7 @@ func (x *CheckExtensionExecutionLimitResponse) ProtoReflect() protoreflect.Messa
 
 // Deprecated: Use CheckExtensionExecutionLimitResponse.ProtoReflect.Descriptor instead.
 func (*CheckExtensionExecutionLimitResponse) Descriptor() ([]byte, []int) {
-	return file_product_proto_rawDescGZIP(), []int{179}
+	return file_product_proto_rawDescGZIP(), []int{182}
 }
 
 func (x *CheckExtensionExecutionLimitResponse) GetIsLimited() bool {
@@ -9674,7 +9840,7 @@ type CreateAutomationRequest struct {
 
 func (x *CreateAutomationRequest) Reset() {
 	*x = CreateAutomationRequest{}
-	mi := &file_product_proto_msgTypes[180]
+	mi := &file_product_proto_msgTypes[183]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -9686,7 +9852,7 @@ func (x *CreateAutomationRequest) String() string {
 func (*CreateAutomationRequest) ProtoMessage() {}
 
 func (x *CreateAutomationRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_product_proto_msgTypes[180]
+	mi := &file_product_proto_msgTypes[183]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -9699,7 +9865,7 @@ func (x *CreateAutomationRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use CreateAutomationRequest.ProtoReflect.Descriptor instead.
 func (*CreateAutomationRequest) Descriptor() ([]byte, []int) {
-	return file_product_proto_rawDescGZIP(), []int{180}
+	return file_product_proto_rawDescGZIP(), []int{183}
 }
 
 func (x *CreateAutomationRequest) GetAutomation() *gen.Automation {
@@ -9721,7 +9887,7 @@ type CreateAutomationResponse struct {
 
 func (x *CreateAutomationResponse) Reset() {
 	*x = CreateAutomationResponse{}
-	mi := &file_product_proto_msgTypes[181]
+	mi := &file_product_proto_msgTypes[184]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -9733,7 +9899,7 @@ func (x *CreateAutomationResponse) String() string {
 func (*CreateAutomationResponse) ProtoMessage() {}
 
 func (x *CreateAutomationResponse) ProtoReflect() protoreflect.Message {
-	mi := &file_product_proto_msgTypes[181]
+	mi := &file_product_proto_msgTypes[184]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -9746,7 +9912,7 @@ func (x *CreateAutomationResponse) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use CreateAutomationResponse.ProtoReflect.Descriptor instead.
 func (*CreateAutomationResponse) Descriptor() ([]byte, []int) {
-	return file_product_proto_rawDescGZIP(), []int{181}
+	return file_product_proto_rawDescGZIP(), []int{184}
 }
 
 func (x *CreateAutomationResponse) GetAutomation() *gen.Automation {
@@ -9772,7 +9938,7 @@ type RotateAutomationSecretRequest struct {
 
 func (x *RotateAutomationSecretRequest) Reset() {
 	*x = RotateAutomationSecretRequest{}
-	mi := &file_product_proto_msgTypes[182]
+	mi := &file_product_proto_msgTypes[185]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -9784,7 +9950,7 @@ func (x *RotateAutomationSecretRequest) String() string {
 func (*RotateAutomationSecretRequest) ProtoMessage() {}
 
 func (x *RotateAutomationSecretRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_product_proto_msgTypes[182]
+	mi := &file_product_proto_msgTypes[185]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -9797,7 +9963,7 @@ func (x *RotateAutomationSecretRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use RotateAutomationSecretRequest.ProtoReflect.Descriptor instead.
 func (*RotateAutomationSecretRequest) Descriptor() ([]byte, []int) {
-	return file_product_proto_rawDescGZIP(), []int{182}
+	return file_product_proto_rawDescGZIP(), []int{185}
 }
 
 func (x *RotateAutomationSecretRequest) GetAutomationUuid() string {
@@ -9819,7 +9985,7 @@ type RotateAutomationSecretResponse struct {
 
 func (x *RotateAutomationSecretResponse) Reset() {
 	*x = RotateAutomationSecretResponse{}
-	mi := &file_product_proto_msgTypes[183]
+	mi := &file_product_proto_msgTypes[186]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -9831,7 +9997,7 @@ func (x *RotateAutomationSecretResponse) String() string {
 func (*RotateAutomationSecretResponse) ProtoMessage() {}
 
 func (x *RotateAutomationSecretResponse) ProtoReflect() protoreflect.Message {
-	mi := &file_product_proto_msgTypes[183]
+	mi := &file_product_proto_msgTypes[186]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -9844,7 +10010,7 @@ func (x *RotateAutomationSecretResponse) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use RotateAutomationSecretResponse.ProtoReflect.Descriptor instead.
 func (*RotateAutomationSecretResponse) Descriptor() ([]byte, []int) {
-	return file_product_proto_rawDescGZIP(), []int{183}
+	return file_product_proto_rawDescGZIP(), []int{186}
 }
 
 func (x *RotateAutomationSecretResponse) GetSigningSecret() string {
@@ -9863,7 +10029,7 @@ type UpdateAutomationRequest struct {
 
 func (x *UpdateAutomationRequest) Reset() {
 	*x = UpdateAutomationRequest{}
-	mi := &file_product_proto_msgTypes[184]
+	mi := &file_product_proto_msgTypes[187]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -9875,7 +10041,7 @@ func (x *UpdateAutomationRequest) String() string {
 func (*UpdateAutomationRequest) ProtoMessage() {}
 
 func (x *UpdateAutomationRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_product_proto_msgTypes[184]
+	mi := &file_product_proto_msgTypes[187]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -9888,7 +10054,7 @@ func (x *UpdateAutomationRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use UpdateAutomationRequest.ProtoReflect.Descriptor instead.
 func (*UpdateAutomationRequest) Descriptor() ([]byte, []int) {
-	return file_product_proto_rawDescGZIP(), []int{184}
+	return file_product_proto_rawDescGZIP(), []int{187}
 }
 
 func (x *UpdateAutomationRequest) GetAutomation() *gen.Automation {
@@ -9907,7 +10073,7 @@ type DeleteAutomationRequest struct {
 
 func (x *DeleteAutomationRequest) Reset() {
 	*x = DeleteAutomationRequest{}
-	mi := &file_product_proto_msgTypes[185]
+	mi := &file_product_proto_msgTypes[188]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -9919,7 +10085,7 @@ func (x *DeleteAutomationRequest) String() string {
 func (*DeleteAutomationRequest) ProtoMessage() {}
 
 func (x *DeleteAutomationRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_product_proto_msgTypes[185]
+	mi := &file_product_proto_msgTypes[188]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -9932,7 +10098,7 @@ func (x *DeleteAutomationRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use DeleteAutomationRequest.ProtoReflect.Descriptor instead.
 func (*DeleteAutomationRequest) Descriptor() ([]byte, []int) {
-	return file_product_proto_rawDescGZIP(), []int{185}
+	return file_product_proto_rawDescGZIP(), []int{188}
 }
 
 func (x *DeleteAutomationRequest) GetAutomationUuid() string {
@@ -9950,7 +10116,7 @@ type DeleteAutomationResponse struct {
 
 func (x *DeleteAutomationResponse) Reset() {
 	*x = DeleteAutomationResponse{}
-	mi := &file_product_proto_msgTypes[186]
+	mi := &file_product_proto_msgTypes[189]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -9962,7 +10128,7 @@ func (x *DeleteAutomationResponse) String() string {
 func (*DeleteAutomationResponse) ProtoMessage() {}
 
 func (x *DeleteAutomationResponse) ProtoReflect() protoreflect.Message {
-	mi := &file_product_proto_msgTypes[186]
+	mi := &file_product_proto_msgTypes[189]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -9975,7 +10141,7 @@ func (x *DeleteAutomationResponse) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use DeleteAutomationResponse.ProtoReflect.Descriptor instead.
 func (*DeleteAutomationResponse) Descriptor() ([]byte, []int) {
-	return file_product_proto_rawDescGZIP(), []int{186}
+	return file_product_proto_rawDescGZIP(), []int{189}
 }
 
 type GetAutomationRequest struct {
@@ -9987,7 +10153,7 @@ type GetAutomationRequest struct {
 
 func (x *GetAutomationRequest) Reset() {
 	*x = GetAutomationRequest{}
-	mi := &file_product_proto_msgTypes[187]
+	mi := &file_product_proto_msgTypes[190]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -9999,7 +10165,7 @@ func (x *GetAutomationRequest) String() string {
 func (*GetAutomationRequest) ProtoMessage() {}
 
 func (x *GetAutomationRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_product_proto_msgTypes[187]
+	mi := &file_product_proto_msgTypes[190]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -10012,7 +10178,7 @@ func (x *GetAutomationRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use GetAutomationRequest.ProtoReflect.Descriptor instead.
 func (*GetAutomationRequest) Descriptor() ([]byte, []int) {
-	return file_product_proto_rawDescGZIP(), []int{187}
+	return file_product_proto_rawDescGZIP(), []int{190}
 }
 
 func (x *GetAutomationRequest) GetAutomationUuid() string {
@@ -10031,7 +10197,7 @@ type ListAutomationsForProjectRequest struct {
 
 func (x *ListAutomationsForProjectRequest) Reset() {
 	*x = ListAutomationsForProjectRequest{}
-	mi := &file_product_proto_msgTypes[188]
+	mi := &file_product_proto_msgTypes[191]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -10043,7 +10209,7 @@ func (x *ListAutomationsForProjectRequest) String() string {
 func (*ListAutomationsForProjectRequest) ProtoMessage() {}
 
 func (x *ListAutomationsForProjectRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_product_proto_msgTypes[188]
+	mi := &file_product_proto_msgTypes[191]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -10056,7 +10222,7 @@ func (x *ListAutomationsForProjectRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use ListAutomationsForProjectRequest.ProtoReflect.Descriptor instead.
 func (*ListAutomationsForProjectRequest) Descriptor() ([]byte, []int) {
-	return file_product_proto_rawDescGZIP(), []int{188}
+	return file_product_proto_rawDescGZIP(), []int{191}
 }
 
 func (x *ListAutomationsForProjectRequest) GetProjectUuid() string {
@@ -10075,7 +10241,7 @@ type ListAutomationsForProjectResponse struct {
 
 func (x *ListAutomationsForProjectResponse) Reset() {
 	*x = ListAutomationsForProjectResponse{}
-	mi := &file_product_proto_msgTypes[189]
+	mi := &file_product_proto_msgTypes[192]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -10087,7 +10253,7 @@ func (x *ListAutomationsForProjectResponse) String() string {
 func (*ListAutomationsForProjectResponse) ProtoMessage() {}
 
 func (x *ListAutomationsForProjectResponse) ProtoReflect() protoreflect.Message {
-	mi := &file_product_proto_msgTypes[189]
+	mi := &file_product_proto_msgTypes[192]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -10100,7 +10266,7 @@ func (x *ListAutomationsForProjectResponse) ProtoReflect() protoreflect.Message 
 
 // Deprecated: Use ListAutomationsForProjectResponse.ProtoReflect.Descriptor instead.
 func (*ListAutomationsForProjectResponse) Descriptor() ([]byte, []int) {
-	return file_product_proto_rawDescGZIP(), []int{189}
+	return file_product_proto_rawDescGZIP(), []int{192}
 }
 
 func (x *ListAutomationsForProjectResponse) GetAutomations() []*gen.Automation {
@@ -10119,7 +10285,7 @@ type TestAutomationRequest struct {
 
 func (x *TestAutomationRequest) Reset() {
 	*x = TestAutomationRequest{}
-	mi := &file_product_proto_msgTypes[190]
+	mi := &file_product_proto_msgTypes[193]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -10131,7 +10297,7 @@ func (x *TestAutomationRequest) String() string {
 func (*TestAutomationRequest) ProtoMessage() {}
 
 func (x *TestAutomationRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_product_proto_msgTypes[190]
+	mi := &file_product_proto_msgTypes[193]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -10144,7 +10310,7 @@ func (x *TestAutomationRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use TestAutomationRequest.ProtoReflect.Descriptor instead.
 func (*TestAutomationRequest) Descriptor() ([]byte, []int) {
-	return file_product_proto_rawDescGZIP(), []int{190}
+	return file_product_proto_rawDescGZIP(), []int{193}
 }
 
 func (x *TestAutomationRequest) GetAutomationUuid() string {
@@ -10165,7 +10331,7 @@ type TestAutomationResponse struct {
 
 func (x *TestAutomationResponse) Reset() {
 	*x = TestAutomationResponse{}
-	mi := &file_product_proto_msgTypes[191]
+	mi := &file_product_proto_msgTypes[194]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -10177,7 +10343,7 @@ func (x *TestAutomationResponse) String() string {
 func (*TestAutomationResponse) ProtoMessage() {}
 
 func (x *TestAutomationResponse) ProtoReflect() protoreflect.Message {
-	mi := &file_product_proto_msgTypes[191]
+	mi := &file_product_proto_msgTypes[194]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -10190,7 +10356,7 @@ func (x *TestAutomationResponse) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use TestAutomationResponse.ProtoReflect.Descriptor instead.
 func (*TestAutomationResponse) Descriptor() ([]byte, []int) {
-	return file_product_proto_rawDescGZIP(), []int{191}
+	return file_product_proto_rawDescGZIP(), []int{194}
 }
 
 func (x *TestAutomationResponse) GetSuccess() bool {
@@ -10226,7 +10392,7 @@ type ListAutomationEventsRequest struct {
 
 func (x *ListAutomationEventsRequest) Reset() {
 	*x = ListAutomationEventsRequest{}
-	mi := &file_product_proto_msgTypes[192]
+	mi := &file_product_proto_msgTypes[195]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -10238,7 +10404,7 @@ func (x *ListAutomationEventsRequest) String() string {
 func (*ListAutomationEventsRequest) ProtoMessage() {}
 
 func (x *ListAutomationEventsRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_product_proto_msgTypes[192]
+	mi := &file_product_proto_msgTypes[195]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -10251,7 +10417,7 @@ func (x *ListAutomationEventsRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use ListAutomationEventsRequest.ProtoReflect.Descriptor instead.
 func (*ListAutomationEventsRequest) Descriptor() ([]byte, []int) {
-	return file_product_proto_rawDescGZIP(), []int{192}
+	return file_product_proto_rawDescGZIP(), []int{195}
 }
 
 func (x *ListAutomationEventsRequest) GetAutomationUuid() string {
@@ -10293,7 +10459,7 @@ type ListAutomationEventsResponse struct {
 
 func (x *ListAutomationEventsResponse) Reset() {
 	*x = ListAutomationEventsResponse{}
-	mi := &file_product_proto_msgTypes[193]
+	mi := &file_product_proto_msgTypes[196]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -10305,7 +10471,7 @@ func (x *ListAutomationEventsResponse) String() string {
 func (*ListAutomationEventsResponse) ProtoMessage() {}
 
 func (x *ListAutomationEventsResponse) ProtoReflect() protoreflect.Message {
-	mi := &file_product_proto_msgTypes[193]
+	mi := &file_product_proto_msgTypes[196]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -10318,7 +10484,7 @@ func (x *ListAutomationEventsResponse) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use ListAutomationEventsResponse.ProtoReflect.Descriptor instead.
 func (*ListAutomationEventsResponse) Descriptor() ([]byte, []int) {
-	return file_product_proto_rawDescGZIP(), []int{193}
+	return file_product_proto_rawDescGZIP(), []int{196}
 }
 
 func (x *ListAutomationEventsResponse) GetAutomationEvents() []*gen.AutomationEvent {
@@ -10344,7 +10510,7 @@ type GetAutomationEventRequest struct {
 
 func (x *GetAutomationEventRequest) Reset() {
 	*x = GetAutomationEventRequest{}
-	mi := &file_product_proto_msgTypes[194]
+	mi := &file_product_proto_msgTypes[197]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -10356,7 +10522,7 @@ func (x *GetAutomationEventRequest) String() string {
 func (*GetAutomationEventRequest) ProtoMessage() {}
 
 func (x *GetAutomationEventRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_product_proto_msgTypes[194]
+	mi := &file_product_proto_msgTypes[197]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -10369,7 +10535,7 @@ func (x *GetAutomationEventRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use GetAutomationEventRequest.ProtoReflect.Descriptor instead.
 func (*GetAutomationEventRequest) Descriptor() ([]byte, []int) {
-	return file_product_proto_rawDescGZIP(), []int{194}
+	return file_product_proto_rawDescGZIP(), []int{197}
 }
 
 func (x *GetAutomationEventRequest) GetAutomationEventUuid() string {
@@ -10388,7 +10554,7 @@ type RetryAutomationEventRequest struct {
 
 func (x *RetryAutomationEventRequest) Reset() {
 	*x = RetryAutomationEventRequest{}
-	mi := &file_product_proto_msgTypes[195]
+	mi := &file_product_proto_msgTypes[198]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -10400,7 +10566,7 @@ func (x *RetryAutomationEventRequest) String() string {
 func (*RetryAutomationEventRequest) ProtoMessage() {}
 
 func (x *RetryAutomationEventRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_product_proto_msgTypes[195]
+	mi := &file_product_proto_msgTypes[198]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -10413,7 +10579,7 @@ func (x *RetryAutomationEventRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use RetryAutomationEventRequest.ProtoReflect.Descriptor instead.
 func (*RetryAutomationEventRequest) Descriptor() ([]byte, []int) {
-	return file_product_proto_rawDescGZIP(), []int{195}
+	return file_product_proto_rawDescGZIP(), []int{198}
 }
 
 func (x *RetryAutomationEventRequest) GetAutomationEventUuid() string {
@@ -10432,7 +10598,7 @@ type MarkChangeRequestAppliedRequest struct {
 
 func (x *MarkChangeRequestAppliedRequest) Reset() {
 	*x = MarkChangeRequestAppliedRequest{}
-	mi := &file_product_proto_msgTypes[196]
+	mi := &file_product_proto_msgTypes[199]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -10444,7 +10610,7 @@ func (x *MarkChangeRequestAppliedRequest) String() string {
 func (*MarkChangeRequestAppliedRequest) ProtoMessage() {}
 
 func (x *MarkChangeRequestAppliedRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_product_proto_msgTypes[196]
+	mi := &file_product_proto_msgTypes[199]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -10457,7 +10623,7 @@ func (x *MarkChangeRequestAppliedRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use MarkChangeRequestAppliedRequest.ProtoReflect.Descriptor instead.
 func (*MarkChangeRequestAppliedRequest) Descriptor() ([]byte, []int) {
-	return file_product_proto_rawDescGZIP(), []int{196}
+	return file_product_proto_rawDescGZIP(), []int{199}
 }
 
 func (x *MarkChangeRequestAppliedRequest) GetChangeRequestUuid() string {
@@ -10477,7 +10643,7 @@ type MarkChangeRequestAppliedResponse struct {
 
 func (x *MarkChangeRequestAppliedResponse) Reset() {
 	*x = MarkChangeRequestAppliedResponse{}
-	mi := &file_product_proto_msgTypes[197]
+	mi := &file_product_proto_msgTypes[200]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -10489,7 +10655,7 @@ func (x *MarkChangeRequestAppliedResponse) String() string {
 func (*MarkChangeRequestAppliedResponse) ProtoMessage() {}
 
 func (x *MarkChangeRequestAppliedResponse) ProtoReflect() protoreflect.Message {
-	mi := &file_product_proto_msgTypes[197]
+	mi := &file_product_proto_msgTypes[200]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -10502,7 +10668,7 @@ func (x *MarkChangeRequestAppliedResponse) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use MarkChangeRequestAppliedResponse.ProtoReflect.Descriptor instead.
 func (*MarkChangeRequestAppliedResponse) Descriptor() ([]byte, []int) {
-	return file_product_proto_rawDescGZIP(), []int{197}
+	return file_product_proto_rawDescGZIP(), []int{200}
 }
 
 func (x *MarkChangeRequestAppliedResponse) GetChangeRequest() *gen.ChangeRequest {
@@ -10525,7 +10691,7 @@ const file_product_proto_rawDesc = "" +
 	"\n" +
 	"\rproduct.proto\x1a\venums.proto\x1a\n" +
 	"team.proto\x1a\x0fuser_team.proto\x1a\x12user_project.proto\x1a\n" +
-	"user.proto\x1a\rproject.proto\x1a\x15project_version.proto\x1a\x10connection.proto\x1a\x12object_store.proto\x1a\x0fextension.proto\x1a\x17extension_version.proto\x1a\x19extension_execution.proto\x1a\x14change_request.proto\x1a\x10membership.proto\x1a\x0eai_usage.proto\x1a\x11local_agent.proto\x1a\x1clocal_agent_connection.proto\x1a\x10automation.proto\x1a\x16automation_event.proto\x1a\x10deployment.proto\x1a google/protobuf/field_mask.proto\"-\n" +
+	"user.proto\x1a\rproject.proto\x1a\x15project_version.proto\x1a\x10connection.proto\x1a\x12object_store.proto\x1a\x0fextension.proto\x1a\x17extension_version.proto\x1a\x19extension_execution.proto\x1a\x14change_request.proto\x1a\x10membership.proto\x1a\x0eai_usage.proto\x1a\x11local_agent.proto\x1a\x1clocal_agent_connection.proto\x1a\x10automation.proto\x1a\x16automation_event.proto\x1a\x10deployment.proto\x1a\x19deployment_revision.proto\x1a google/protobuf/field_mask.proto\"-\n" +
 	"\x0eGetUserRequest\x12\x1b\n" +
 	"\tuser_uuid\x18\x01 \x01(\tR\buserUuid\"\x15\n" +
 	"\x13GetTokenUserRequest\"-\n" +
@@ -11122,18 +11288,29 @@ const file_product_proto_rawDesc = "" +
 	"\x1fGetLocalAgentConnectionsRequest\x12(\n" +
 	"\x10local_agent_uuid\x18\x01 \x01(\tR\x0elocalAgentUuid\"_\n" +
 	" GetLocalAgentConnectionsResponse\x12;\n" +
-	"\vconnections\x18\x01 \x03(\v2\x19.nem.LocalAgentConnectionR\vconnections\"J\n" +
+	"\vconnections\x18\x01 \x03(\v2\x19.nem.LocalAgentConnectionR\vconnections\"\x7f\n" +
 	"\x17UpsertDeploymentRequest\x12/\n" +
 	"\n" +
 	"deployment\x18\x01 \x01(\v2\x0f.nem.DeploymentR\n" +
-	"deployment\"K\n" +
+	"deployment\x123\n" +
+	"\brevision\x18\x02 \x01(\v2\x17.nem.DeploymentRevisionR\brevision\"\x8d\x01\n" +
 	"\x18UpsertDeploymentResponse\x12/\n" +
 	"\n" +
 	"deployment\x18\x01 \x01(\v2\x0f.nem.DeploymentR\n" +
-	"deployment\"\x18\n" +
-	"\x16ListDeploymentsRequest\"L\n" +
-	"\x17ListDeploymentsResponse\x121\n" +
-	"\vdeployments\x18\x01 \x03(\v2\x0f.nem.DeploymentR\vdeployments\"T\n" +
+	"deployment\x12@\n" +
+	"\x0factive_revision\x18\x02 \x01(\v2\x17.nem.DeploymentRevisionR\x0eactiveRevision\"\x8b\x01\n" +
+	"\x16DeploymentWithRevision\x12/\n" +
+	"\n" +
+	"deployment\x18\x01 \x01(\v2\x0f.nem.DeploymentR\n" +
+	"deployment\x12@\n" +
+	"\x0factive_revision\x18\x02 \x01(\v2\x17.nem.DeploymentRevisionR\x0eactiveRevision\"\x18\n" +
+	"\x16ListDeploymentsRequest\"T\n" +
+	"\x17ListDeploymentsResponse\x129\n" +
+	"\vdeployments\x18\x01 \x03(\v2\x17.DeploymentWithRevisionR\vdeployments\"I\n" +
+	"\x1eListDeploymentRevisionsRequest\x12'\n" +
+	"\x0fdeployment_uuid\x18\x01 \x01(\tR\x0edeploymentUuid\"X\n" +
+	"\x1fListDeploymentRevisionsResponse\x125\n" +
+	"\trevisions\x18\x01 \x03(\v2\x17.nem.DeploymentRevisionR\trevisions\"T\n" +
 	"\x1eMarkDeploymentDestroyedRequest\x12\x12\n" +
 	"\x04host\x18\x01 \x01(\tR\x04host\x12\x1e\n" +
 	"\n" +
@@ -11222,7 +11399,7 @@ const file_product_proto_rawDesc = "" +
 	"ProContext\x12\x17\n" +
 	"\x13PRO_CONTEXT_INVALID\x10\x00\x12\x16\n" +
 	"\x12PRO_CONTEXT_EDITOR\x10\x01\x12\x1c\n" +
-	"\x18PRO_CONTEXT_DATA_MANAGER\x10\x022\x9dS\n" +
+	"\x18PRO_CONTEXT_DATA_MANAGER\x10\x022\xfdS\n" +
 	"\fNuzurProduct\x12'\n" +
 	"\aGetUser\x12\x0f.GetUserRequest\x1a\t.nem.User\"\x00\x121\n" +
 	"\fGetTokenUser\x12\x14.GetTokenUserRequest\x1a\t.nem.User\"\x00\x125\n" +
@@ -11343,6 +11520,7 @@ const file_product_proto_rawDesc = "" +
 	"\x19ExchangeProvisioningToken\x12!.ExchangeProvisioningTokenRequest\x1a\".ExchangeProvisioningTokenResponse\"\x00\x12I\n" +
 	"\x10UpsertDeployment\x12\x18.UpsertDeploymentRequest\x1a\x19.UpsertDeploymentResponse\"\x00\x12F\n" +
 	"\x0fListDeployments\x12\x17.ListDeploymentsRequest\x1a\x18.ListDeploymentsResponse\"\x00\x12^\n" +
+	"\x17ListDeploymentRevisions\x12\x1f.ListDeploymentRevisionsRequest\x1a .ListDeploymentRevisionsResponse\"\x00\x12^\n" +
 	"\x17MarkDeploymentDestroyed\x12\x1f.MarkDeploymentDestroyedRequest\x1a .MarkDeploymentDestroyedResponse\"\x00\x12I\n" +
 	"\x10CreateAutomation\x12\x18.CreateAutomationRequest\x1a\x19.CreateAutomationResponse\"\x00\x12[\n" +
 	"\x16RotateAutomationSecret\x12\x1e.RotateAutomationSecretRequest\x1a\x1f.RotateAutomationSecretResponse\"\x00\x12?\n" +
@@ -11370,7 +11548,7 @@ func file_product_proto_rawDescGZIP() []byte {
 }
 
 var file_product_proto_enumTypes = make([]protoimpl.EnumInfo, 2)
-var file_product_proto_msgTypes = make([]protoimpl.MessageInfo, 198)
+var file_product_proto_msgTypes = make([]protoimpl.MessageInfo, 201)
 var file_product_proto_goTypes = []any{
 	(CheckoutSessionType)(0),                                   // 0: CheckoutSessionType
 	(ProContext)(0),                                            // 1: ProContext
@@ -11544,417 +11722,428 @@ var file_product_proto_goTypes = []any{
 	(*GetLocalAgentConnectionsResponse)(nil),                   // 169: GetLocalAgentConnectionsResponse
 	(*UpsertDeploymentRequest)(nil),                            // 170: UpsertDeploymentRequest
 	(*UpsertDeploymentResponse)(nil),                           // 171: UpsertDeploymentResponse
-	(*ListDeploymentsRequest)(nil),                             // 172: ListDeploymentsRequest
-	(*ListDeploymentsResponse)(nil),                            // 173: ListDeploymentsResponse
-	(*MarkDeploymentDestroyedRequest)(nil),                     // 174: MarkDeploymentDestroyedRequest
-	(*MarkDeploymentDestroyedResponse)(nil),                    // 175: MarkDeploymentDestroyedResponse
-	(*IssueProvisioningTokenRequest)(nil),                      // 176: IssueProvisioningTokenRequest
-	(*IssueProvisioningTokenResponse)(nil),                     // 177: IssueProvisioningTokenResponse
-	(*ExchangeProvisioningTokenRequest)(nil),                   // 178: ExchangeProvisioningTokenRequest
-	(*ExchangeProvisioningTokenResponse)(nil),                  // 179: ExchangeProvisioningTokenResponse
-	(*CheckExtensionExecutionLimitRequest)(nil),                // 180: CheckExtensionExecutionLimitRequest
-	(*CheckExtensionExecutionLimitResponse)(nil),               // 181: CheckExtensionExecutionLimitResponse
-	(*CreateAutomationRequest)(nil),                            // 182: CreateAutomationRequest
-	(*CreateAutomationResponse)(nil),                           // 183: CreateAutomationResponse
-	(*RotateAutomationSecretRequest)(nil),                      // 184: RotateAutomationSecretRequest
-	(*RotateAutomationSecretResponse)(nil),                     // 185: RotateAutomationSecretResponse
-	(*UpdateAutomationRequest)(nil),                            // 186: UpdateAutomationRequest
-	(*DeleteAutomationRequest)(nil),                            // 187: DeleteAutomationRequest
-	(*DeleteAutomationResponse)(nil),                           // 188: DeleteAutomationResponse
-	(*GetAutomationRequest)(nil),                               // 189: GetAutomationRequest
-	(*ListAutomationsForProjectRequest)(nil),                   // 190: ListAutomationsForProjectRequest
-	(*ListAutomationsForProjectResponse)(nil),                  // 191: ListAutomationsForProjectResponse
-	(*TestAutomationRequest)(nil),                              // 192: TestAutomationRequest
-	(*TestAutomationResponse)(nil),                             // 193: TestAutomationResponse
-	(*ListAutomationEventsRequest)(nil),                        // 194: ListAutomationEventsRequest
-	(*ListAutomationEventsResponse)(nil),                       // 195: ListAutomationEventsResponse
-	(*GetAutomationEventRequest)(nil),                          // 196: GetAutomationEventRequest
-	(*RetryAutomationEventRequest)(nil),                        // 197: RetryAutomationEventRequest
-	(*MarkChangeRequestAppliedRequest)(nil),                    // 198: MarkChangeRequestAppliedRequest
-	(*MarkChangeRequestAppliedResponse)(nil),                   // 199: MarkChangeRequestAppliedResponse
-	(gen.UserProjectRole)(0),                                   // 200: nem.UserProjectRole
-	(gen.UserTeamRole)(0),                                      // 201: nem.UserTeamRole
-	(*gen.User)(nil),                                           // 202: nem.User
-	(*gen.UserTeam)(nil),                                       // 203: nem.UserTeam
-	(*gen.UserProject)(nil),                                    // 204: nem.UserProject
-	(*gen.Team)(nil),                                           // 205: nem.Team
-	(*fieldmaskpb.FieldMask)(nil),                              // 206: google.protobuf.FieldMask
-	(*gen.Connection)(nil),                                     // 207: nem.Connection
-	(*gen.Project)(nil),                                        // 208: nem.Project
-	(*gen.ProjectVersion)(nil),                                 // 209: nem.ProjectVersion
-	(gen.ProjectVersionReviewStatus)(0),                        // 210: nem.ProjectVersionReviewStatus
-	(*gen.Extension)(nil),                                      // 211: nem.Extension
-	(*gen.ExtensionVersion)(nil),                               // 212: nem.ExtensionVersion
-	(*gen.ExtensionExecution)(nil),                             // 213: nem.ExtensionExecution
-	(gen.ChangeRequestReviewStatus)(0),                         // 214: nem.ChangeRequestReviewStatus
-	(gen.ChangeRequestChangeType)(0),                           // 215: nem.ChangeRequestChangeType
-	(*gen.ChangeRequest)(nil),                                  // 216: nem.ChangeRequest
-	(*gen.ObjectStore)(nil),                                    // 217: nem.ObjectStore
-	(gen.ConnectionDbType)(0),                                  // 218: nem.ConnectionDbType
-	(*gen.Membership)(nil),                                     // 219: nem.Membership
-	(gen.MembershipType)(0),                                    // 220: nem.MembershipType
-	(*gen.AiUsage)(nil),                                        // 221: nem.AiUsage
-	(*gen.LocalAgent)(nil),                                     // 222: nem.LocalAgent
-	(*gen.LocalAgentConnection)(nil),                           // 223: nem.LocalAgentConnection
-	(*gen.Deployment)(nil),                                     // 224: nem.Deployment
-	(*gen.Automation)(nil),                                     // 225: nem.Automation
-	(gen.AutomationEventStatus)(0),                             // 226: nem.AutomationEventStatus
-	(*gen.AutomationEvent)(nil),                                // 227: nem.AutomationEvent
+	(*DeploymentWithRevision)(nil),                             // 172: DeploymentWithRevision
+	(*ListDeploymentsRequest)(nil),                             // 173: ListDeploymentsRequest
+	(*ListDeploymentsResponse)(nil),                            // 174: ListDeploymentsResponse
+	(*ListDeploymentRevisionsRequest)(nil),                     // 175: ListDeploymentRevisionsRequest
+	(*ListDeploymentRevisionsResponse)(nil),                    // 176: ListDeploymentRevisionsResponse
+	(*MarkDeploymentDestroyedRequest)(nil),                     // 177: MarkDeploymentDestroyedRequest
+	(*MarkDeploymentDestroyedResponse)(nil),                    // 178: MarkDeploymentDestroyedResponse
+	(*IssueProvisioningTokenRequest)(nil),                      // 179: IssueProvisioningTokenRequest
+	(*IssueProvisioningTokenResponse)(nil),                     // 180: IssueProvisioningTokenResponse
+	(*ExchangeProvisioningTokenRequest)(nil),                   // 181: ExchangeProvisioningTokenRequest
+	(*ExchangeProvisioningTokenResponse)(nil),                  // 182: ExchangeProvisioningTokenResponse
+	(*CheckExtensionExecutionLimitRequest)(nil),                // 183: CheckExtensionExecutionLimitRequest
+	(*CheckExtensionExecutionLimitResponse)(nil),               // 184: CheckExtensionExecutionLimitResponse
+	(*CreateAutomationRequest)(nil),                            // 185: CreateAutomationRequest
+	(*CreateAutomationResponse)(nil),                           // 186: CreateAutomationResponse
+	(*RotateAutomationSecretRequest)(nil),                      // 187: RotateAutomationSecretRequest
+	(*RotateAutomationSecretResponse)(nil),                     // 188: RotateAutomationSecretResponse
+	(*UpdateAutomationRequest)(nil),                            // 189: UpdateAutomationRequest
+	(*DeleteAutomationRequest)(nil),                            // 190: DeleteAutomationRequest
+	(*DeleteAutomationResponse)(nil),                           // 191: DeleteAutomationResponse
+	(*GetAutomationRequest)(nil),                               // 192: GetAutomationRequest
+	(*ListAutomationsForProjectRequest)(nil),                   // 193: ListAutomationsForProjectRequest
+	(*ListAutomationsForProjectResponse)(nil),                  // 194: ListAutomationsForProjectResponse
+	(*TestAutomationRequest)(nil),                              // 195: TestAutomationRequest
+	(*TestAutomationResponse)(nil),                             // 196: TestAutomationResponse
+	(*ListAutomationEventsRequest)(nil),                        // 197: ListAutomationEventsRequest
+	(*ListAutomationEventsResponse)(nil),                       // 198: ListAutomationEventsResponse
+	(*GetAutomationEventRequest)(nil),                          // 199: GetAutomationEventRequest
+	(*RetryAutomationEventRequest)(nil),                        // 200: RetryAutomationEventRequest
+	(*MarkChangeRequestAppliedRequest)(nil),                    // 201: MarkChangeRequestAppliedRequest
+	(*MarkChangeRequestAppliedResponse)(nil),                   // 202: MarkChangeRequestAppliedResponse
+	(gen.UserProjectRole)(0),                                   // 203: nem.UserProjectRole
+	(gen.UserTeamRole)(0),                                      // 204: nem.UserTeamRole
+	(*gen.User)(nil),                                           // 205: nem.User
+	(*gen.UserTeam)(nil),                                       // 206: nem.UserTeam
+	(*gen.UserProject)(nil),                                    // 207: nem.UserProject
+	(*gen.Team)(nil),                                           // 208: nem.Team
+	(*fieldmaskpb.FieldMask)(nil),                              // 209: google.protobuf.FieldMask
+	(*gen.Connection)(nil),                                     // 210: nem.Connection
+	(*gen.Project)(nil),                                        // 211: nem.Project
+	(*gen.ProjectVersion)(nil),                                 // 212: nem.ProjectVersion
+	(gen.ProjectVersionReviewStatus)(0),                        // 213: nem.ProjectVersionReviewStatus
+	(*gen.Extension)(nil),                                      // 214: nem.Extension
+	(*gen.ExtensionVersion)(nil),                               // 215: nem.ExtensionVersion
+	(*gen.ExtensionExecution)(nil),                             // 216: nem.ExtensionExecution
+	(gen.ChangeRequestReviewStatus)(0),                         // 217: nem.ChangeRequestReviewStatus
+	(gen.ChangeRequestChangeType)(0),                           // 218: nem.ChangeRequestChangeType
+	(*gen.ChangeRequest)(nil),                                  // 219: nem.ChangeRequest
+	(*gen.ObjectStore)(nil),                                    // 220: nem.ObjectStore
+	(gen.ConnectionDbType)(0),                                  // 221: nem.ConnectionDbType
+	(*gen.Membership)(nil),                                     // 222: nem.Membership
+	(gen.MembershipType)(0),                                    // 223: nem.MembershipType
+	(*gen.AiUsage)(nil),                                        // 224: nem.AiUsage
+	(*gen.LocalAgent)(nil),                                     // 225: nem.LocalAgent
+	(*gen.LocalAgentConnection)(nil),                           // 226: nem.LocalAgentConnection
+	(*gen.Deployment)(nil),                                     // 227: nem.Deployment
+	(*gen.DeploymentRevision)(nil),                             // 228: nem.DeploymentRevision
+	(*gen.Automation)(nil),                                     // 229: nem.Automation
+	(gen.AutomationEventStatus)(0),                             // 230: nem.AutomationEventStatus
+	(*gen.AutomationEvent)(nil),                                // 231: nem.AutomationEvent
 }
 var file_product_proto_depIdxs = []int32{
-	200, // 0: GetUserRoleForProjectResponse.role:type_name -> nem.UserProjectRole
-	201, // 1: GetUserRoleForTeamResponse.role:type_name -> nem.UserTeamRole
-	202, // 2: UpdateUserRequest.user:type_name -> nem.User
-	202, // 3: ListUsersForTeamResponse.users:type_name -> nem.User
-	203, // 4: ListUsersForTeamResponse.user_teams:type_name -> nem.UserTeam
-	202, // 5: ListUsersForProjectResponse.users:type_name -> nem.User
-	204, // 6: ListUsersForProjectResponse.user_projects:type_name -> nem.UserProject
-	200, // 7: AddUserToProjectRequest.role:type_name -> nem.UserProjectRole
-	200, // 8: UpdateUserProjectRequest.role:type_name -> nem.UserProjectRole
-	201, // 9: AddUserToTeamRequest.role:type_name -> nem.UserTeamRole
-	201, // 10: UpdateUserTeamRequest.role:type_name -> nem.UserTeamRole
-	205, // 11: ListTeamsForUserResponse.teams:type_name -> nem.Team
-	205, // 12: ListTeamsForAdminUserResponse.teams:type_name -> nem.Team
-	205, // 13: CreateTeamRequest.team:type_name -> nem.Team
-	205, // 14: UpdateTeamRequest.team:type_name -> nem.Team
-	206, // 15: UpdateTeamRequest.update_mask:type_name -> google.protobuf.FieldMask
-	207, // 16: CreateConnectionSecretRequest.connection:type_name -> nem.Connection
-	207, // 17: UpdateConnectionSecretRequest.connection:type_name -> nem.Connection
-	207, // 18: DeleteConnectionSecretRequest.connection:type_name -> nem.Connection
-	208, // 19: ListProjectsForUserResponse.projects:type_name -> nem.Project
-	208, // 20: CreateProjectRequest.project:type_name -> nem.Project
-	208, // 21: UpdateProjectRequest.project:type_name -> nem.Project
-	206, // 22: UpdateProjectRequest.update_mask:type_name -> google.protobuf.FieldMask
-	209, // 23: ListProjectVersionsResponse.project_versions:type_name -> nem.ProjectVersion
-	210, // 24: ListProjectVersionsForUserRequest.review_status:type_name -> nem.ProjectVersionReviewStatus
-	209, // 25: ListProjectVersionsForUserResponse.project_versions:type_name -> nem.ProjectVersion
-	210, // 26: GetLatestProjectVersionRequest.review_status:type_name -> nem.ProjectVersionReviewStatus
-	210, // 27: GetLatestProjectVersionForUserRequest.review_status:type_name -> nem.ProjectVersionReviewStatus
-	210, // 28: GetLatestProjectVersionUUIDForUserRequest.review_status:type_name -> nem.ProjectVersionReviewStatus
-	209, // 29: CreateProjectVersionRequest.project_version:type_name -> nem.ProjectVersion
-	209, // 30: UpdateProjectVersionRequest.project_version:type_name -> nem.ProjectVersion
-	206, // 31: UpdateProjectVersionRequest.update_mask:type_name -> google.protobuf.FieldMask
-	210, // 32: ReviewProjectVersionRequest.review_status:type_name -> nem.ProjectVersionReviewStatus
-	211, // 33: ListExtensionsResponse.extensions:type_name -> nem.Extension
-	211, // 34: CreateExtensionRequest.extension:type_name -> nem.Extension
-	211, // 35: UpdateExtensionRequest.extension:type_name -> nem.Extension
-	206, // 36: UpdateExtensionRequest.update_mask:type_name -> google.protobuf.FieldMask
-	212, // 37: ListExtensionVersionsResponse.versions:type_name -> nem.ExtensionVersion
-	212, // 38: CreateExtensionVersionRequest.version:type_name -> nem.ExtensionVersion
-	212, // 39: UpdateExtensionVersionRequest.version:type_name -> nem.ExtensionVersion
-	206, // 40: UpdateExtensionVersionRequest.update_mask:type_name -> google.protobuf.FieldMask
-	213, // 41: ListExtensionExecutionsResponse.executions:type_name -> nem.ExtensionExecution
-	213, // 42: CreateExtensionExecutionRequest.execution:type_name -> nem.ExtensionExecution
-	213, // 43: UpdateExtensionExecutionRequest.execution:type_name -> nem.ExtensionExecution
-	206, // 44: UpdateExtensionExecutionRequest.update_mask:type_name -> google.protobuf.FieldMask
-	214, // 45: ListUserChangeRequestsRequest.review_status:type_name -> nem.ChangeRequestReviewStatus
-	215, // 46: ListUserChangeRequestsRequest.change_request_type:type_name -> nem.ChangeRequestChangeType
-	216, // 47: ListUserChangeRequestsResponse.change_requests:type_name -> nem.ChangeRequest
-	216, // 48: CreateChangeRequestRequest.change_request:type_name -> nem.ChangeRequest
-	216, // 49: UpdateChangeRequestRequest.change_request:type_name -> nem.ChangeRequest
-	206, // 50: UpdateChangeRequestRequest.update_mask:type_name -> google.protobuf.FieldMask
-	215, // 51: ListChangeRequestsForReviewRequest.change_request_type:type_name -> nem.ChangeRequestChangeType
-	216, // 52: ListChangeRequestsForReviewResponse.change_requests:type_name -> nem.ChangeRequest
-	217, // 53: CreateObjectStoreSecretRequest.object_store:type_name -> nem.ObjectStore
-	217, // 54: UpdateObjectStoreSecretRequest.object_store:type_name -> nem.ObjectStore
-	217, // 55: DeleteObjectStoreSecretRequest.object_store:type_name -> nem.ObjectStore
-	218, // 56: GenerateSQLForCRRequest.db_type_override:type_name -> nem.ConnectionDbType
+	203, // 0: GetUserRoleForProjectResponse.role:type_name -> nem.UserProjectRole
+	204, // 1: GetUserRoleForTeamResponse.role:type_name -> nem.UserTeamRole
+	205, // 2: UpdateUserRequest.user:type_name -> nem.User
+	205, // 3: ListUsersForTeamResponse.users:type_name -> nem.User
+	206, // 4: ListUsersForTeamResponse.user_teams:type_name -> nem.UserTeam
+	205, // 5: ListUsersForProjectResponse.users:type_name -> nem.User
+	207, // 6: ListUsersForProjectResponse.user_projects:type_name -> nem.UserProject
+	203, // 7: AddUserToProjectRequest.role:type_name -> nem.UserProjectRole
+	203, // 8: UpdateUserProjectRequest.role:type_name -> nem.UserProjectRole
+	204, // 9: AddUserToTeamRequest.role:type_name -> nem.UserTeamRole
+	204, // 10: UpdateUserTeamRequest.role:type_name -> nem.UserTeamRole
+	208, // 11: ListTeamsForUserResponse.teams:type_name -> nem.Team
+	208, // 12: ListTeamsForAdminUserResponse.teams:type_name -> nem.Team
+	208, // 13: CreateTeamRequest.team:type_name -> nem.Team
+	208, // 14: UpdateTeamRequest.team:type_name -> nem.Team
+	209, // 15: UpdateTeamRequest.update_mask:type_name -> google.protobuf.FieldMask
+	210, // 16: CreateConnectionSecretRequest.connection:type_name -> nem.Connection
+	210, // 17: UpdateConnectionSecretRequest.connection:type_name -> nem.Connection
+	210, // 18: DeleteConnectionSecretRequest.connection:type_name -> nem.Connection
+	211, // 19: ListProjectsForUserResponse.projects:type_name -> nem.Project
+	211, // 20: CreateProjectRequest.project:type_name -> nem.Project
+	211, // 21: UpdateProjectRequest.project:type_name -> nem.Project
+	209, // 22: UpdateProjectRequest.update_mask:type_name -> google.protobuf.FieldMask
+	212, // 23: ListProjectVersionsResponse.project_versions:type_name -> nem.ProjectVersion
+	213, // 24: ListProjectVersionsForUserRequest.review_status:type_name -> nem.ProjectVersionReviewStatus
+	212, // 25: ListProjectVersionsForUserResponse.project_versions:type_name -> nem.ProjectVersion
+	213, // 26: GetLatestProjectVersionRequest.review_status:type_name -> nem.ProjectVersionReviewStatus
+	213, // 27: GetLatestProjectVersionForUserRequest.review_status:type_name -> nem.ProjectVersionReviewStatus
+	213, // 28: GetLatestProjectVersionUUIDForUserRequest.review_status:type_name -> nem.ProjectVersionReviewStatus
+	212, // 29: CreateProjectVersionRequest.project_version:type_name -> nem.ProjectVersion
+	212, // 30: UpdateProjectVersionRequest.project_version:type_name -> nem.ProjectVersion
+	209, // 31: UpdateProjectVersionRequest.update_mask:type_name -> google.protobuf.FieldMask
+	213, // 32: ReviewProjectVersionRequest.review_status:type_name -> nem.ProjectVersionReviewStatus
+	214, // 33: ListExtensionsResponse.extensions:type_name -> nem.Extension
+	214, // 34: CreateExtensionRequest.extension:type_name -> nem.Extension
+	214, // 35: UpdateExtensionRequest.extension:type_name -> nem.Extension
+	209, // 36: UpdateExtensionRequest.update_mask:type_name -> google.protobuf.FieldMask
+	215, // 37: ListExtensionVersionsResponse.versions:type_name -> nem.ExtensionVersion
+	215, // 38: CreateExtensionVersionRequest.version:type_name -> nem.ExtensionVersion
+	215, // 39: UpdateExtensionVersionRequest.version:type_name -> nem.ExtensionVersion
+	209, // 40: UpdateExtensionVersionRequest.update_mask:type_name -> google.protobuf.FieldMask
+	216, // 41: ListExtensionExecutionsResponse.executions:type_name -> nem.ExtensionExecution
+	216, // 42: CreateExtensionExecutionRequest.execution:type_name -> nem.ExtensionExecution
+	216, // 43: UpdateExtensionExecutionRequest.execution:type_name -> nem.ExtensionExecution
+	209, // 44: UpdateExtensionExecutionRequest.update_mask:type_name -> google.protobuf.FieldMask
+	217, // 45: ListUserChangeRequestsRequest.review_status:type_name -> nem.ChangeRequestReviewStatus
+	218, // 46: ListUserChangeRequestsRequest.change_request_type:type_name -> nem.ChangeRequestChangeType
+	219, // 47: ListUserChangeRequestsResponse.change_requests:type_name -> nem.ChangeRequest
+	219, // 48: CreateChangeRequestRequest.change_request:type_name -> nem.ChangeRequest
+	219, // 49: UpdateChangeRequestRequest.change_request:type_name -> nem.ChangeRequest
+	209, // 50: UpdateChangeRequestRequest.update_mask:type_name -> google.protobuf.FieldMask
+	218, // 51: ListChangeRequestsForReviewRequest.change_request_type:type_name -> nem.ChangeRequestChangeType
+	219, // 52: ListChangeRequestsForReviewResponse.change_requests:type_name -> nem.ChangeRequest
+	220, // 53: CreateObjectStoreSecretRequest.object_store:type_name -> nem.ObjectStore
+	220, // 54: UpdateObjectStoreSecretRequest.object_store:type_name -> nem.ObjectStore
+	220, // 55: DeleteObjectStoreSecretRequest.object_store:type_name -> nem.ObjectStore
+	221, // 56: GenerateSQLForCRRequest.db_type_override:type_name -> nem.ConnectionDbType
 	111, // 57: GenerateSQLForCRResponse.statements:type_name -> GenerateSQLForCRStatement
-	214, // 58: ReviewDataChangeRequest.review_status:type_name -> nem.ChangeRequestReviewStatus
-	219, // 59: CreateMembershipRequest.membership:type_name -> nem.Membership
-	219, // 60: UpdateMembershipRequest.membership:type_name -> nem.Membership
-	206, // 61: UpdateMembershipRequest.update_mask:type_name -> google.protobuf.FieldMask
+	217, // 58: ReviewDataChangeRequest.review_status:type_name -> nem.ChangeRequestReviewStatus
+	222, // 59: CreateMembershipRequest.membership:type_name -> nem.Membership
+	222, // 60: UpdateMembershipRequest.membership:type_name -> nem.Membership
+	209, // 61: UpdateMembershipRequest.update_mask:type_name -> google.protobuf.FieldMask
 	0,   // 62: CreateCheckoutSessionRequest.session_type:type_name -> CheckoutSessionType
-	220, // 63: CreateCheckoutSessionRequest.plan_type:type_name -> nem.MembershipType
-	220, // 64: ChangeMembershipPlanRequest.new_plan_type:type_name -> nem.MembershipType
-	202, // 65: ListMembershipUsersResponse.users:type_name -> nem.User
-	208, // 66: ListMembershipUserProjectsResponse.projects:type_name -> nem.Project
-	219, // 67: MembershipWithName.membership:type_name -> nem.Membership
+	223, // 63: CreateCheckoutSessionRequest.plan_type:type_name -> nem.MembershipType
+	223, // 64: ChangeMembershipPlanRequest.new_plan_type:type_name -> nem.MembershipType
+	205, // 65: ListMembershipUsersResponse.users:type_name -> nem.User
+	211, // 66: ListMembershipUserProjectsResponse.projects:type_name -> nem.Project
+	222, // 67: MembershipWithName.membership:type_name -> nem.Membership
 	136, // 68: ListMembershipsForUserResponse.memberships:type_name -> MembershipWithName
-	220, // 69: GetMembershipTierForProjectResponse.membership_type:type_name -> nem.MembershipType
+	223, // 69: GetMembershipTierForProjectResponse.membership_type:type_name -> nem.MembershipType
 	1,   // 70: EvaluateUserPromptRequest.context:type_name -> ProContext
 	1,   // 71: HandleUserPromptRequest.context:type_name -> ProContext
 	1,   // 72: GetUserPromptJobRequest.context:type_name -> ProContext
-	209, // 73: GetUserPromptJobResponse.project_version:type_name -> nem.ProjectVersion
+	212, // 73: GetUserPromptJobResponse.project_version:type_name -> nem.ProjectVersion
 	1,   // 74: HandleFollowupUserPromptRequest.context:type_name -> ProContext
 	1,   // 75: FinalizeUserPromptRequest.context:type_name -> ProContext
-	221, // 76: ListAIUsageForUserResponse.usages:type_name -> nem.AiUsage
-	222, // 77: ListLocalAgentsResponse.local_agents:type_name -> nem.LocalAgent
-	223, // 78: UpdateLocalAgentConnectionsRequest.connections:type_name -> nem.LocalAgentConnection
-	223, // 79: GetLocalAgentConnectionsResponse.connections:type_name -> nem.LocalAgentConnection
-	224, // 80: UpsertDeploymentRequest.deployment:type_name -> nem.Deployment
-	224, // 81: UpsertDeploymentResponse.deployment:type_name -> nem.Deployment
-	224, // 82: ListDeploymentsResponse.deployments:type_name -> nem.Deployment
-	225, // 83: CreateAutomationRequest.automation:type_name -> nem.Automation
-	225, // 84: CreateAutomationResponse.automation:type_name -> nem.Automation
-	225, // 85: UpdateAutomationRequest.automation:type_name -> nem.Automation
-	225, // 86: ListAutomationsForProjectResponse.automations:type_name -> nem.Automation
-	226, // 87: ListAutomationEventsRequest.status:type_name -> nem.AutomationEventStatus
-	227, // 88: ListAutomationEventsResponse.automation_events:type_name -> nem.AutomationEvent
-	216, // 89: MarkChangeRequestAppliedResponse.change_request:type_name -> nem.ChangeRequest
-	2,   // 90: NuzurProduct.GetUser:input_type -> GetUserRequest
-	3,   // 91: NuzurProduct.GetTokenUser:input_type -> GetTokenUserRequest
-	4,   // 92: NuzurProduct.GetUserByEmail:input_type -> GetUserByEmailRequest
-	5,   // 93: NuzurProduct.GetTokenUserRoleForProject:input_type -> GetUserRoleForProjectRequest
-	7,   // 94: NuzurProduct.GetTokenUserRoleForTeam:input_type -> GetUserRoleForTeamRequest
-	9,   // 95: NuzurProduct.UpdateTokenUser:input_type -> UpdateUserRequest
-	10,  // 96: NuzurProduct.ListUsersForTeam:input_type -> ListUsersForTeamRequest
-	12,  // 97: NuzurProduct.ListUsersForProject:input_type -> ListUsersForProjectRequest
-	14,  // 98: NuzurProduct.AddUserToProject:input_type -> AddUserToProjectRequest
-	15,  // 99: NuzurProduct.UpdateUserProject:input_type -> UpdateUserProjectRequest
-	16,  // 100: NuzurProduct.RemoveUserFromProject:input_type -> RemoveUserFromProjectRequest
-	17,  // 101: NuzurProduct.AddUserToTeam:input_type -> AddUserToTeamRequest
-	18,  // 102: NuzurProduct.UpdateUserTeam:input_type -> UpdateUserTeamRequest
-	19,  // 103: NuzurProduct.RemoveUserFromTeam:input_type -> RemoveUserFromTeamRequest
-	20,  // 104: NuzurProduct.ListTeamsForUser:input_type -> ListTeamsForUserRequest
-	22,  // 105: NuzurProduct.ListTeamsForAdminUser:input_type -> ListTeamsForAdminUserRequest
-	24,  // 106: NuzurProduct.GetTeamForUser:input_type -> GetTeamForUserRequest
-	25,  // 107: NuzurProduct.CreateTeam:input_type -> CreateTeamRequest
-	26,  // 108: NuzurProduct.UpdateTeam:input_type -> UpdateTeamRequest
-	27,  // 109: NuzurProduct.GetConnectionWithSecret:input_type -> GetConnectionWithSecretRequest
-	28,  // 110: NuzurProduct.CreateConnectionSecret:input_type -> CreateConnectionSecretRequest
-	29,  // 111: NuzurProduct.UpdateConnectionSecret:input_type -> UpdateConnectionSecretRequest
-	30,  // 112: NuzurProduct.DeleteConnectionSecret:input_type -> DeleteConnectionSecretRequest
-	31,  // 113: NuzurProduct.ListProjectsForUser:input_type -> ListProjectsForUserRequest
-	33,  // 114: NuzurProduct.GetProjectForUser:input_type -> GetProjectForUserRequest
-	34,  // 115: NuzurProduct.CreateProject:input_type -> CreateProjectRequest
-	35,  // 116: NuzurProduct.UpdateProject:input_type -> UpdateProjectRequest
-	36,  // 117: NuzurProduct.GetProjectName:input_type -> GetProjectNameRequest
-	38,  // 118: NuzurProduct.ListProjectVersions:input_type -> ListProjectVersionsRequest
-	40,  // 119: NuzurProduct.ListProjectVersionsForUser:input_type -> ListProjectVersionsForUserRequest
-	40,  // 120: NuzurProduct.ListProjectVersionsForUserCached:input_type -> ListProjectVersionsForUserRequest
-	42,  // 121: NuzurProduct.GetProjectVersionForUser:input_type -> GetProjectVersionForUserRequest
-	42,  // 122: NuzurProduct.GetProjectVersionForUserCached:input_type -> GetProjectVersionForUserRequest
-	42,  // 123: NuzurProduct.GetProjectVersionLeanForUser:input_type -> GetProjectVersionForUserRequest
-	43,  // 124: NuzurProduct.GetLatestProjectVersion:input_type -> GetLatestProjectVersionRequest
-	44,  // 125: NuzurProduct.GetLatestProjectVersionForUser:input_type -> GetLatestProjectVersionForUserRequest
-	44,  // 126: NuzurProduct.GetLatestProjectVersionLeanForUser:input_type -> GetLatestProjectVersionForUserRequest
-	45,  // 127: NuzurProduct.GetLatestProjectVersionUUIDForUser:input_type -> GetLatestProjectVersionUUIDForUserRequest
-	47,  // 128: NuzurProduct.GetProjectVersionVersion:input_type -> GetProjectVersionVersionRequest
-	49,  // 129: NuzurProduct.GetProjectVersionIdentifier:input_type -> GetProjectVersionIdentifierRequest
-	51,  // 130: NuzurProduct.CreateProjectVersion:input_type -> CreateProjectVersionRequest
-	52,  // 131: NuzurProduct.CreateProjectVersionFromJSON:input_type -> CreateProjectVersionFromJSONRequest
-	54,  // 132: NuzurProduct.CreateDraftProjectVersionForExistingProject:input_type -> CreateDraftProjectVersionForExistingProjectRequest
-	53,  // 133: NuzurProduct.UpdateProjectVersion:input_type -> UpdateProjectVersionRequest
-	55,  // 134: NuzurProduct.DiscardDraftProjectVersion:input_type -> DiscardDraftProjectVersionRequest
-	56,  // 135: NuzurProduct.SendProjectVersionForReview:input_type -> SendProjectVersionForReviewRequest
-	57,  // 136: NuzurProduct.WithdrawFromReviewProjectVersion:input_type -> WithdrawFromReviewProjectVersionRequest
-	58,  // 137: NuzurProduct.ReviewProjectVersion:input_type -> ReviewProjectVersionRequest
-	59,  // 138: NuzurProduct.UploadProjectVersionSnapshot:input_type -> UploadProjectVersionSnapshotRequest
-	61,  // 139: NuzurProduct.GetSignedFileURL:input_type -> GetSignedFileURLRequest
-	63,  // 140: NuzurProduct.UploadExtensionExecutionFile:input_type -> UploadExtensionExecutionFileRequest
-	65,  // 141: NuzurProduct.GetExtensionExecutionFile:input_type -> GetExtensionExecutionFileRequest
-	67,  // 142: NuzurProduct.UploadExtensionIcon:input_type -> UploadExtensionIconRequest
-	77,  // 143: NuzurProduct.UploadUserAvatar:input_type -> UploadUserAvatarRequest
-	71,  // 144: NuzurProduct.UploadRecordFieldFile:input_type -> UploadRecordFieldFileRequest
-	73,  // 145: NuzurProduct.GetRecordFieldSignedFileURL:input_type -> GetRecordFieldSignedFileURLRequest
-	75,  // 146: NuzurProduct.GetRecordFileContent:input_type -> GetRecordFileContentRequest
-	79,  // 147: NuzurProduct.ListExtensions:input_type -> ListExtensionsRequest
-	81,  // 148: NuzurProduct.GetExtension:input_type -> GetExtensionRequest
-	82,  // 149: NuzurProduct.CreateExtension:input_type -> CreateExtensionRequest
-	83,  // 150: NuzurProduct.UpdateExtension:input_type -> UpdateExtensionRequest
-	84,  // 151: NuzurProduct.ListExtensionVersions:input_type -> ListExtensionVersionsRequest
-	86,  // 152: NuzurProduct.GetExtensionVersion:input_type -> GetExtensionVersionRequest
-	87,  // 153: NuzurProduct.CreateExtensionVersion:input_type -> CreateExtensionVersionRequest
-	88,  // 154: NuzurProduct.UpdateExtensionVersion:input_type -> UpdateExtensionVersionRequest
-	89,  // 155: NuzurProduct.ListExtensionExecutions:input_type -> ListExtensionExecutionsRequest
-	91,  // 156: NuzurProduct.GetExtensionExecution:input_type -> GetExtensionExecutionRequest
-	92,  // 157: NuzurProduct.CreateExtensionExecution:input_type -> CreateExtensionExecutionRequest
-	93,  // 158: NuzurProduct.UpdateExtensionExecution:input_type -> UpdateExtensionExecutionRequest
-	180, // 159: NuzurProduct.CheckExtensionExecutionLimit:input_type -> CheckExtensionExecutionLimitRequest
-	94,  // 160: NuzurProduct.ListUserChangeRequests:input_type -> ListUserChangeRequestsRequest
-	96,  // 161: NuzurProduct.GetChangeRequest:input_type -> GetChangeRequestRequest
-	97,  // 162: NuzurProduct.CreateChangeRequest:input_type -> CreateChangeRequestRequest
-	98,  // 163: NuzurProduct.UpdateChangeRequest:input_type -> UpdateChangeRequestRequest
-	99,  // 164: NuzurProduct.ListChangeRequestsForReview:input_type -> ListChangeRequestsForReviewRequest
-	101, // 165: NuzurProduct.GetUserProjectVersionData:input_type -> GetUserProjectVersionDataRequest
-	103, // 166: NuzurProduct.SaveUserProjectVersionData:input_type -> SaveUserProjectVersionDataRequest
-	105, // 167: NuzurProduct.GetObjectStoreWithSecret:input_type -> GetObjectStoreWithSecretRequest
-	106, // 168: NuzurProduct.CreateObjectStoreSecret:input_type -> CreateObjectStoreSecretRequest
-	107, // 169: NuzurProduct.UpdateObjectStoreSecret:input_type -> UpdateObjectStoreSecretRequest
-	108, // 170: NuzurProduct.DeleteObjectStoreSecret:input_type -> DeleteObjectStoreSecretRequest
-	109, // 171: NuzurProduct.GenerateSQLForCR:input_type -> GenerateSQLForCRRequest
-	112, // 172: NuzurProduct.ReviewDataChange:input_type -> ReviewDataChangeRequest
-	114, // 173: NuzurProduct.GetMembership:input_type -> GetMembershipRequest
-	115, // 174: NuzurProduct.CreateMembership:input_type -> CreateMembershipRequest
-	116, // 175: NuzurProduct.UpdateMembership:input_type -> UpdateMembershipRequest
-	117, // 176: NuzurProduct.MembershipForProject:input_type -> MembershipForProjectRequest
-	118, // 177: NuzurProduct.MembershipForTeam:input_type -> MembershipForTeamRequest
-	119, // 178: NuzurProduct.CreateCheckoutSession:input_type -> CreateCheckoutSessionRequest
-	123, // 179: NuzurProduct.ListMembershipUsers:input_type -> ListMembershipUsersRequest
-	125, // 180: NuzurProduct.CancelMembership:input_type -> CancelMembershipRequest
-	127, // 181: NuzurProduct.ReactivateMembership:input_type -> ReactivateMembershipRequest
-	129, // 182: NuzurProduct.UserHasActiveStripeSubscription:input_type -> UserHasActiveStripeSubscriptionRequest
-	131, // 183: NuzurProduct.ListMembershipUserProjects:input_type -> ListMembershipUserProjectsRequest
-	133, // 184: NuzurProduct.RemoveMembershipUser:input_type -> RemoveMembershipUserRequest
-	135, // 185: NuzurProduct.ListMembershipsForUser:input_type -> ListMembershipsForUserRequest
-	121, // 186: NuzurProduct.ChangeMembershipPlan:input_type -> ChangeMembershipPlanRequest
-	138, // 187: NuzurProduct.SendPrioritySupportEmail:input_type -> PrioritySupportEmailRequest
-	140, // 188: NuzurProduct.HandleWebhook:input_type -> HandleWebhookRequest
-	142, // 189: NuzurProduct.IsProActiveForProject:input_type -> IsProActiveForProjectRequest
-	144, // 190: NuzurProduct.GetMembershipTierForProject:input_type -> GetMembershipTierForProjectRequest
-	146, // 191: NuzurProduct.EvaluateUserPrompt:input_type -> EvaluateUserPromptRequest
-	148, // 192: NuzurProduct.HandleUserPrompt:input_type -> HandleUserPromptRequest
-	150, // 193: NuzurProduct.GetUserPromptJob:input_type -> GetUserPromptJobRequest
-	152, // 194: NuzurProduct.HandleFollowupUserPrompt:input_type -> HandleFollowupUserPromptRequest
-	154, // 195: NuzurProduct.FinalizeUserPrompt:input_type -> FinalizeUserPromptRequest
-	156, // 196: NuzurProduct.ListAIUsageForUser:input_type -> ListAIUsageForUserRequest
-	158, // 197: NuzurProduct.GetAIUsageForUserInPeriod:input_type -> GetAIUsageForUserInPeriodRequest
-	160, // 198: NuzurProduct.RegisterLocalAgent:input_type -> RegisterLocalAgentRequest
-	162, // 199: NuzurProduct.RevokeLocalAgent:input_type -> RevokeLocalAgentRequest
-	164, // 200: NuzurProduct.ListLocalAgents:input_type -> ListLocalAgentsRequest
-	166, // 201: NuzurProduct.UpdateLocalAgentConnections:input_type -> UpdateLocalAgentConnectionsRequest
-	168, // 202: NuzurProduct.GetLocalAgentConnections:input_type -> GetLocalAgentConnectionsRequest
-	176, // 203: NuzurProduct.IssueProvisioningToken:input_type -> IssueProvisioningTokenRequest
-	178, // 204: NuzurProduct.ExchangeProvisioningToken:input_type -> ExchangeProvisioningTokenRequest
-	170, // 205: NuzurProduct.UpsertDeployment:input_type -> UpsertDeploymentRequest
-	172, // 206: NuzurProduct.ListDeployments:input_type -> ListDeploymentsRequest
-	174, // 207: NuzurProduct.MarkDeploymentDestroyed:input_type -> MarkDeploymentDestroyedRequest
-	182, // 208: NuzurProduct.CreateAutomation:input_type -> CreateAutomationRequest
-	184, // 209: NuzurProduct.RotateAutomationSecret:input_type -> RotateAutomationSecretRequest
-	186, // 210: NuzurProduct.UpdateAutomation:input_type -> UpdateAutomationRequest
-	187, // 211: NuzurProduct.DeleteAutomation:input_type -> DeleteAutomationRequest
-	189, // 212: NuzurProduct.GetAutomation:input_type -> GetAutomationRequest
-	190, // 213: NuzurProduct.ListAutomationsForProject:input_type -> ListAutomationsForProjectRequest
-	192, // 214: NuzurProduct.TestAutomation:input_type -> TestAutomationRequest
-	194, // 215: NuzurProduct.ListAutomationEvents:input_type -> ListAutomationEventsRequest
-	196, // 216: NuzurProduct.GetAutomationEvent:input_type -> GetAutomationEventRequest
-	197, // 217: NuzurProduct.RetryAutomationEvent:input_type -> RetryAutomationEventRequest
-	198, // 218: NuzurProduct.MarkChangeRequestApplied:input_type -> MarkChangeRequestAppliedRequest
-	202, // 219: NuzurProduct.GetUser:output_type -> nem.User
-	202, // 220: NuzurProduct.GetTokenUser:output_type -> nem.User
-	202, // 221: NuzurProduct.GetUserByEmail:output_type -> nem.User
-	6,   // 222: NuzurProduct.GetTokenUserRoleForProject:output_type -> GetUserRoleForProjectResponse
-	8,   // 223: NuzurProduct.GetTokenUserRoleForTeam:output_type -> GetUserRoleForTeamResponse
-	202, // 224: NuzurProduct.UpdateTokenUser:output_type -> nem.User
-	11,  // 225: NuzurProduct.ListUsersForTeam:output_type -> ListUsersForTeamResponse
-	13,  // 226: NuzurProduct.ListUsersForProject:output_type -> ListUsersForProjectResponse
-	204, // 227: NuzurProduct.AddUserToProject:output_type -> nem.UserProject
-	204, // 228: NuzurProduct.UpdateUserProject:output_type -> nem.UserProject
-	204, // 229: NuzurProduct.RemoveUserFromProject:output_type -> nem.UserProject
-	203, // 230: NuzurProduct.AddUserToTeam:output_type -> nem.UserTeam
-	203, // 231: NuzurProduct.UpdateUserTeam:output_type -> nem.UserTeam
-	203, // 232: NuzurProduct.RemoveUserFromTeam:output_type -> nem.UserTeam
-	21,  // 233: NuzurProduct.ListTeamsForUser:output_type -> ListTeamsForUserResponse
-	23,  // 234: NuzurProduct.ListTeamsForAdminUser:output_type -> ListTeamsForAdminUserResponse
-	205, // 235: NuzurProduct.GetTeamForUser:output_type -> nem.Team
-	205, // 236: NuzurProduct.CreateTeam:output_type -> nem.Team
-	205, // 237: NuzurProduct.UpdateTeam:output_type -> nem.Team
-	207, // 238: NuzurProduct.GetConnectionWithSecret:output_type -> nem.Connection
-	207, // 239: NuzurProduct.CreateConnectionSecret:output_type -> nem.Connection
-	207, // 240: NuzurProduct.UpdateConnectionSecret:output_type -> nem.Connection
-	207, // 241: NuzurProduct.DeleteConnectionSecret:output_type -> nem.Connection
-	32,  // 242: NuzurProduct.ListProjectsForUser:output_type -> ListProjectsForUserResponse
-	208, // 243: NuzurProduct.GetProjectForUser:output_type -> nem.Project
-	208, // 244: NuzurProduct.CreateProject:output_type -> nem.Project
-	208, // 245: NuzurProduct.UpdateProject:output_type -> nem.Project
-	37,  // 246: NuzurProduct.GetProjectName:output_type -> GetProjectNameResponse
-	39,  // 247: NuzurProduct.ListProjectVersions:output_type -> ListProjectVersionsResponse
-	41,  // 248: NuzurProduct.ListProjectVersionsForUser:output_type -> ListProjectVersionsForUserResponse
-	41,  // 249: NuzurProduct.ListProjectVersionsForUserCached:output_type -> ListProjectVersionsForUserResponse
-	209, // 250: NuzurProduct.GetProjectVersionForUser:output_type -> nem.ProjectVersion
-	209, // 251: NuzurProduct.GetProjectVersionForUserCached:output_type -> nem.ProjectVersion
-	209, // 252: NuzurProduct.GetProjectVersionLeanForUser:output_type -> nem.ProjectVersion
-	209, // 253: NuzurProduct.GetLatestProjectVersion:output_type -> nem.ProjectVersion
-	209, // 254: NuzurProduct.GetLatestProjectVersionForUser:output_type -> nem.ProjectVersion
-	209, // 255: NuzurProduct.GetLatestProjectVersionLeanForUser:output_type -> nem.ProjectVersion
-	46,  // 256: NuzurProduct.GetLatestProjectVersionUUIDForUser:output_type -> GetLatestProjectVersionUUIDForUserResponse
-	48,  // 257: NuzurProduct.GetProjectVersionVersion:output_type -> GetProjectVersionVersionResponse
-	50,  // 258: NuzurProduct.GetProjectVersionIdentifier:output_type -> GetProjectVersionIdentifierResponse
-	209, // 259: NuzurProduct.CreateProjectVersion:output_type -> nem.ProjectVersion
-	209, // 260: NuzurProduct.CreateProjectVersionFromJSON:output_type -> nem.ProjectVersion
-	209, // 261: NuzurProduct.CreateDraftProjectVersionForExistingProject:output_type -> nem.ProjectVersion
-	209, // 262: NuzurProduct.UpdateProjectVersion:output_type -> nem.ProjectVersion
-	209, // 263: NuzurProduct.DiscardDraftProjectVersion:output_type -> nem.ProjectVersion
-	209, // 264: NuzurProduct.SendProjectVersionForReview:output_type -> nem.ProjectVersion
-	209, // 265: NuzurProduct.WithdrawFromReviewProjectVersion:output_type -> nem.ProjectVersion
-	209, // 266: NuzurProduct.ReviewProjectVersion:output_type -> nem.ProjectVersion
-	60,  // 267: NuzurProduct.UploadProjectVersionSnapshot:output_type -> UploadProjectVersionSnapshotResponse
-	62,  // 268: NuzurProduct.GetSignedFileURL:output_type -> GetSignedFileURLResponse
-	64,  // 269: NuzurProduct.UploadExtensionExecutionFile:output_type -> UploadExtensionExecutionFileResponse
-	66,  // 270: NuzurProduct.GetExtensionExecutionFile:output_type -> GetExtensionExecutionFileResponse
-	68,  // 271: NuzurProduct.UploadExtensionIcon:output_type -> UploadExtensionIconResponse
-	78,  // 272: NuzurProduct.UploadUserAvatar:output_type -> UploadUserAvatarResponse
-	72,  // 273: NuzurProduct.UploadRecordFieldFile:output_type -> UploadRecordFieldFileResponse
-	74,  // 274: NuzurProduct.GetRecordFieldSignedFileURL:output_type -> GetRecordFieldSignedFileURLResponse
-	76,  // 275: NuzurProduct.GetRecordFileContent:output_type -> GetRecordFileContentResponse
-	80,  // 276: NuzurProduct.ListExtensions:output_type -> ListExtensionsResponse
-	211, // 277: NuzurProduct.GetExtension:output_type -> nem.Extension
-	211, // 278: NuzurProduct.CreateExtension:output_type -> nem.Extension
-	211, // 279: NuzurProduct.UpdateExtension:output_type -> nem.Extension
-	85,  // 280: NuzurProduct.ListExtensionVersions:output_type -> ListExtensionVersionsResponse
-	212, // 281: NuzurProduct.GetExtensionVersion:output_type -> nem.ExtensionVersion
-	212, // 282: NuzurProduct.CreateExtensionVersion:output_type -> nem.ExtensionVersion
-	212, // 283: NuzurProduct.UpdateExtensionVersion:output_type -> nem.ExtensionVersion
-	90,  // 284: NuzurProduct.ListExtensionExecutions:output_type -> ListExtensionExecutionsResponse
-	213, // 285: NuzurProduct.GetExtensionExecution:output_type -> nem.ExtensionExecution
-	213, // 286: NuzurProduct.CreateExtensionExecution:output_type -> nem.ExtensionExecution
-	213, // 287: NuzurProduct.UpdateExtensionExecution:output_type -> nem.ExtensionExecution
-	181, // 288: NuzurProduct.CheckExtensionExecutionLimit:output_type -> CheckExtensionExecutionLimitResponse
-	95,  // 289: NuzurProduct.ListUserChangeRequests:output_type -> ListUserChangeRequestsResponse
-	216, // 290: NuzurProduct.GetChangeRequest:output_type -> nem.ChangeRequest
-	216, // 291: NuzurProduct.CreateChangeRequest:output_type -> nem.ChangeRequest
-	216, // 292: NuzurProduct.UpdateChangeRequest:output_type -> nem.ChangeRequest
-	100, // 293: NuzurProduct.ListChangeRequestsForReview:output_type -> ListChangeRequestsForReviewResponse
-	102, // 294: NuzurProduct.GetUserProjectVersionData:output_type -> GetUserProjectVersionDataResponse
-	104, // 295: NuzurProduct.SaveUserProjectVersionData:output_type -> SaveUserProjectVersionDataResponse
-	217, // 296: NuzurProduct.GetObjectStoreWithSecret:output_type -> nem.ObjectStore
-	217, // 297: NuzurProduct.CreateObjectStoreSecret:output_type -> nem.ObjectStore
-	217, // 298: NuzurProduct.UpdateObjectStoreSecret:output_type -> nem.ObjectStore
-	217, // 299: NuzurProduct.DeleteObjectStoreSecret:output_type -> nem.ObjectStore
-	110, // 300: NuzurProduct.GenerateSQLForCR:output_type -> GenerateSQLForCRResponse
-	113, // 301: NuzurProduct.ReviewDataChange:output_type -> ReviewDataChangeResponse
-	219, // 302: NuzurProduct.GetMembership:output_type -> nem.Membership
-	219, // 303: NuzurProduct.CreateMembership:output_type -> nem.Membership
-	219, // 304: NuzurProduct.UpdateMembership:output_type -> nem.Membership
-	219, // 305: NuzurProduct.MembershipForProject:output_type -> nem.Membership
-	219, // 306: NuzurProduct.MembershipForTeam:output_type -> nem.Membership
-	120, // 307: NuzurProduct.CreateCheckoutSession:output_type -> CreateCheckoutSessionResponse
-	124, // 308: NuzurProduct.ListMembershipUsers:output_type -> ListMembershipUsersResponse
-	126, // 309: NuzurProduct.CancelMembership:output_type -> CancelMembershipResponse
-	128, // 310: NuzurProduct.ReactivateMembership:output_type -> ReactivateMembershipResponse
-	130, // 311: NuzurProduct.UserHasActiveStripeSubscription:output_type -> UserHasActiveStripeSubscriptionResponse
-	132, // 312: NuzurProduct.ListMembershipUserProjects:output_type -> ListMembershipUserProjectsResponse
-	134, // 313: NuzurProduct.RemoveMembershipUser:output_type -> RemoveMembershipUserResponse
-	137, // 314: NuzurProduct.ListMembershipsForUser:output_type -> ListMembershipsForUserResponse
-	122, // 315: NuzurProduct.ChangeMembershipPlan:output_type -> ChangeMembershipPlanResponse
-	139, // 316: NuzurProduct.SendPrioritySupportEmail:output_type -> PrioritySupportEmailResponse
-	141, // 317: NuzurProduct.HandleWebhook:output_type -> HandleWebhookResponse
-	143, // 318: NuzurProduct.IsProActiveForProject:output_type -> IsProActiveForProjectResponse
-	145, // 319: NuzurProduct.GetMembershipTierForProject:output_type -> GetMembershipTierForProjectResponse
-	147, // 320: NuzurProduct.EvaluateUserPrompt:output_type -> EvaluateUserPromptResponse
-	149, // 321: NuzurProduct.HandleUserPrompt:output_type -> HandleUserPromptResponse
-	151, // 322: NuzurProduct.GetUserPromptJob:output_type -> GetUserPromptJobResponse
-	153, // 323: NuzurProduct.HandleFollowupUserPrompt:output_type -> HandleFollowupUserPromptResponse
-	155, // 324: NuzurProduct.FinalizeUserPrompt:output_type -> FinalizeUserPromptResponse
-	157, // 325: NuzurProduct.ListAIUsageForUser:output_type -> ListAIUsageForUserResponse
-	159, // 326: NuzurProduct.GetAIUsageForUserInPeriod:output_type -> GetAIUsageForUserInPeriodResponse
-	161, // 327: NuzurProduct.RegisterLocalAgent:output_type -> RegisterLocalAgentResponse
-	163, // 328: NuzurProduct.RevokeLocalAgent:output_type -> RevokeLocalAgentResponse
-	165, // 329: NuzurProduct.ListLocalAgents:output_type -> ListLocalAgentsResponse
-	167, // 330: NuzurProduct.UpdateLocalAgentConnections:output_type -> UpdateLocalAgentConnectionsResponse
-	169, // 331: NuzurProduct.GetLocalAgentConnections:output_type -> GetLocalAgentConnectionsResponse
-	177, // 332: NuzurProduct.IssueProvisioningToken:output_type -> IssueProvisioningTokenResponse
-	179, // 333: NuzurProduct.ExchangeProvisioningToken:output_type -> ExchangeProvisioningTokenResponse
-	171, // 334: NuzurProduct.UpsertDeployment:output_type -> UpsertDeploymentResponse
-	173, // 335: NuzurProduct.ListDeployments:output_type -> ListDeploymentsResponse
-	175, // 336: NuzurProduct.MarkDeploymentDestroyed:output_type -> MarkDeploymentDestroyedResponse
-	183, // 337: NuzurProduct.CreateAutomation:output_type -> CreateAutomationResponse
-	185, // 338: NuzurProduct.RotateAutomationSecret:output_type -> RotateAutomationSecretResponse
-	225, // 339: NuzurProduct.UpdateAutomation:output_type -> nem.Automation
-	188, // 340: NuzurProduct.DeleteAutomation:output_type -> DeleteAutomationResponse
-	225, // 341: NuzurProduct.GetAutomation:output_type -> nem.Automation
-	191, // 342: NuzurProduct.ListAutomationsForProject:output_type -> ListAutomationsForProjectResponse
-	193, // 343: NuzurProduct.TestAutomation:output_type -> TestAutomationResponse
-	195, // 344: NuzurProduct.ListAutomationEvents:output_type -> ListAutomationEventsResponse
-	227, // 345: NuzurProduct.GetAutomationEvent:output_type -> nem.AutomationEvent
-	227, // 346: NuzurProduct.RetryAutomationEvent:output_type -> nem.AutomationEvent
-	199, // 347: NuzurProduct.MarkChangeRequestApplied:output_type -> MarkChangeRequestAppliedResponse
-	219, // [219:348] is the sub-list for method output_type
-	90,  // [90:219] is the sub-list for method input_type
-	90,  // [90:90] is the sub-list for extension type_name
-	90,  // [90:90] is the sub-list for extension extendee
-	0,   // [0:90] is the sub-list for field type_name
+	224, // 76: ListAIUsageForUserResponse.usages:type_name -> nem.AiUsage
+	225, // 77: ListLocalAgentsResponse.local_agents:type_name -> nem.LocalAgent
+	226, // 78: UpdateLocalAgentConnectionsRequest.connections:type_name -> nem.LocalAgentConnection
+	226, // 79: GetLocalAgentConnectionsResponse.connections:type_name -> nem.LocalAgentConnection
+	227, // 80: UpsertDeploymentRequest.deployment:type_name -> nem.Deployment
+	228, // 81: UpsertDeploymentRequest.revision:type_name -> nem.DeploymentRevision
+	227, // 82: UpsertDeploymentResponse.deployment:type_name -> nem.Deployment
+	228, // 83: UpsertDeploymentResponse.active_revision:type_name -> nem.DeploymentRevision
+	227, // 84: DeploymentWithRevision.deployment:type_name -> nem.Deployment
+	228, // 85: DeploymentWithRevision.active_revision:type_name -> nem.DeploymentRevision
+	172, // 86: ListDeploymentsResponse.deployments:type_name -> DeploymentWithRevision
+	228, // 87: ListDeploymentRevisionsResponse.revisions:type_name -> nem.DeploymentRevision
+	229, // 88: CreateAutomationRequest.automation:type_name -> nem.Automation
+	229, // 89: CreateAutomationResponse.automation:type_name -> nem.Automation
+	229, // 90: UpdateAutomationRequest.automation:type_name -> nem.Automation
+	229, // 91: ListAutomationsForProjectResponse.automations:type_name -> nem.Automation
+	230, // 92: ListAutomationEventsRequest.status:type_name -> nem.AutomationEventStatus
+	231, // 93: ListAutomationEventsResponse.automation_events:type_name -> nem.AutomationEvent
+	219, // 94: MarkChangeRequestAppliedResponse.change_request:type_name -> nem.ChangeRequest
+	2,   // 95: NuzurProduct.GetUser:input_type -> GetUserRequest
+	3,   // 96: NuzurProduct.GetTokenUser:input_type -> GetTokenUserRequest
+	4,   // 97: NuzurProduct.GetUserByEmail:input_type -> GetUserByEmailRequest
+	5,   // 98: NuzurProduct.GetTokenUserRoleForProject:input_type -> GetUserRoleForProjectRequest
+	7,   // 99: NuzurProduct.GetTokenUserRoleForTeam:input_type -> GetUserRoleForTeamRequest
+	9,   // 100: NuzurProduct.UpdateTokenUser:input_type -> UpdateUserRequest
+	10,  // 101: NuzurProduct.ListUsersForTeam:input_type -> ListUsersForTeamRequest
+	12,  // 102: NuzurProduct.ListUsersForProject:input_type -> ListUsersForProjectRequest
+	14,  // 103: NuzurProduct.AddUserToProject:input_type -> AddUserToProjectRequest
+	15,  // 104: NuzurProduct.UpdateUserProject:input_type -> UpdateUserProjectRequest
+	16,  // 105: NuzurProduct.RemoveUserFromProject:input_type -> RemoveUserFromProjectRequest
+	17,  // 106: NuzurProduct.AddUserToTeam:input_type -> AddUserToTeamRequest
+	18,  // 107: NuzurProduct.UpdateUserTeam:input_type -> UpdateUserTeamRequest
+	19,  // 108: NuzurProduct.RemoveUserFromTeam:input_type -> RemoveUserFromTeamRequest
+	20,  // 109: NuzurProduct.ListTeamsForUser:input_type -> ListTeamsForUserRequest
+	22,  // 110: NuzurProduct.ListTeamsForAdminUser:input_type -> ListTeamsForAdminUserRequest
+	24,  // 111: NuzurProduct.GetTeamForUser:input_type -> GetTeamForUserRequest
+	25,  // 112: NuzurProduct.CreateTeam:input_type -> CreateTeamRequest
+	26,  // 113: NuzurProduct.UpdateTeam:input_type -> UpdateTeamRequest
+	27,  // 114: NuzurProduct.GetConnectionWithSecret:input_type -> GetConnectionWithSecretRequest
+	28,  // 115: NuzurProduct.CreateConnectionSecret:input_type -> CreateConnectionSecretRequest
+	29,  // 116: NuzurProduct.UpdateConnectionSecret:input_type -> UpdateConnectionSecretRequest
+	30,  // 117: NuzurProduct.DeleteConnectionSecret:input_type -> DeleteConnectionSecretRequest
+	31,  // 118: NuzurProduct.ListProjectsForUser:input_type -> ListProjectsForUserRequest
+	33,  // 119: NuzurProduct.GetProjectForUser:input_type -> GetProjectForUserRequest
+	34,  // 120: NuzurProduct.CreateProject:input_type -> CreateProjectRequest
+	35,  // 121: NuzurProduct.UpdateProject:input_type -> UpdateProjectRequest
+	36,  // 122: NuzurProduct.GetProjectName:input_type -> GetProjectNameRequest
+	38,  // 123: NuzurProduct.ListProjectVersions:input_type -> ListProjectVersionsRequest
+	40,  // 124: NuzurProduct.ListProjectVersionsForUser:input_type -> ListProjectVersionsForUserRequest
+	40,  // 125: NuzurProduct.ListProjectVersionsForUserCached:input_type -> ListProjectVersionsForUserRequest
+	42,  // 126: NuzurProduct.GetProjectVersionForUser:input_type -> GetProjectVersionForUserRequest
+	42,  // 127: NuzurProduct.GetProjectVersionForUserCached:input_type -> GetProjectVersionForUserRequest
+	42,  // 128: NuzurProduct.GetProjectVersionLeanForUser:input_type -> GetProjectVersionForUserRequest
+	43,  // 129: NuzurProduct.GetLatestProjectVersion:input_type -> GetLatestProjectVersionRequest
+	44,  // 130: NuzurProduct.GetLatestProjectVersionForUser:input_type -> GetLatestProjectVersionForUserRequest
+	44,  // 131: NuzurProduct.GetLatestProjectVersionLeanForUser:input_type -> GetLatestProjectVersionForUserRequest
+	45,  // 132: NuzurProduct.GetLatestProjectVersionUUIDForUser:input_type -> GetLatestProjectVersionUUIDForUserRequest
+	47,  // 133: NuzurProduct.GetProjectVersionVersion:input_type -> GetProjectVersionVersionRequest
+	49,  // 134: NuzurProduct.GetProjectVersionIdentifier:input_type -> GetProjectVersionIdentifierRequest
+	51,  // 135: NuzurProduct.CreateProjectVersion:input_type -> CreateProjectVersionRequest
+	52,  // 136: NuzurProduct.CreateProjectVersionFromJSON:input_type -> CreateProjectVersionFromJSONRequest
+	54,  // 137: NuzurProduct.CreateDraftProjectVersionForExistingProject:input_type -> CreateDraftProjectVersionForExistingProjectRequest
+	53,  // 138: NuzurProduct.UpdateProjectVersion:input_type -> UpdateProjectVersionRequest
+	55,  // 139: NuzurProduct.DiscardDraftProjectVersion:input_type -> DiscardDraftProjectVersionRequest
+	56,  // 140: NuzurProduct.SendProjectVersionForReview:input_type -> SendProjectVersionForReviewRequest
+	57,  // 141: NuzurProduct.WithdrawFromReviewProjectVersion:input_type -> WithdrawFromReviewProjectVersionRequest
+	58,  // 142: NuzurProduct.ReviewProjectVersion:input_type -> ReviewProjectVersionRequest
+	59,  // 143: NuzurProduct.UploadProjectVersionSnapshot:input_type -> UploadProjectVersionSnapshotRequest
+	61,  // 144: NuzurProduct.GetSignedFileURL:input_type -> GetSignedFileURLRequest
+	63,  // 145: NuzurProduct.UploadExtensionExecutionFile:input_type -> UploadExtensionExecutionFileRequest
+	65,  // 146: NuzurProduct.GetExtensionExecutionFile:input_type -> GetExtensionExecutionFileRequest
+	67,  // 147: NuzurProduct.UploadExtensionIcon:input_type -> UploadExtensionIconRequest
+	77,  // 148: NuzurProduct.UploadUserAvatar:input_type -> UploadUserAvatarRequest
+	71,  // 149: NuzurProduct.UploadRecordFieldFile:input_type -> UploadRecordFieldFileRequest
+	73,  // 150: NuzurProduct.GetRecordFieldSignedFileURL:input_type -> GetRecordFieldSignedFileURLRequest
+	75,  // 151: NuzurProduct.GetRecordFileContent:input_type -> GetRecordFileContentRequest
+	79,  // 152: NuzurProduct.ListExtensions:input_type -> ListExtensionsRequest
+	81,  // 153: NuzurProduct.GetExtension:input_type -> GetExtensionRequest
+	82,  // 154: NuzurProduct.CreateExtension:input_type -> CreateExtensionRequest
+	83,  // 155: NuzurProduct.UpdateExtension:input_type -> UpdateExtensionRequest
+	84,  // 156: NuzurProduct.ListExtensionVersions:input_type -> ListExtensionVersionsRequest
+	86,  // 157: NuzurProduct.GetExtensionVersion:input_type -> GetExtensionVersionRequest
+	87,  // 158: NuzurProduct.CreateExtensionVersion:input_type -> CreateExtensionVersionRequest
+	88,  // 159: NuzurProduct.UpdateExtensionVersion:input_type -> UpdateExtensionVersionRequest
+	89,  // 160: NuzurProduct.ListExtensionExecutions:input_type -> ListExtensionExecutionsRequest
+	91,  // 161: NuzurProduct.GetExtensionExecution:input_type -> GetExtensionExecutionRequest
+	92,  // 162: NuzurProduct.CreateExtensionExecution:input_type -> CreateExtensionExecutionRequest
+	93,  // 163: NuzurProduct.UpdateExtensionExecution:input_type -> UpdateExtensionExecutionRequest
+	183, // 164: NuzurProduct.CheckExtensionExecutionLimit:input_type -> CheckExtensionExecutionLimitRequest
+	94,  // 165: NuzurProduct.ListUserChangeRequests:input_type -> ListUserChangeRequestsRequest
+	96,  // 166: NuzurProduct.GetChangeRequest:input_type -> GetChangeRequestRequest
+	97,  // 167: NuzurProduct.CreateChangeRequest:input_type -> CreateChangeRequestRequest
+	98,  // 168: NuzurProduct.UpdateChangeRequest:input_type -> UpdateChangeRequestRequest
+	99,  // 169: NuzurProduct.ListChangeRequestsForReview:input_type -> ListChangeRequestsForReviewRequest
+	101, // 170: NuzurProduct.GetUserProjectVersionData:input_type -> GetUserProjectVersionDataRequest
+	103, // 171: NuzurProduct.SaveUserProjectVersionData:input_type -> SaveUserProjectVersionDataRequest
+	105, // 172: NuzurProduct.GetObjectStoreWithSecret:input_type -> GetObjectStoreWithSecretRequest
+	106, // 173: NuzurProduct.CreateObjectStoreSecret:input_type -> CreateObjectStoreSecretRequest
+	107, // 174: NuzurProduct.UpdateObjectStoreSecret:input_type -> UpdateObjectStoreSecretRequest
+	108, // 175: NuzurProduct.DeleteObjectStoreSecret:input_type -> DeleteObjectStoreSecretRequest
+	109, // 176: NuzurProduct.GenerateSQLForCR:input_type -> GenerateSQLForCRRequest
+	112, // 177: NuzurProduct.ReviewDataChange:input_type -> ReviewDataChangeRequest
+	114, // 178: NuzurProduct.GetMembership:input_type -> GetMembershipRequest
+	115, // 179: NuzurProduct.CreateMembership:input_type -> CreateMembershipRequest
+	116, // 180: NuzurProduct.UpdateMembership:input_type -> UpdateMembershipRequest
+	117, // 181: NuzurProduct.MembershipForProject:input_type -> MembershipForProjectRequest
+	118, // 182: NuzurProduct.MembershipForTeam:input_type -> MembershipForTeamRequest
+	119, // 183: NuzurProduct.CreateCheckoutSession:input_type -> CreateCheckoutSessionRequest
+	123, // 184: NuzurProduct.ListMembershipUsers:input_type -> ListMembershipUsersRequest
+	125, // 185: NuzurProduct.CancelMembership:input_type -> CancelMembershipRequest
+	127, // 186: NuzurProduct.ReactivateMembership:input_type -> ReactivateMembershipRequest
+	129, // 187: NuzurProduct.UserHasActiveStripeSubscription:input_type -> UserHasActiveStripeSubscriptionRequest
+	131, // 188: NuzurProduct.ListMembershipUserProjects:input_type -> ListMembershipUserProjectsRequest
+	133, // 189: NuzurProduct.RemoveMembershipUser:input_type -> RemoveMembershipUserRequest
+	135, // 190: NuzurProduct.ListMembershipsForUser:input_type -> ListMembershipsForUserRequest
+	121, // 191: NuzurProduct.ChangeMembershipPlan:input_type -> ChangeMembershipPlanRequest
+	138, // 192: NuzurProduct.SendPrioritySupportEmail:input_type -> PrioritySupportEmailRequest
+	140, // 193: NuzurProduct.HandleWebhook:input_type -> HandleWebhookRequest
+	142, // 194: NuzurProduct.IsProActiveForProject:input_type -> IsProActiveForProjectRequest
+	144, // 195: NuzurProduct.GetMembershipTierForProject:input_type -> GetMembershipTierForProjectRequest
+	146, // 196: NuzurProduct.EvaluateUserPrompt:input_type -> EvaluateUserPromptRequest
+	148, // 197: NuzurProduct.HandleUserPrompt:input_type -> HandleUserPromptRequest
+	150, // 198: NuzurProduct.GetUserPromptJob:input_type -> GetUserPromptJobRequest
+	152, // 199: NuzurProduct.HandleFollowupUserPrompt:input_type -> HandleFollowupUserPromptRequest
+	154, // 200: NuzurProduct.FinalizeUserPrompt:input_type -> FinalizeUserPromptRequest
+	156, // 201: NuzurProduct.ListAIUsageForUser:input_type -> ListAIUsageForUserRequest
+	158, // 202: NuzurProduct.GetAIUsageForUserInPeriod:input_type -> GetAIUsageForUserInPeriodRequest
+	160, // 203: NuzurProduct.RegisterLocalAgent:input_type -> RegisterLocalAgentRequest
+	162, // 204: NuzurProduct.RevokeLocalAgent:input_type -> RevokeLocalAgentRequest
+	164, // 205: NuzurProduct.ListLocalAgents:input_type -> ListLocalAgentsRequest
+	166, // 206: NuzurProduct.UpdateLocalAgentConnections:input_type -> UpdateLocalAgentConnectionsRequest
+	168, // 207: NuzurProduct.GetLocalAgentConnections:input_type -> GetLocalAgentConnectionsRequest
+	179, // 208: NuzurProduct.IssueProvisioningToken:input_type -> IssueProvisioningTokenRequest
+	181, // 209: NuzurProduct.ExchangeProvisioningToken:input_type -> ExchangeProvisioningTokenRequest
+	170, // 210: NuzurProduct.UpsertDeployment:input_type -> UpsertDeploymentRequest
+	173, // 211: NuzurProduct.ListDeployments:input_type -> ListDeploymentsRequest
+	175, // 212: NuzurProduct.ListDeploymentRevisions:input_type -> ListDeploymentRevisionsRequest
+	177, // 213: NuzurProduct.MarkDeploymentDestroyed:input_type -> MarkDeploymentDestroyedRequest
+	185, // 214: NuzurProduct.CreateAutomation:input_type -> CreateAutomationRequest
+	187, // 215: NuzurProduct.RotateAutomationSecret:input_type -> RotateAutomationSecretRequest
+	189, // 216: NuzurProduct.UpdateAutomation:input_type -> UpdateAutomationRequest
+	190, // 217: NuzurProduct.DeleteAutomation:input_type -> DeleteAutomationRequest
+	192, // 218: NuzurProduct.GetAutomation:input_type -> GetAutomationRequest
+	193, // 219: NuzurProduct.ListAutomationsForProject:input_type -> ListAutomationsForProjectRequest
+	195, // 220: NuzurProduct.TestAutomation:input_type -> TestAutomationRequest
+	197, // 221: NuzurProduct.ListAutomationEvents:input_type -> ListAutomationEventsRequest
+	199, // 222: NuzurProduct.GetAutomationEvent:input_type -> GetAutomationEventRequest
+	200, // 223: NuzurProduct.RetryAutomationEvent:input_type -> RetryAutomationEventRequest
+	201, // 224: NuzurProduct.MarkChangeRequestApplied:input_type -> MarkChangeRequestAppliedRequest
+	205, // 225: NuzurProduct.GetUser:output_type -> nem.User
+	205, // 226: NuzurProduct.GetTokenUser:output_type -> nem.User
+	205, // 227: NuzurProduct.GetUserByEmail:output_type -> nem.User
+	6,   // 228: NuzurProduct.GetTokenUserRoleForProject:output_type -> GetUserRoleForProjectResponse
+	8,   // 229: NuzurProduct.GetTokenUserRoleForTeam:output_type -> GetUserRoleForTeamResponse
+	205, // 230: NuzurProduct.UpdateTokenUser:output_type -> nem.User
+	11,  // 231: NuzurProduct.ListUsersForTeam:output_type -> ListUsersForTeamResponse
+	13,  // 232: NuzurProduct.ListUsersForProject:output_type -> ListUsersForProjectResponse
+	207, // 233: NuzurProduct.AddUserToProject:output_type -> nem.UserProject
+	207, // 234: NuzurProduct.UpdateUserProject:output_type -> nem.UserProject
+	207, // 235: NuzurProduct.RemoveUserFromProject:output_type -> nem.UserProject
+	206, // 236: NuzurProduct.AddUserToTeam:output_type -> nem.UserTeam
+	206, // 237: NuzurProduct.UpdateUserTeam:output_type -> nem.UserTeam
+	206, // 238: NuzurProduct.RemoveUserFromTeam:output_type -> nem.UserTeam
+	21,  // 239: NuzurProduct.ListTeamsForUser:output_type -> ListTeamsForUserResponse
+	23,  // 240: NuzurProduct.ListTeamsForAdminUser:output_type -> ListTeamsForAdminUserResponse
+	208, // 241: NuzurProduct.GetTeamForUser:output_type -> nem.Team
+	208, // 242: NuzurProduct.CreateTeam:output_type -> nem.Team
+	208, // 243: NuzurProduct.UpdateTeam:output_type -> nem.Team
+	210, // 244: NuzurProduct.GetConnectionWithSecret:output_type -> nem.Connection
+	210, // 245: NuzurProduct.CreateConnectionSecret:output_type -> nem.Connection
+	210, // 246: NuzurProduct.UpdateConnectionSecret:output_type -> nem.Connection
+	210, // 247: NuzurProduct.DeleteConnectionSecret:output_type -> nem.Connection
+	32,  // 248: NuzurProduct.ListProjectsForUser:output_type -> ListProjectsForUserResponse
+	211, // 249: NuzurProduct.GetProjectForUser:output_type -> nem.Project
+	211, // 250: NuzurProduct.CreateProject:output_type -> nem.Project
+	211, // 251: NuzurProduct.UpdateProject:output_type -> nem.Project
+	37,  // 252: NuzurProduct.GetProjectName:output_type -> GetProjectNameResponse
+	39,  // 253: NuzurProduct.ListProjectVersions:output_type -> ListProjectVersionsResponse
+	41,  // 254: NuzurProduct.ListProjectVersionsForUser:output_type -> ListProjectVersionsForUserResponse
+	41,  // 255: NuzurProduct.ListProjectVersionsForUserCached:output_type -> ListProjectVersionsForUserResponse
+	212, // 256: NuzurProduct.GetProjectVersionForUser:output_type -> nem.ProjectVersion
+	212, // 257: NuzurProduct.GetProjectVersionForUserCached:output_type -> nem.ProjectVersion
+	212, // 258: NuzurProduct.GetProjectVersionLeanForUser:output_type -> nem.ProjectVersion
+	212, // 259: NuzurProduct.GetLatestProjectVersion:output_type -> nem.ProjectVersion
+	212, // 260: NuzurProduct.GetLatestProjectVersionForUser:output_type -> nem.ProjectVersion
+	212, // 261: NuzurProduct.GetLatestProjectVersionLeanForUser:output_type -> nem.ProjectVersion
+	46,  // 262: NuzurProduct.GetLatestProjectVersionUUIDForUser:output_type -> GetLatestProjectVersionUUIDForUserResponse
+	48,  // 263: NuzurProduct.GetProjectVersionVersion:output_type -> GetProjectVersionVersionResponse
+	50,  // 264: NuzurProduct.GetProjectVersionIdentifier:output_type -> GetProjectVersionIdentifierResponse
+	212, // 265: NuzurProduct.CreateProjectVersion:output_type -> nem.ProjectVersion
+	212, // 266: NuzurProduct.CreateProjectVersionFromJSON:output_type -> nem.ProjectVersion
+	212, // 267: NuzurProduct.CreateDraftProjectVersionForExistingProject:output_type -> nem.ProjectVersion
+	212, // 268: NuzurProduct.UpdateProjectVersion:output_type -> nem.ProjectVersion
+	212, // 269: NuzurProduct.DiscardDraftProjectVersion:output_type -> nem.ProjectVersion
+	212, // 270: NuzurProduct.SendProjectVersionForReview:output_type -> nem.ProjectVersion
+	212, // 271: NuzurProduct.WithdrawFromReviewProjectVersion:output_type -> nem.ProjectVersion
+	212, // 272: NuzurProduct.ReviewProjectVersion:output_type -> nem.ProjectVersion
+	60,  // 273: NuzurProduct.UploadProjectVersionSnapshot:output_type -> UploadProjectVersionSnapshotResponse
+	62,  // 274: NuzurProduct.GetSignedFileURL:output_type -> GetSignedFileURLResponse
+	64,  // 275: NuzurProduct.UploadExtensionExecutionFile:output_type -> UploadExtensionExecutionFileResponse
+	66,  // 276: NuzurProduct.GetExtensionExecutionFile:output_type -> GetExtensionExecutionFileResponse
+	68,  // 277: NuzurProduct.UploadExtensionIcon:output_type -> UploadExtensionIconResponse
+	78,  // 278: NuzurProduct.UploadUserAvatar:output_type -> UploadUserAvatarResponse
+	72,  // 279: NuzurProduct.UploadRecordFieldFile:output_type -> UploadRecordFieldFileResponse
+	74,  // 280: NuzurProduct.GetRecordFieldSignedFileURL:output_type -> GetRecordFieldSignedFileURLResponse
+	76,  // 281: NuzurProduct.GetRecordFileContent:output_type -> GetRecordFileContentResponse
+	80,  // 282: NuzurProduct.ListExtensions:output_type -> ListExtensionsResponse
+	214, // 283: NuzurProduct.GetExtension:output_type -> nem.Extension
+	214, // 284: NuzurProduct.CreateExtension:output_type -> nem.Extension
+	214, // 285: NuzurProduct.UpdateExtension:output_type -> nem.Extension
+	85,  // 286: NuzurProduct.ListExtensionVersions:output_type -> ListExtensionVersionsResponse
+	215, // 287: NuzurProduct.GetExtensionVersion:output_type -> nem.ExtensionVersion
+	215, // 288: NuzurProduct.CreateExtensionVersion:output_type -> nem.ExtensionVersion
+	215, // 289: NuzurProduct.UpdateExtensionVersion:output_type -> nem.ExtensionVersion
+	90,  // 290: NuzurProduct.ListExtensionExecutions:output_type -> ListExtensionExecutionsResponse
+	216, // 291: NuzurProduct.GetExtensionExecution:output_type -> nem.ExtensionExecution
+	216, // 292: NuzurProduct.CreateExtensionExecution:output_type -> nem.ExtensionExecution
+	216, // 293: NuzurProduct.UpdateExtensionExecution:output_type -> nem.ExtensionExecution
+	184, // 294: NuzurProduct.CheckExtensionExecutionLimit:output_type -> CheckExtensionExecutionLimitResponse
+	95,  // 295: NuzurProduct.ListUserChangeRequests:output_type -> ListUserChangeRequestsResponse
+	219, // 296: NuzurProduct.GetChangeRequest:output_type -> nem.ChangeRequest
+	219, // 297: NuzurProduct.CreateChangeRequest:output_type -> nem.ChangeRequest
+	219, // 298: NuzurProduct.UpdateChangeRequest:output_type -> nem.ChangeRequest
+	100, // 299: NuzurProduct.ListChangeRequestsForReview:output_type -> ListChangeRequestsForReviewResponse
+	102, // 300: NuzurProduct.GetUserProjectVersionData:output_type -> GetUserProjectVersionDataResponse
+	104, // 301: NuzurProduct.SaveUserProjectVersionData:output_type -> SaveUserProjectVersionDataResponse
+	220, // 302: NuzurProduct.GetObjectStoreWithSecret:output_type -> nem.ObjectStore
+	220, // 303: NuzurProduct.CreateObjectStoreSecret:output_type -> nem.ObjectStore
+	220, // 304: NuzurProduct.UpdateObjectStoreSecret:output_type -> nem.ObjectStore
+	220, // 305: NuzurProduct.DeleteObjectStoreSecret:output_type -> nem.ObjectStore
+	110, // 306: NuzurProduct.GenerateSQLForCR:output_type -> GenerateSQLForCRResponse
+	113, // 307: NuzurProduct.ReviewDataChange:output_type -> ReviewDataChangeResponse
+	222, // 308: NuzurProduct.GetMembership:output_type -> nem.Membership
+	222, // 309: NuzurProduct.CreateMembership:output_type -> nem.Membership
+	222, // 310: NuzurProduct.UpdateMembership:output_type -> nem.Membership
+	222, // 311: NuzurProduct.MembershipForProject:output_type -> nem.Membership
+	222, // 312: NuzurProduct.MembershipForTeam:output_type -> nem.Membership
+	120, // 313: NuzurProduct.CreateCheckoutSession:output_type -> CreateCheckoutSessionResponse
+	124, // 314: NuzurProduct.ListMembershipUsers:output_type -> ListMembershipUsersResponse
+	126, // 315: NuzurProduct.CancelMembership:output_type -> CancelMembershipResponse
+	128, // 316: NuzurProduct.ReactivateMembership:output_type -> ReactivateMembershipResponse
+	130, // 317: NuzurProduct.UserHasActiveStripeSubscription:output_type -> UserHasActiveStripeSubscriptionResponse
+	132, // 318: NuzurProduct.ListMembershipUserProjects:output_type -> ListMembershipUserProjectsResponse
+	134, // 319: NuzurProduct.RemoveMembershipUser:output_type -> RemoveMembershipUserResponse
+	137, // 320: NuzurProduct.ListMembershipsForUser:output_type -> ListMembershipsForUserResponse
+	122, // 321: NuzurProduct.ChangeMembershipPlan:output_type -> ChangeMembershipPlanResponse
+	139, // 322: NuzurProduct.SendPrioritySupportEmail:output_type -> PrioritySupportEmailResponse
+	141, // 323: NuzurProduct.HandleWebhook:output_type -> HandleWebhookResponse
+	143, // 324: NuzurProduct.IsProActiveForProject:output_type -> IsProActiveForProjectResponse
+	145, // 325: NuzurProduct.GetMembershipTierForProject:output_type -> GetMembershipTierForProjectResponse
+	147, // 326: NuzurProduct.EvaluateUserPrompt:output_type -> EvaluateUserPromptResponse
+	149, // 327: NuzurProduct.HandleUserPrompt:output_type -> HandleUserPromptResponse
+	151, // 328: NuzurProduct.GetUserPromptJob:output_type -> GetUserPromptJobResponse
+	153, // 329: NuzurProduct.HandleFollowupUserPrompt:output_type -> HandleFollowupUserPromptResponse
+	155, // 330: NuzurProduct.FinalizeUserPrompt:output_type -> FinalizeUserPromptResponse
+	157, // 331: NuzurProduct.ListAIUsageForUser:output_type -> ListAIUsageForUserResponse
+	159, // 332: NuzurProduct.GetAIUsageForUserInPeriod:output_type -> GetAIUsageForUserInPeriodResponse
+	161, // 333: NuzurProduct.RegisterLocalAgent:output_type -> RegisterLocalAgentResponse
+	163, // 334: NuzurProduct.RevokeLocalAgent:output_type -> RevokeLocalAgentResponse
+	165, // 335: NuzurProduct.ListLocalAgents:output_type -> ListLocalAgentsResponse
+	167, // 336: NuzurProduct.UpdateLocalAgentConnections:output_type -> UpdateLocalAgentConnectionsResponse
+	169, // 337: NuzurProduct.GetLocalAgentConnections:output_type -> GetLocalAgentConnectionsResponse
+	180, // 338: NuzurProduct.IssueProvisioningToken:output_type -> IssueProvisioningTokenResponse
+	182, // 339: NuzurProduct.ExchangeProvisioningToken:output_type -> ExchangeProvisioningTokenResponse
+	171, // 340: NuzurProduct.UpsertDeployment:output_type -> UpsertDeploymentResponse
+	174, // 341: NuzurProduct.ListDeployments:output_type -> ListDeploymentsResponse
+	176, // 342: NuzurProduct.ListDeploymentRevisions:output_type -> ListDeploymentRevisionsResponse
+	178, // 343: NuzurProduct.MarkDeploymentDestroyed:output_type -> MarkDeploymentDestroyedResponse
+	186, // 344: NuzurProduct.CreateAutomation:output_type -> CreateAutomationResponse
+	188, // 345: NuzurProduct.RotateAutomationSecret:output_type -> RotateAutomationSecretResponse
+	229, // 346: NuzurProduct.UpdateAutomation:output_type -> nem.Automation
+	191, // 347: NuzurProduct.DeleteAutomation:output_type -> DeleteAutomationResponse
+	229, // 348: NuzurProduct.GetAutomation:output_type -> nem.Automation
+	194, // 349: NuzurProduct.ListAutomationsForProject:output_type -> ListAutomationsForProjectResponse
+	196, // 350: NuzurProduct.TestAutomation:output_type -> TestAutomationResponse
+	198, // 351: NuzurProduct.ListAutomationEvents:output_type -> ListAutomationEventsResponse
+	231, // 352: NuzurProduct.GetAutomationEvent:output_type -> nem.AutomationEvent
+	231, // 353: NuzurProduct.RetryAutomationEvent:output_type -> nem.AutomationEvent
+	202, // 354: NuzurProduct.MarkChangeRequestApplied:output_type -> MarkChangeRequestAppliedResponse
+	225, // [225:355] is the sub-list for method output_type
+	95,  // [95:225] is the sub-list for method input_type
+	95,  // [95:95] is the sub-list for extension type_name
+	95,  // [95:95] is the sub-list for extension extendee
+	0,   // [0:95] is the sub-list for field type_name
 }
 
 func init() { file_product_proto_init() }
@@ -11968,7 +12157,7 @@ func file_product_proto_init() {
 			GoPackagePath: reflect.TypeOf(x{}).PkgPath(),
 			RawDescriptor: unsafe.Slice(unsafe.StringData(file_product_proto_rawDesc), len(file_product_proto_rawDesc)),
 			NumEnums:      2,
-			NumMessages:   198,
+			NumMessages:   201,
 			NumExtensions: 0,
 			NumServices:   1,
 		},

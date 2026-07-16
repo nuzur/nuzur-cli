@@ -137,6 +137,7 @@ const (
 	NuzurProduct_ExchangeProvisioningToken_FullMethodName                   = "/NuzurProduct/ExchangeProvisioningToken"
 	NuzurProduct_UpsertDeployment_FullMethodName                            = "/NuzurProduct/UpsertDeployment"
 	NuzurProduct_ListDeployments_FullMethodName                             = "/NuzurProduct/ListDeployments"
+	NuzurProduct_ListDeploymentRevisions_FullMethodName                     = "/NuzurProduct/ListDeploymentRevisions"
 	NuzurProduct_MarkDeploymentDestroyed_FullMethodName                     = "/NuzurProduct/MarkDeploymentDestroyed"
 	NuzurProduct_CreateAutomation_FullMethodName                            = "/NuzurProduct/CreateAutomation"
 	NuzurProduct_RotateAutomationSecret_FullMethodName                      = "/NuzurProduct/RotateAutomationSecret"
@@ -301,6 +302,7 @@ type NuzurProductClient interface {
 	// destroyed on teardown; the web lists them (user-scoped) + pulls live health.
 	UpsertDeployment(ctx context.Context, in *UpsertDeploymentRequest, opts ...grpc.CallOption) (*UpsertDeploymentResponse, error)
 	ListDeployments(ctx context.Context, in *ListDeploymentsRequest, opts ...grpc.CallOption) (*ListDeploymentsResponse, error)
+	ListDeploymentRevisions(ctx context.Context, in *ListDeploymentRevisionsRequest, opts ...grpc.CallOption) (*ListDeploymentRevisionsResponse, error)
 	MarkDeploymentDestroyed(ctx context.Context, in *MarkDeploymentDestroyedRequest, opts ...grpc.CallOption) (*MarkDeploymentDestroyedResponse, error)
 	// automations
 	CreateAutomation(ctx context.Context, in *CreateAutomationRequest, opts ...grpc.CallOption) (*CreateAutomationResponse, error)
@@ -1494,6 +1496,16 @@ func (c *nuzurProductClient) ListDeployments(ctx context.Context, in *ListDeploy
 	return out, nil
 }
 
+func (c *nuzurProductClient) ListDeploymentRevisions(ctx context.Context, in *ListDeploymentRevisionsRequest, opts ...grpc.CallOption) (*ListDeploymentRevisionsResponse, error) {
+	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
+	out := new(ListDeploymentRevisionsResponse)
+	err := c.cc.Invoke(ctx, NuzurProduct_ListDeploymentRevisions_FullMethodName, in, out, cOpts...)
+	if err != nil {
+		return nil, err
+	}
+	return out, nil
+}
+
 func (c *nuzurProductClient) MarkDeploymentDestroyed(ctx context.Context, in *MarkDeploymentDestroyedRequest, opts ...grpc.CallOption) (*MarkDeploymentDestroyedResponse, error) {
 	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
 	out := new(MarkDeploymentDestroyedResponse)
@@ -1764,6 +1776,7 @@ type NuzurProductServer interface {
 	// destroyed on teardown; the web lists them (user-scoped) + pulls live health.
 	UpsertDeployment(context.Context, *UpsertDeploymentRequest) (*UpsertDeploymentResponse, error)
 	ListDeployments(context.Context, *ListDeploymentsRequest) (*ListDeploymentsResponse, error)
+	ListDeploymentRevisions(context.Context, *ListDeploymentRevisionsRequest) (*ListDeploymentRevisionsResponse, error)
 	MarkDeploymentDestroyed(context.Context, *MarkDeploymentDestroyedRequest) (*MarkDeploymentDestroyedResponse, error)
 	// automations
 	CreateAutomation(context.Context, *CreateAutomationRequest) (*CreateAutomationResponse, error)
@@ -2137,6 +2150,9 @@ func (UnimplementedNuzurProductServer) UpsertDeployment(context.Context, *Upsert
 }
 func (UnimplementedNuzurProductServer) ListDeployments(context.Context, *ListDeploymentsRequest) (*ListDeploymentsResponse, error) {
 	return nil, status.Error(codes.Unimplemented, "method ListDeployments not implemented")
+}
+func (UnimplementedNuzurProductServer) ListDeploymentRevisions(context.Context, *ListDeploymentRevisionsRequest) (*ListDeploymentRevisionsResponse, error) {
+	return nil, status.Error(codes.Unimplemented, "method ListDeploymentRevisions not implemented")
 }
 func (UnimplementedNuzurProductServer) MarkDeploymentDestroyed(context.Context, *MarkDeploymentDestroyedRequest) (*MarkDeploymentDestroyedResponse, error) {
 	return nil, status.Error(codes.Unimplemented, "method MarkDeploymentDestroyed not implemented")
@@ -4301,6 +4317,24 @@ func _NuzurProduct_ListDeployments_Handler(srv interface{}, ctx context.Context,
 	return interceptor(ctx, in, info, handler)
 }
 
+func _NuzurProduct_ListDeploymentRevisions_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
+	in := new(ListDeploymentRevisionsRequest)
+	if err := dec(in); err != nil {
+		return nil, err
+	}
+	if interceptor == nil {
+		return srv.(NuzurProductServer).ListDeploymentRevisions(ctx, in)
+	}
+	info := &grpc.UnaryServerInfo{
+		Server:     srv,
+		FullMethod: NuzurProduct_ListDeploymentRevisions_FullMethodName,
+	}
+	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
+		return srv.(NuzurProductServer).ListDeploymentRevisions(ctx, req.(*ListDeploymentRevisionsRequest))
+	}
+	return interceptor(ctx, in, info, handler)
+}
+
 func _NuzurProduct_MarkDeploymentDestroyed_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
 	in := new(MarkDeploymentDestroyedRequest)
 	if err := dec(in); err != nil {
@@ -4991,6 +5025,10 @@ var NuzurProduct_ServiceDesc = grpc.ServiceDesc{
 		{
 			MethodName: "ListDeployments",
 			Handler:    _NuzurProduct_ListDeployments_Handler,
+		},
+		{
+			MethodName: "ListDeploymentRevisions",
+			Handler:    _NuzurProduct_ListDeploymentRevisions_Handler,
 		},
 		{
 			MethodName: "MarkDeploymentDestroyed",

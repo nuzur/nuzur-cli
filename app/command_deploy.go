@@ -52,7 +52,9 @@ func (i *Implementation) DeployCommand() cli.Command {
 			cli.StringFlag{Name: "auth", Usage: "Auth middleware: disabled | jwt | keycloak (leave unset to use the project's last/provided config)"},
 			cli.BoolFlag{Name: "custom", Usage: "Generate the custom application layer (app package for custom endpoints)"},
 			cli.StringFlag{Name: "source-dir", Usage: "Directory for the app's source (the workspace deploy generates + builds from; you edit custom endpoints here). Default: ./nuzur-<identifier>. Re-deploys reuse it and preserve your edits."},
-			cli.StringFlag{Name: "config-file", Usage: "Path to a JSON go-code-gen config (else the last-used config for this project is reused)"},
+			cli.StringFlag{Name: "deploy-config", Usage: "Path to a JSON deploy spec describing the whole deploy (topology + a nested `codegen` block); use '-' to read from stdin. Explicit flags override values in the file. Build or generate one from nuzur web."},
+			cli.BoolFlag{Name: "print-config", Usage: "Print the effective deploy config (as JSON) resolved from flags + --deploy-config, then exit without deploying. Use it to snapshot an invocation into a reusable deploy-config file."},
+			cli.StringFlag{Name: "gen-config", Usage: "Path to a JSON go-code-gen config (overrides the deploy-config's `codegen` block; else the last-used config for this project is reused)"},
 			cli.StringFlag{Name: "cli-install-cmd", Usage: "Command to install the nuzur CLI on the box (must leave `nuzur` on PATH)"},
 			cli.StringFlag{Name: "schema-push-extension", Value: "sql-push-local", Usage: "Identifier of the SQL-push extension used to auto-apply the schema"},
 			cli.BoolFlag{Name: "sudo", Usage: "Run the bootstrap via sudo (auto-enabled for non-root SSH users; the box needs passwordless sudo)"},
@@ -66,7 +68,24 @@ func (i *Implementation) DeployCommand() cli.Command {
 }
 
 func (i *Implementation) runDeploy(c *cli.Context) error {
-	provider := deploy.Provider(strings.TrimSpace(c.String("provider")))
+	// Resolve the effective settings from the --deploy-config file merged with the
+	// CLI flags (explicit flags win). Everything below reads from `s`.
+	s, err := resolveDeploySettings(c)
+	if err != nil {
+		return err
+	}
+	// --print-config: emit the resolved deploy spec and exit without deploying, so
+	// a user can snapshot an invocation into a reusable deploy-config file.
+	if c.Bool("print-config") {
+		out, err := json.MarshalIndent(s.toDeployConfig(), "", "  ")
+		if err != nil {
+			return err
+		}
+		fmt.Println(string(out))
+		return nil
+	}
+
+	provider := deploy.Provider(strings.TrimSpace(s.Provider))
 	if provider == "" {
 		provider = deploy.ProviderSSH
 	}
@@ -74,21 +93,21 @@ func (i *Implementation) runDeploy(c *cli.Context) error {
 	if err != nil {
 		return err
 	}
-	if provider == deploy.ProviderSSH && strings.TrimSpace(c.String("host")) == "" {
+	if provider == deploy.ProviderSSH && strings.TrimSpace(s.Host) == "" {
 		return fmt.Errorf("--host is required for the ssh provider")
 	}
-	if provider != deploy.ProviderSSH && strings.TrimSpace(c.String("region")) == "" {
+	if provider != deploy.ProviderSSH && strings.TrimSpace(s.Region) == "" {
 		return fmt.Errorf("--region is required for the %s provider", provider)
 	}
 	ctx := context.Background()
-	dbOnly := c.Bool("db-only")
+	dbOnly := s.DBOnly
 
 	// --db-dsn / --connection: connect to an EXISTING database instead of
 	// self-hosting one. --db-dsn takes a raw DSN; --connection resolves the DSN
 	// server-side from a stored team connection (no plaintext secret on the CLI).
 	// Both feed the same external-DB path below.
-	dbDSN := strings.TrimSpace(c.String("db-dsn"))
-	connFlag := strings.TrimSpace(c.String("connection"))
+	dbDSN := strings.TrimSpace(s.DBDSN)
+	connFlag := strings.TrimSpace(s.Connection)
 	if connFlag != "" && dbDSN != "" {
 		return fmt.Errorf("--connection and --db-dsn are mutually exclusive")
 	}
@@ -105,7 +124,7 @@ func (i *Implementation) runDeploy(c *cli.Context) error {
 		if extName == "" {
 			return fmt.Errorf("--db-dsn must include a database name")
 		}
-	} else if !fromConnection && c.String("db") == "postgres" {
+	} else if !fromConnection && s.DB == "postgres" {
 		// Self-hosted Postgres: install + provision PG on the box (parallels the
 		// MySQL local tier). The engine drives the bootstrap install/create branch,
 		// the app config driver, and the agent connection's --driver/--schema.
@@ -114,8 +133,8 @@ func (i *Implementation) runDeploy(c *cli.Context) error {
 
 	// 1. Resolve project/version + the go-code-gen extension (logs in).
 	targets, err := i.resolveRunTargets(extRunFlags{
-		project:        c.String("project"),
-		version:        c.String("version"),
+		project:        s.Project,
+		version:        s.Version,
 		nonInteractive: true,
 	}, resolveOptions{
 		extensionIdentifier: goCodeGenExtensionIdentifier,
@@ -144,19 +163,22 @@ func (i *Implementation) runDeploy(c *cli.Context) error {
 	var workspaceDir string // persistent app-source workspace (full-app deploys)
 	jwtAuth := false
 	if !dbOnly {
-		provided, err := loadDeployConfig(c.String("config-file"))
-		if err != nil {
-			return err
+		// The go-code-gen config: the deploy-config's `codegen` block overlaid by a
+		// --gen-config file (resolved in s.Codegen), then the deploy-level knobs
+		// (db/custom/api/auth) applied on top.
+		provided := map[string]interface{}{}
+		for k, v := range s.Codegen {
+			provided[k] = v
 		}
 		// dbEngine is authoritative (from --db, or inferred from --db-dsn). go-code-gen's
 		// `db` config option uses "postgresql" (its DatabaseType enum) — distinct from the
 		// runtime driver name "postgres" used in prod.yaml + the agent connection.
 		provided["db"] = goCodeGenDBValue(dbEngine)
-		provided["custom_enabled"] = c.Bool("custom")
+		provided["custom_enabled"] = s.Custom
 		provided["dockerfile"] = true
 		// Transport selection: pick REST for JS/web clients, gRPC for Go/backend
 		// clients. Unset leaves the project's last/provided config untouched.
-		switch c.String("api") {
+		switch s.API {
 		case "rest":
 			provided["proto_enabled"] = false
 			provided["grpc_server_enabled"] = false
@@ -170,11 +192,11 @@ func (i *Implementation) runDeploy(c *cli.Context) error {
 			provided["grpc_server_enabled"] = true
 			provided["rest_enabled"] = true
 		case "":
-			// leave to config-file / last-used / generator defaults
+			// leave to codegen / last-used / generator defaults
 		default:
 			return fmt.Errorf("--api must be one of: rest, grpc, both")
 		}
-		if a := c.String("auth"); a != "" {
+		if a := s.Auth; a != "" {
 			provided["auth"] = a
 		}
 		configValues, err = targets.er.BuildConfigFromJSON(targets.project, targets.projectVersion.Uuid, targets.configEntity, provided, targets.lastConfig)
@@ -187,7 +209,12 @@ func (i *Implementation) runDeploy(c *cli.Context) error {
 
 	// Identifier: --identifier override, else the go-code-gen config's identifier,
 	// else (db-only) the sanitized project name.
-	identifier := firstNonEmpty(c.String("identifier"), stringValue(configValues, "identifier", ""), sanitizeDBName(targets.project.Name))
+	identifier := firstNonEmpty(s.Identifier, stringValue(configValues, "identifier", ""), sanitizeDBName(targets.project.Name))
+
+	// Per-revision image tag: each deploy builds + runs a uniquely-tagged image
+	// (not :latest) so the deployment revision history pins the exact artifact
+	// that shipped — the basis for auditing and a future rollback.
+	imageName := fmt.Sprintf("nuzur/%s:%s", identifier, time.Now().UTC().Format("20060102-150405")+"-"+shortID()[:6])
 
 	// The DB is registered as a named agent connection with this UUID, then
 	// published to nuzur so the schema can be pushed to it. Self-hosted → a DB
@@ -219,11 +246,11 @@ func (i *Implementation) runDeploy(c *cli.Context) error {
 	schema := dbName
 	dbSchema := "" // agent-connection default schema; empty for MySQL (chosen per query)
 	if dbEngine == deploy.DBPostgres {
-		schema = firstNonEmpty(c.String("db-schema"), "public")
+		schema = firstNonEmpty(s.DBSchema, "public")
 		dbSchema = schema
 	}
 	connName := identifier + "-db"
-	host := c.String("host")
+	host := s.Host
 
 	// Multi-project on one box: the box has ONE shared agent (reused for every
 	// project on it — box-level), while the connection UUID + deployment record
@@ -255,7 +282,7 @@ func (i *Implementation) runDeploy(c *cli.Context) error {
 	// place, refreshing generated code while preserving the user's custom
 	// endpoints (see extensionrun's user-file-preserving extraction).
 	if !dbOnly {
-		workspaceDir, err = resolveWorkspace(c.String("source-dir"), prior, identifier)
+		workspaceDir, err = resolveWorkspace(s.SourceDir, prior, identifier)
 		if err != nil {
 			return err
 		}
@@ -307,14 +334,14 @@ func (i *Implementation) runDeploy(c *cli.Context) error {
 	spec := deploy.Spec{
 		Provider: provider,
 		Target: deploy.Target{
-			Host: c.String("host"), User: c.String("user"),
-			Port: c.Int("port"), KeyPath: c.String("ssh-key"),
+			Host: s.Host, User: s.User,
+			Port: s.Port, KeyPath: s.SSHKey,
 		},
 		ProviderConfig: deploy.ProviderConfig{
-			Region:     c.String("region"),
-			Size:       c.String("size"),
-			Image:      c.String("image"),
-			SSHKeyName: c.String("ssh-key-name"),
+			Region:     s.Region,
+			Size:       s.Size,
+			Image:      s.Image,
+			SSHKeyName: s.SSHKeyName,
 		},
 		Identifier:         identifier,
 		ProjectUUID:        targets.project.Uuid,
@@ -342,14 +369,14 @@ func (i *Implementation) runDeploy(c *cli.Context) error {
 	// Caddy front doors). Best-effort — the on-box ufw is the authoritative gate,
 	// so a firewall hiccup must not fail an otherwise-good deploy. No-op for BYO-SSH.
 	if provider != deploy.ProviderSSH {
-		if err := provisioner.ConfigureFirewall(ctx, prov, deployFirewallRules(dbOnly, c.String("domain"))); err != nil {
+		if err := provisioner.ConfigureFirewall(ctx, prov, deployFirewallRules(dbOnly, s.Domain)); err != nil {
 			outputtools.PrintlnColoredErr("Provider firewall not fully configured (the box's own ufw still applies): "+err.Error(), outputtools.Yellow)
 		}
 	}
 
 	runner := deploy.NewSSHRunner(target)
 	// Non-root SSH users need sudo for the privileged bootstrap steps.
-	runner.Sudo = c.Bool("sudo") || target.User != "root"
+	runner.Sudo = s.Sudo || target.User != "root"
 	outputtools.PrintlnColoredErr(i.localize.Localize("deploy_preflight", "Checking SSH connectivity..."), outputtools.Blue)
 	if err := runner.Ping(ctx); err != nil {
 		return err
@@ -388,14 +415,15 @@ func (i *Implementation) runDeploy(c *cli.Context) error {
 		GRPCEnabled:       boolValue(configValues, "grpc_server_enabled"),
 		JWTAuth:           jwtAuth,
 		ProvisioningToken: tokRes.GetProvisioningToken(),
-		CLIInstallCmd:     c.String("cli-install-cmd"),
+		CLIInstallCmd:     s.CLIInstallCmd,
 		ConnUUID:          connUUID,
 		ConnName:          connName,
-		Domain:            c.String("domain"),
+		Domain:            s.Domain,
 		Host:              host,
 	}
 	if !dbOnly {
 		bp.RemoteSrcDir = remoteSrc
+		bp.ImageName = imageName
 	}
 	script, err := deploy.RenderBootstrap(bp)
 	if err != nil {
@@ -435,7 +463,7 @@ func (i *Implementation) runDeploy(c *cli.Context) error {
 	// 10. Publish the connection catalog (needs the user token — the box can't)
 	// and auto-apply the schema to the empty DB.
 	schemaApplied := true
-	if err := i.publishAndApplySchema(targets, agentUUID, connUUID, connName, dbEngine, schema, c.String("schema-push-extension")); err != nil {
+	if err := i.publishAndApplySchema(targets, agentUUID, connUUID, connName, dbEngine, schema, s.SchemaPushExtension); err != nil {
 		schemaApplied = false
 		outputtools.PrintlnColoredErr("Schema auto-apply skipped: "+err.Error(), outputtools.Yellow)
 	}
@@ -450,8 +478,8 @@ func (i *Implementation) runDeploy(c *cli.Context) error {
 		publicURL, _ = runner.Capture(ctx, "cat /etc/nuzur/"+identifier+"/url 2>/dev/null")
 		publicURL = strings.TrimSpace(publicURL)
 		if publicURL == "" {
-			if c.String("domain") != "" {
-				publicURL = "https://" + c.String("domain")
+			if s.Domain != "" {
+				publicURL = "https://" + s.Domain
 			} else {
 				publicURL = "http://" + target.Host
 			}
@@ -472,7 +500,7 @@ func (i *Implementation) runDeploy(c *cli.Context) error {
 	// with the local-agent connection preselected).
 	dataManagerURL := fmt.Sprintf(
 		"%s/project/data-manager/%s/%s?mode=local&localAgent=%s&localAgentConn=%s&schema=%s",
-		strings.TrimRight(c.String("web-url"), "/"),
+		strings.TrimRight(s.WebURL, "/"),
 		targets.project.Uuid, targets.projectVersion.Uuid,
 		agentUUID, connUUID, url.QueryEscape(schema),
 	)
@@ -497,7 +525,7 @@ func (i *Implementation) runDeploy(c *cli.Context) error {
 		DBEngine:           dbEngine,
 		ExternalDB:         externalDB,
 		SourceDir:          workspaceDir,
-		Domain:             c.String("domain"),
+		Domain:             s.Domain,
 		APIURL:             publicURL,
 		PublicURL:          publicURL,
 		DataManagerURL:     dataManagerURL,
@@ -522,7 +550,7 @@ func (i *Implementation) runDeploy(c *cli.Context) error {
 		DBEngine:       dbEngine,
 		ExternalDB:     externalDB,
 		DBOnly:         dbOnly,
-		Domain:         c.String("domain"),
+		Domain:         s.Domain,
 		PublicURL:      publicURL,
 		DataManagerURL: dataManagerURL,
 		UseHTTPS:       useHTTPS,
@@ -531,6 +559,16 @@ func (i *Implementation) runDeploy(c *cli.Context) error {
 		GRPCEnabled:    boolValue(configValues, "grpc_server_enabled"),
 		JWTAuth:        jwtAuth,
 		AuthConfig:     stringValue(configValues, "auth", ""),
+		Region:         s.Region,
+		Size:           s.Size,
+		Image:          s.Image,
+		SSHKeyName:     s.SSHKeyName,
+		SSHUser:        target.User,
+		SSHPort:        target.Port,
+		DBSchema:       schema,
+		Custom:         s.Custom,
+		SourceDir:      workspaceDir,
+		ImageName:      imageName,
 	}); err != nil {
 		outputtools.PrintlnColoredErr("Deployment recorded locally but not reported to nuzur: "+err.Error(), outputtools.Yellow)
 	}
@@ -610,7 +648,7 @@ func (i *Implementation) runDeploy(c *cli.Context) error {
 		outputtools.PrintlnColored("\nYour app source:", outputtools.Green)
 		fmt.Printf("  %s\n", appDir)
 		fmt.Printf("  Re-run the same deploy to ship changes from here.\n")
-		if c.Bool("custom") {
+		if s.Custom {
 			fmt.Printf("  Add custom endpoints: edit app/grpc.go (override/extend gRPC) or app/rest.go\n")
 			fmt.Printf("  (custom REST routes); add RPCs in app/idl/proto/custom.proto then run app/idl/proto/gen.sh.\n")
 		}
@@ -622,10 +660,10 @@ func (i *Implementation) runDeploy(c *cli.Context) error {
 	// team can use the data manager on it. Opt-in only (flag or TTY prompt), and
 	// skipped for --connection (already a team connection) and self-hosted DBs
 	// (unreachable from nuzur cloud). Best-effort — never fails the deploy.
-	if c.Bool("save-connection") && (!externalDB || fromConnection) {
+	if s.SaveConnection && (!externalDB || fromConnection) {
 		outputtools.PrintlnColoredErr("--save-connection applies only to an external --db-dsn deploy; ignoring.", outputtools.Yellow)
 	}
-	if externalDB && !fromConnection && shouldSaveTeamConnection(c.Bool("no-save-connection"), c.Bool("save-connection")) {
+	if externalDB && !fromConnection && shouldSaveTeamConnection(s.NoSaveConnection, s.SaveConnection) {
 		i.saveTeamConnection(saveConnectionInput{
 			TeamUUID:    targets.project.TeamUuid,
 			ProjectName: targets.project.Name,
