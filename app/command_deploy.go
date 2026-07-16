@@ -419,6 +419,33 @@ func (i *Implementation) runDeploy(c *cli.Context) error {
 		return err
 	}
 
+	// 12b. Report the deployment to nuzur so it appears in the web (with its
+	// config + live health). Best-effort: the local record above is authoritative
+	// for destroy, so a cloud hiccup must not fail an otherwise-good deploy.
+	if err := i.reportDeployment(ctx, deploymentReportInput{
+		Runner:         runner,
+		Identifier:     identifier,
+		ProjectUUID:    targets.project.Uuid,
+		ProjectVersion: targets.projectVersion.Uuid,
+		LocalAgentUUID: agentUUID,
+		ConnUUID:       connUUID,
+		Host:           target.Host,
+		DBEngine:       dbEngine,
+		ExternalDB:     externalDB,
+		DBOnly:         dbOnly,
+		Domain:         c.String("domain"),
+		PublicURL:      publicURL,
+		DataManagerURL: dataManagerURL,
+		UseHTTPS:       useHTTPS,
+		ExtDBPort:      extPort,
+		RESTEnabled:    boolValue(configValues, "rest_enabled"),
+		GRPCEnabled:    boolValue(configValues, "grpc_server_enabled"),
+		JWTAuth:        jwtAuth,
+		AuthConfig:     stringValue(configValues, "auth", ""),
+	}); err != nil {
+		outputtools.PrintlnColoredErr("Deployment recorded locally but not reported to nuzur: "+err.Error(), outputtools.Yellow)
+	}
+
 	// 13. Report.
 	outputtools.PrintlnColored("\nDeployment complete.", outputtools.Green)
 	fmt.Printf("  deployment id: %s\n", dep.ID)
@@ -715,6 +742,18 @@ func (i *Implementation) DestroyCommand() cli.Command {
 					}); err != nil {
 						outputtools.PrintlnColoredErr(fmt.Sprintf("warning: could not refresh agent connections: %v", err), outputtools.Yellow)
 					}
+				}
+			}
+
+			// 2b. Mark the cloud-side deployment record DESTROYED (kept as
+			// history). Best-effort — a stale row is preferable to failing the
+			// destroy; the local state removal below is what matters.
+			if authCtx, err := productclient.ClientContext(); err == nil {
+				if _, err := i.productClient.ProductClient.MarkDeploymentDestroyed(authCtx, &pb.MarkDeploymentDestroyedRequest{
+					Host:       dep.Host,
+					Identifier: dep.Identifier,
+				}); err != nil {
+					outputtools.PrintlnColoredErr(fmt.Sprintf("warning: could not mark deployment destroyed in nuzur: %v", err), outputtools.Yellow)
 				}
 			}
 

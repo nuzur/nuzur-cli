@@ -309,6 +309,12 @@ func handleReverseRPC(ctx context.Context, stream pb.NuzurConnectionManager_Loca
 		defer sem.Release()
 		handleComputePgSchemaPlan(ctx, stream, pool, payload.ComputePgSchemaPlan)
 
+	case *pb.ServerToLocalAgent_CollectDeploymentMetrics:
+		// Cheap local probes (systemctl is-active / docker inspect / DB ping).
+		// No query slot needed — like Ping/Commit, gating it would only risk
+		// starving health checks under load without any resource benefit.
+		handleCollectDeploymentMetrics(ctx, stream, pool, payload.CollectDeploymentMetrics)
+
 	default:
 		log.Printf("unhandled reverse RPC: %T", payload)
 	}

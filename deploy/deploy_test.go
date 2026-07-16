@@ -58,6 +58,10 @@ func TestRenderBootstrap(t *testing.T) {
 		"PUBLIC_PORT=8443",
 		"PUBLIC_URL=\"http://1.2.3.4:${PUBLIC_PORT}\"",
 		"> /etc/nuzur/shop/url",
+		// box-allocated ports recorded for the deployment-record read-back
+		"> /etc/nuzur/shop/ports",
+		"http=${HTTP_PORT}",
+		"grpc=${GRPC_PORT}",
 		"ufw allow 22/tcp",
 		"ufw allow ${PUBLIC_PORT}/tcp",
 		// per-project backup cron

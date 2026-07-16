@@ -346,6 +346,15 @@ systemctl reload caddy 2>/dev/null || systemctl restart caddy
 # (world-readable — it's just a URL, not a secret).
 printf '%s' "${PUBLIC_URL}" > {{.ProjectDir}}/url
 chmod 644 {{.ProjectDir}}/url
+
+# Record the box-allocated ports so the deploy command can read them back for the
+# deployment record (internal http/grpc are picked on-box; not secret).
+cat > {{.ProjectDir}}/ports <<PORTS
+http=${HTTP_PORT}
+grpc=${GRPC_PORT}
+db=${DB_PORT}
+PORTS
+chmod 644 {{.ProjectDir}}/ports
 {{end}}
 
 # ── 8. Firewall: SSH + (for a full deploy) the Caddy front doors. The DB stays

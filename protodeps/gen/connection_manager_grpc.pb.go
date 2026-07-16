@@ -36,6 +36,7 @@ const (
 	NuzurConnectionManager_GetProjectVersionSQLDiff_FullMethodName        = "/NuzurConnectionManager/GetProjectVersionSQLDiff"
 	NuzurConnectionManager_CancelProjectVersionSQLDiff_FullMethodName     = "/NuzurConnectionManager/CancelProjectVersionSQLDiff"
 	NuzurConnectionManager_GetProjectVersionFromConnection_FullMethodName = "/NuzurConnectionManager/GetProjectVersionFromConnection"
+	NuzurConnectionManager_CollectDeploymentMetrics_FullMethodName        = "/NuzurConnectionManager/CollectDeploymentMetrics"
 	NuzurConnectionManager_LocalAgentChannel_FullMethodName               = "/NuzurConnectionManager/LocalAgentChannel"
 )
 
@@ -65,6 +66,12 @@ type NuzurConnectionManagerClient interface {
 	CancelProjectVersionSQLDiff(ctx context.Context, in *CancelProjectVersionSQLDiffRequest, opts ...grpc.CallOption) (*CancelProjectVersionSQLDiffResponse, error)
 	// project version
 	GetProjectVersionFromConnection(ctx context.Context, in *GetProjectVersionFromConnectionRequest, opts ...grpc.CallOption) (*GetProjectVersionFromConnectionResponse, error)
+	// deployment health metrics
+	// On-demand, pull-based: the web calls this with a deployment's local_agent
+	// + identifier + connection; the server routes a reverse RPC to the box's
+	// agent, which runs cheap local probes and returns a live snapshot. Nothing
+	// is stored. If the agent is offline the response has agent_online=false.
+	CollectDeploymentMetrics(ctx context.Context, in *CollectDeploymentMetricsRequest, opts ...grpc.CallOption) (*CollectDeploymentMetricsResponse, error)
 	// local agent bidi channel
 	// The CLI agent dials this, holds the stream open, and answers reverse RPCs
 	// (RunQuery, Ping, etc.) from the server. See the LocalAgentToServer /
@@ -250,6 +257,16 @@ func (c *nuzurConnectionManagerClient) GetProjectVersionFromConnection(ctx conte
 	return out, nil
 }
 
+func (c *nuzurConnectionManagerClient) CollectDeploymentMetrics(ctx context.Context, in *CollectDeploymentMetricsRequest, opts ...grpc.CallOption) (*CollectDeploymentMetricsResponse, error) {
+	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
+	out := new(CollectDeploymentMetricsResponse)
+	err := c.cc.Invoke(ctx, NuzurConnectionManager_CollectDeploymentMetrics_FullMethodName, in, out, cOpts...)
+	if err != nil {
+		return nil, err
+	}
+	return out, nil
+}
+
 func (c *nuzurConnectionManagerClient) LocalAgentChannel(ctx context.Context, opts ...grpc.CallOption) (grpc.BidiStreamingClient[LocalAgentToServer, ServerToLocalAgent], error) {
 	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
 	stream, err := c.cc.NewStream(ctx, &NuzurConnectionManager_ServiceDesc.Streams[0], NuzurConnectionManager_LocalAgentChannel_FullMethodName, cOpts...)
@@ -289,6 +306,12 @@ type NuzurConnectionManagerServer interface {
 	CancelProjectVersionSQLDiff(context.Context, *CancelProjectVersionSQLDiffRequest) (*CancelProjectVersionSQLDiffResponse, error)
 	// project version
 	GetProjectVersionFromConnection(context.Context, *GetProjectVersionFromConnectionRequest) (*GetProjectVersionFromConnectionResponse, error)
+	// deployment health metrics
+	// On-demand, pull-based: the web calls this with a deployment's local_agent
+	// + identifier + connection; the server routes a reverse RPC to the box's
+	// agent, which runs cheap local probes and returns a live snapshot. Nothing
+	// is stored. If the agent is offline the response has agent_online=false.
+	CollectDeploymentMetrics(context.Context, *CollectDeploymentMetricsRequest) (*CollectDeploymentMetricsResponse, error)
 	// local agent bidi channel
 	// The CLI agent dials this, holds the stream open, and answers reverse RPCs
 	// (RunQuery, Ping, etc.) from the server. See the LocalAgentToServer /
@@ -354,6 +377,9 @@ func (UnimplementedNuzurConnectionManagerServer) CancelProjectVersionSQLDiff(con
 }
 func (UnimplementedNuzurConnectionManagerServer) GetProjectVersionFromConnection(context.Context, *GetProjectVersionFromConnectionRequest) (*GetProjectVersionFromConnectionResponse, error) {
 	return nil, status.Error(codes.Unimplemented, "method GetProjectVersionFromConnection not implemented")
+}
+func (UnimplementedNuzurConnectionManagerServer) CollectDeploymentMetrics(context.Context, *CollectDeploymentMetricsRequest) (*CollectDeploymentMetricsResponse, error) {
+	return nil, status.Error(codes.Unimplemented, "method CollectDeploymentMetrics not implemented")
 }
 func (UnimplementedNuzurConnectionManagerServer) LocalAgentChannel(grpc.BidiStreamingServer[LocalAgentToServer, ServerToLocalAgent]) error {
 	return status.Error(codes.Unimplemented, "method LocalAgentChannel not implemented")
@@ -686,6 +712,24 @@ func _NuzurConnectionManager_GetProjectVersionFromConnection_Handler(srv interfa
 	return interceptor(ctx, in, info, handler)
 }
 
+func _NuzurConnectionManager_CollectDeploymentMetrics_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
+	in := new(CollectDeploymentMetricsRequest)
+	if err := dec(in); err != nil {
+		return nil, err
+	}
+	if interceptor == nil {
+		return srv.(NuzurConnectionManagerServer).CollectDeploymentMetrics(ctx, in)
+	}
+	info := &grpc.UnaryServerInfo{
+		Server:     srv,
+		FullMethod: NuzurConnectionManager_CollectDeploymentMetrics_FullMethodName,
+	}
+	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
+		return srv.(NuzurConnectionManagerServer).CollectDeploymentMetrics(ctx, req.(*CollectDeploymentMetricsRequest))
+	}
+	return interceptor(ctx, in, info, handler)
+}
+
 func _NuzurConnectionManager_LocalAgentChannel_Handler(srv interface{}, stream grpc.ServerStream) error {
 	return srv.(NuzurConnectionManagerServer).LocalAgentChannel(&grpc.GenericServerStream[LocalAgentToServer, ServerToLocalAgent]{ServerStream: stream})
 }
@@ -767,6 +811,10 @@ var NuzurConnectionManager_ServiceDesc = grpc.ServiceDesc{
 		{
 			MethodName: "GetProjectVersionFromConnection",
 			Handler:    _NuzurConnectionManager_GetProjectVersionFromConnection_Handler,
+		},
+		{
+			MethodName: "CollectDeploymentMetrics",
+			Handler:    _NuzurConnectionManager_CollectDeploymentMetrics_Handler,
 		},
 	},
 	Streams: []grpc.StreamDesc{
