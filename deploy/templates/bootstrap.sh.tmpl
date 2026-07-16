@@ -191,8 +191,11 @@ db:
 chmod 600 "$PROD_YAML"
 
 # ── 5. Build + run this project's API (host networking → reaches localhost DB) ─
+# BuildKit is required for the generated Dockerfile's dependency cache mounts
+# (RUN --mount=type=cache) that make re-deploys skip re-downloading Go modules.
+# It's the default in modern Docker; set it explicitly so older engines use it too.
 echo "[nuzur-deploy] building app image"
-docker build -t {{.ImageName}} "{{.RemoteSrcDir}}"
+DOCKER_BUILDKIT=1 docker build -t {{.ImageName}} "{{.RemoteSrcDir}}"
 cat > /etc/systemd/system/{{.Identifier}}-api.service <<UNIT
 [Unit]
 Description=nuzur generated API ({{.Identifier}})
