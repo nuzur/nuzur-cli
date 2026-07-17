@@ -169,15 +169,10 @@ func (i *Implementation) resolveRunTargets(flags extRunFlags, opts resolveOption
 		return nil, err
 	}
 
-	if opts.checkLimit {
-		limitRes, err := er.CheckExtensionExecutionLimit(project.Uuid, extension.Uuid)
-		if err != nil {
-			return nil, err
-		}
-		if limitRes.IsLimited {
-			return nil, errors.New(i.localize.Localize("pro_execution_limit_reached", "Monthly limit of 5 Pro extension executions reached. Please upgrade to Pro for unlimited executions."))
-		}
-	}
+	// The former monthly Pro-execution cap has been replaced by a server-side
+	// admission queue: free users are no longer blocked, they simply wait longer
+	// under load. The extension server handles queueing during StartExecution, so
+	// there is no client-side limit gate to enforce here.
 
 	extensionVersion, err := er.GetLatestExtensionVersion(extension.Uuid)
 	if err != nil {

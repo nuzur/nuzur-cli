@@ -101,8 +101,12 @@ func (i *Implementation) Run(params RunParams) (*RunResult, error) {
 		extensiongen.ExecutionResponseType_EXECUTION_RESPONSE_TYPE_STEP:
 		// async or step-based — poll the extension server until done, handling
 		// any confirmation steps along the way.
-		if resp.Data != nil && resp.Data.Async != nil && resp.Data.Async.StatusMessage != "" {
-			fmt.Fprintf(os.Stderr, "Async execution: %s\n", resp.Data.Async.StatusMessage)
+		if async := resp.GetData().GetAsync(); async != nil {
+			if async.Queued {
+				fmt.Fprintln(os.Stderr, queueWaitingLine(async))
+			} else if async.StatusMessage != "" {
+				fmt.Fprintf(os.Stderr, "Async execution: %s\n", async.StatusMessage)
+			}
 		}
 		return i.pollExtensionExecution(extClient, tokenBytes, params.Extension.Identifier, resp.ExecutionUuid, params.OutputPath, params.AutoConfirmSteps)
 
@@ -165,6 +169,16 @@ func (i *Implementation) pollExtensionExecution(
 					}
 					submitted[stepID] = true
 				}
+			}
+			// While waiting in the admission queue the extension reports an
+			// in-progress status carrying structured queue info; render it as a
+			// dedicated "waiting" line rather than as active progress.
+			if async := exec.GetData().GetAsync(); async != nil && async.Queued {
+				if line := queueWaitingLine(async); line != lastStatus {
+					fmt.Fprintln(os.Stderr, line)
+					lastStatus = line
+				}
+				break
 			}
 			msg := exec.StatusMsg
 			if exec.CurrentStepIdentifier != "" {
@@ -323,6 +337,29 @@ func cleanupOrphanedGeneratedFiles(outputPath string, previousManifest files.Gen
 		}
 	}
 	return removed
+}
+
+// queueWaitingLine renders the "waiting in the generation queue" status shown
+// to the user while an execution is admitted-pending, using the structured
+// queue fields the extension server reports.
+func queueWaitingLine(async *extensiongen.ExecutionResponseTypeAsyncData) string {
+	if async.QueuePosition <= 0 {
+		return "Waiting for a generation slot…"
+	}
+	if async.EstimatedWaitSeconds > 0 {
+		return fmt.Sprintf("Waiting for a generation slot — position %d (about %s)…",
+			async.QueuePosition, humanizeSeconds(async.EstimatedWaitSeconds))
+	}
+	return fmt.Sprintf("Waiting for a generation slot — position %d…", async.QueuePosition)
+}
+
+// humanizeSeconds renders a rough wait as a compact human string.
+func humanizeSeconds(s int64) string {
+	if s < 60 {
+		return fmt.Sprintf("%ds", s)
+	}
+	m := (s + 59) / 60
+	return fmt.Sprintf("%dm", m)
 }
 
 func contextWithTimeout(seconds int) context.Context {
