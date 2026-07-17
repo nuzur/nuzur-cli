@@ -12,18 +12,18 @@ func implementedProviders() []string {
 		string(ProviderSSH),
 		string(ProviderDigitalOcean),
 		string(ProviderHetzner),
+		string(ProviderLinode),
+		string(ProviderGCP),
+		string(ProviderAzure),
+		string(ProviderVultr),
+		string(ProviderScaleway),
 	}
 }
 
 // plannedProviders are recognized names whose adapter isn't shipped yet — they
 // get a "coming soon, use ssh for now" error rather than "unknown provider".
 var plannedProviders = map[Provider]bool{
-	ProviderAWS:      true,
-	ProviderGCP:      true,
-	ProviderAzure:    true,
-	ProviderVultr:    true,
-	ProviderLinode:   true,
-	ProviderScaleway: true,
+	ProviderAWS: true,
 }
 
 // NewProvisioner returns the adapter for a provider. An empty provider defaults
@@ -36,6 +36,16 @@ func NewProvisioner(provider Provider) (Provisioner, error) {
 		return NewDigitalOceanProvisioner(), nil
 	case ProviderHetzner:
 		return NewHetznerProvisioner(), nil
+	case ProviderLinode:
+		return NewLinodeProvisioner(), nil
+	case ProviderGCP:
+		return NewGCPProvisioner(), nil
+	case ProviderAzure:
+		return NewAzureProvisioner(), nil
+	case ProviderVultr:
+		return NewVultrProvisioner(), nil
+	case ProviderScaleway:
+		return NewScalewayProvisioner(), nil
 	}
 	if plannedProviders[provider] {
 		return nil, fmt.Errorf(

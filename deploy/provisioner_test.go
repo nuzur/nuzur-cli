@@ -63,8 +63,12 @@ func TestNewProvisioner(t *testing.T) {
 		{"", "*deploy.SSHProvisioner", ""},
 		{ProviderDigitalOcean, "*deploy.DigitalOceanProvisioner", ""},
 		{ProviderHetzner, "*deploy.HetznerProvisioner", ""},
+		{ProviderLinode, "*deploy.LinodeProvisioner", ""},
+		{ProviderGCP, "*deploy.GCPProvisioner", ""},
+		{ProviderAzure, "*deploy.AzureProvisioner", ""},
+		{ProviderVultr, "*deploy.VultrProvisioner", ""},
+		{ProviderScaleway, "*deploy.ScalewayProvisioner", ""},
 		{ProviderAWS, "", "planned but not available"},
-		{ProviderGCP, "", "planned but not available"},
 		{Provider("bogus"), "", "unknown provider"},
 	}
 	for _, tc := range cases {
@@ -115,6 +119,9 @@ func TestDigitalOceanProvision(t *testing.T) {
 	}
 	if prov.Target.User != "root" || prov.Target.Port != 22 {
 		t.Errorf("expected root@:22, got %s:%d", prov.Target.User, prov.Target.Port)
+	}
+	if findCall(*calls, "doctl", "account", "get") == nil {
+		t.Errorf("expected the doctl auth check; calls: %v", *calls)
 	}
 	create := findCall(*calls, "droplet", "create", "--region", "nyc3", "--ssh-keys", "999", "--wait")
 	if create == nil {
@@ -195,6 +202,9 @@ func TestHetznerProvision(t *testing.T) {
 	}
 	if prov.InstanceID != "8675309" || prov.Target.Host != "49.12.0.5" {
 		t.Fatalf("unexpected Provisioned: %+v", prov)
+	}
+	if findCall(*calls, "hcloud", "context", "active") == nil {
+		t.Errorf("expected the hcloud auth check; calls: %v", *calls)
 	}
 	create := findCall(*calls, "server", "create", "--location", "nbg1", "--ssh-key", "mykey")
 	if create == nil {

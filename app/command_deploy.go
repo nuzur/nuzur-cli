@@ -28,10 +28,10 @@ func (i *Implementation) DeployCommand() cli.Command {
 		Name:  "deploy",
 		Usage: i.localize.Localize("deploy_desc", "Deploy a project to a server: self-host its database and pair it back to nuzur"),
 		Flags: []cli.Flag{
-			cli.StringFlag{Name: "provider", Value: "ssh", Usage: "Where to deploy: ssh (bring-your-own-server), or a managed provider that creates the VM for you — digitalocean | hetzner (more coming). Managed providers shell out to your already-authenticated provider CLI."},
+			cli.StringFlag{Name: "provider", Value: "ssh", Usage: "Where to deploy: ssh (bring-your-own-server), or a managed provider that creates the VM for you — digitalocean | hetzner | linode | gcp | azure | vultr | scaleway (aws coming). Managed providers shell out to your already-authenticated provider CLI."},
 			cli.StringFlag{Name: "host", Usage: "Target server IP/hostname (ssh provider)"},
-			cli.StringFlag{Name: "region", Usage: "Managed providers: region/location to create the VM in (e.g. nyc3, fra1 for DigitalOcean; nbg1, fsn1 for Hetzner)"},
-			cli.StringFlag{Name: "size", Usage: "Managed providers: instance size/type (default: a small instance per provider)"},
+			cli.StringFlag{Name: "region", Usage: "Managed providers: region/location to create the VM in (e.g. nyc3 DigitalOcean; nbg1 Hetzner; us-east Linode; ewr Vultr; eastus Azure). For GCP and Scaleway pass a ZONE (us-central1-a, fr-par-1)."},
+			cli.StringFlag{Name: "size", Usage: "Managed providers: instance size/type (default: a ~2GB instance per provider — the app image is built on the box, which OOMs on 1GB)"},
 			cli.StringFlag{Name: "image", Usage: "Managed providers: OS image (default: Ubuntu 22.04)"},
 			cli.StringFlag{Name: "ssh-key-name", Usage: "Managed providers: name/id of an SSH key already registered with the provider. Omit to upload the public half of --ssh-key (or your default ~/.ssh key)."},
 			cli.StringFlag{Name: "user", Value: "root", Usage: "SSH user"},
