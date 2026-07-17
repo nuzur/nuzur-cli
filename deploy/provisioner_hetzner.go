@@ -21,7 +21,7 @@ const (
 	// Default location — --region is optional. nbg1 is deliberate: it's one of the
 	// locations that offers the default cpx22 type (the US ones don't).
 	hetznerDefaultRegion = "nbg1"
-	hetznerDefaultImage  = "ubuntu-22.04"
+	hetznerDefaultImage  = "ubuntu-24.04" // Ubuntu 24.04 LTS (noble) — see doDefaultImage
 	hetznerKeyName       = "nuzur-deploy"
 	hetznerSSHReadyWait  = 3 * time.Minute
 )
@@ -45,7 +45,7 @@ func (p *HetznerProvisioner) Provision(ctx context.Context, spec Spec) (Provisio
 		return Provisioned{}, err
 	}
 
-	name, err := providerResourceName(spec.Identifier)
+	name, err := specResourceName(spec)
 	if err != nil {
 		return Provisioned{}, err
 	}
@@ -71,6 +71,10 @@ func (p *HetznerProvisioner) Provision(ctx context.Context, spec Spec) (Provisio
 		return Provisioned{}, fmt.Errorf("Hetzner server %s has no public IPv4", name)
 	}
 	target := Target{Host: ip, User: "root", Port: 22, KeyPath: spec.Target.KeyPath}
+	// The server exists and is billing — report it before the SSH wait below.
+	reportInstance(spec, InstanceRef{
+		InstanceID: strings.TrimSpace(id), Region: cfg.Region, Host: ip, ResourceName: name,
+	})
 	if err := sshReady(ctx, target, hetznerSSHReadyWait); err != nil {
 		return Provisioned{}, err
 	}
@@ -148,4 +152,24 @@ func (p *HetznerProvisioner) Destroy(ctx context.Context, prov Provisioned) erro
 	// best-effort.
 	_, _ = runCLI(ctx, hetznerCLI, "firewall", "delete", "nuzur-fw-"+prov.InstanceID)
 	return nil
+}
+
+// FindInstanceByName resolves a Hetzner server name to its id. This lists and
+// matches rather than using `server describe <name>`, which exits non-zero with
+// "Server not found" — an expected outcome here, not a failure.
+func (p *HetznerProvisioner) FindInstanceByName(ctx context.Context, name, region string) (string, error) {
+	if strings.TrimSpace(name) == "" {
+		return "", nil
+	}
+	out, err := runCLI(ctx, hetznerCLI, "server", "list", "-o", "noheader", "-o", "columns=id,name")
+	if err != nil {
+		return "", fmt.Errorf("listing Hetzner servers to find %q: %w", name, err)
+	}
+	for _, line := range strings.Split(out, "\n") {
+		f := strings.Fields(line)
+		if len(f) >= 2 && f[1] == name {
+			return f[0], nil
+		}
+	}
+	return "", nil
 }

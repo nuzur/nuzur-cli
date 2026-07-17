@@ -46,7 +46,7 @@ var providerNameSuffix = func() (string, error) {
 //   - Most providers reject a duplicate name, so the deploy fails confusingly.
 //   - AZURE IS WORSE: `az group create` is an idempotent ARM PUT, so a colliding
 //     name silently ADOPTS the user's existing resource group — and the matching
-//     `nuzur destroy` would then `az group delete` it, taking everything inside
+//     `nuzur-cli destroy` would then `az group delete` it, taking everything inside
 //     with it.
 //
 // Nothing needs to re-derive this name: it's returned in Provisioned (as the
@@ -66,6 +66,34 @@ func providerResourceName(identifier string) (string, error) {
 		base = strings.Trim(base[:max], "-")
 	}
 	return "nuzur-" + base + "-" + suffix, nil
+}
+
+// ProviderResourceName mints the provider-side name for a deploy's resources. The
+// deploy command calls this before provisioning so the name can be persisted ahead
+// of the create call; adapters get it via Spec.ResourceName.
+func ProviderResourceName(identifier string) (string, error) {
+	return providerResourceName(identifier)
+}
+
+// specResourceName returns the name the caller minted for this deploy, falling
+// back to minting one. The normal deploy path always mints it up front (so it is
+// on disk before the create call); the fallback keeps direct and test callers,
+// which have no state to write, working unchanged.
+func specResourceName(spec Spec) (string, error) {
+	if n := strings.TrimSpace(spec.ResourceName); n != "" {
+		return n, nil
+	}
+	return providerResourceName(spec.Identifier)
+}
+
+// reportInstance hands a just-created VM to the caller so it can be persisted
+// while the deploy is still running. Adapters must call this as soon as the
+// provider acknowledges the instance and BEFORE waiting for SSH — see
+// Spec.OnInstanceCreated.
+func reportInstance(spec Spec, ref InstanceRef) {
+	if spec.OnInstanceCreated != nil {
+		spec.OnInstanceCreated(ref)
+	}
 }
 
 // sanitizeProviderName reduces an identifier to the intersection every provider

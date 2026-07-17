@@ -30,7 +30,7 @@ func agentLogDir() string {
 }
 
 // InstallResult describes where the service file landed so the caller (the
-// `nuzur agent install` command) can print something useful.
+// `nuzur-cli agent install` command) can print something useful.
 type InstallResult struct {
 	Platform string
 	UnitPath string
@@ -59,7 +59,7 @@ func Install() (*InstallResult, error) {
 	case "linux":
 		return installLinux(execPath)
 	case "windows":
-		return nil, fmt.Errorf("windows install is not implemented yet; run `nuzur agent start` manually for now")
+		return nil, fmt.Errorf("windows install is not implemented yet; run `nuzur-cli agent start` manually for now")
 	default:
 		return nil, fmt.Errorf("unsupported platform: %s", runtime.GOOS)
 	}

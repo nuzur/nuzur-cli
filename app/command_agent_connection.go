@@ -14,7 +14,7 @@ import (
 	"google.golang.org/grpc/status"
 )
 
-// AgentConnectionCommand adds the `nuzur agent connection ...` subcommand
+// AgentConnectionCommand adds the `nuzur-cli agent connection ...` subcommand
 // tree. Each subcommand keeps the local registry and the cloud-side catalog
 // in sync: cloud sees only metadata (name, db_type, default_schema), never
 // the DSN.
@@ -129,7 +129,7 @@ func (i *Implementation) AgentConnectionAddCommand() cli.Command {
 			}
 			if err := i.publishCatalog(reg); err != nil {
 				fmt.Printf("Saved locally but publishing the catalog to nuzur failed: %v\n", err)
-				fmt.Println("Run `nuzur agent connection list` to retry; the entry is safe on disk.")
+				fmt.Println("Run `nuzur-cli agent connection list` to retry; the entry is safe on disk.")
 				return nil
 			}
 			fmt.Println("Catalog published.")
@@ -148,7 +148,7 @@ func (i *Implementation) AgentConnectionListCommand() cli.Command {
 				return err
 			}
 			if len(reg.Entries) == 0 {
-				fmt.Println("No local connections registered. Run `nuzur agent connection add` to create one.")
+				fmt.Println("No local connections registered. Run `nuzur-cli agent connection add` to create one.")
 				return nil
 			}
 
@@ -209,7 +209,7 @@ func (i *Implementation) AgentConnectionRemoveCommand() cli.Command {
 // machine.
 func (i *Implementation) publishCatalog(reg *connections.Registry) error {
 	// Pair this machine automatically on first publish so users don't need a
-	// separate `nuzur agent pair` step. ensureLocalAgentPaired also logs in.
+	// separate `nuzur-cli agent pair` step. ensureLocalAgentPaired also logs in.
 	agentUUID, err := i.ensureLocalAgentPaired()
 	if err != nil {
 		return err

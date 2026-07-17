@@ -1,6 +1,6 @@
 // Package connections holds the agent's local registry of database
 // connections — the set of named (name, driver, DSN, db_type) entries the user
-// has added via `nuzur agent connection add`.
+// has added via `nuzur-cli agent connection add`.
 //
 // Two faces:
 //   - On-disk persistence at /tmp/nuzur-cli/local_agent_connections.json, with

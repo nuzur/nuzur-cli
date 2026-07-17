@@ -7,9 +7,9 @@ import (
 )
 
 // DeploymentsDir returns the persistent per-user directory where the CLI records
-// deployments created by `nuzur deploy`, nested under configBaseDir (e.g.
+// deployments created by `nuzur-cli deploy`, nested under configBaseDir (e.g.
 // ~/.config/nuzur/deployments). Each deployment is one JSON file, read by
-// `nuzur destroy` / `nuzur deploy list`.
+// `nuzur-cli destroy` / `nuzur-cli deploy list`.
 //
 // Falls back to /tmp/nuzur-cli/ when UserConfigDir fails, matching the agent
 // state helpers.

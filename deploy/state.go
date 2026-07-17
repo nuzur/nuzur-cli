@@ -12,14 +12,23 @@ import (
 	"github.com/nuzur/nuzur-cli/files"
 )
 
-// Deployment is the persisted record of one `nuzur deploy`, written under
+// Deployment is the persisted record of one `nuzur-cli deploy`, written under
 // ~/.config/nuzur/deployments/<id>.json. It is the source of truth for
-// `nuzur destroy` (revoke the agent, delete provider infra) and `deploy list`.
+// `nuzur-cli destroy` (revoke the agent, delete provider infra) and `deploy list`.
 type Deployment struct {
-	ID                 string    `json:"id"`
-	Provider           Provider  `json:"provider"`
-	ProviderInstanceID string    `json:"provider_instance_id,omitempty"` // cloud VM/instance id (for destroy); empty for BYO-SSH
-	Region             string    `json:"region,omitempty"`               // cloud region the VM lives in
+	ID                 string   `json:"id"`
+	Provider           Provider `json:"provider"`
+	ProviderInstanceID string   `json:"provider_instance_id,omitempty"` // cloud VM/instance id (for destroy); empty for BYO-SSH
+	// ProviderResourceName is the name nuzur minted for the VM, written to disk
+	// BEFORE the provider create call. If a deploy dies during that call, the id
+	// never comes back and this name is the only handle left on a VM that may be
+	// running and billing — destroy resolves it via Provisioner.FindInstanceByName.
+	ProviderResourceName string `json:"provider_resource_name,omitempty"`
+	// Provisioning marks a deployment whose VM is still being created. It is set
+	// before the create call and cleared once the deploy completes, so a record left
+	// with it set is a deploy that died in flight and may have leaked a VM.
+	Provisioning       bool      `json:"provisioning,omitempty"`
+	Region             string    `json:"region,omitempty"` // cloud region the VM lives in
 	Host               string    `json:"host"`
 	User               string    `json:"user"`
 	Port               int       `json:"port"`

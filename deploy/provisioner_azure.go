@@ -31,7 +31,11 @@ const (
 	azureDefaultSize = "Standard_B2s"
 	// Default location — --region is optional.
 	azureDefaultRegion = "eastus"
-	azureDefaultImage  = "Ubuntu2204"
+	// Ubuntu 24.04 LTS (noble) — see doDefaultImage. This is the NEWEST Ubuntu with
+	// an `az` image ALIAS: the alias list stops at Ubuntu2404, so 26.04 would need a
+	// raw URN (Canonical:ubuntu-26_04-lts:server:latest). That's the constraint that
+	// pins the whole fleet to 24.04.
+	azureDefaultImage = "Ubuntu2404"
 	// azureAdminUser is the SSH user. Azure rejects "root" (and a list of other
 	// reserved names) as --admin-username.
 	azureAdminUser    = "nuzur"
@@ -61,7 +65,7 @@ func (p *AzureProvisioner) Provision(ctx context.Context, spec Spec) (Provisione
 		return Provisioned{}, err
 	}
 
-	name, err := providerResourceName(spec.Identifier)
+	name, err := specResourceName(spec)
 	if err != nil {
 		return Provisioned{}, err
 	}
@@ -79,6 +83,11 @@ func (p *AzureProvisioner) Provision(ctx context.Context, spec Spec) (Provisione
 		"--name", name, "--location", region); err != nil {
 		return Provisioned{}, fmt.Errorf("creating Azure resource group: %w", err)
 	}
+	// Report as soon as the GROUP exists, which is earlier than any other adapter can
+	// manage: the group is what Destroy deletes, so from here a teardown reaps
+	// whatever the VM create below leaves behind. That create, plus the SSH wait
+	// after it, is several minutes of exposure.
+	reportInstance(spec, InstanceRef{InstanceID: name, Region: region, ResourceName: name})
 
 	ip, err := runCLI(ctx, azureCLI, "vm", "create",
 		"--resource-group", name, "--name", name,
@@ -90,7 +99,7 @@ func (p *AzureProvisioner) Provision(ctx context.Context, spec Spec) (Provisione
 	if err != nil {
 		// The group is already there; leave it so Destroy can still reap whatever
 		// was half-created rather than orphaning it.
-		return Provisioned{}, fmt.Errorf("creating Azure VM (the resource group %q was created — `nuzur destroy` or `az group delete -n %s` will clean it up): %w", name, name, err)
+		return Provisioned{}, fmt.Errorf("creating Azure VM (the resource group %q was created — `nuzur-cli destroy` or `az group delete -n %s` will clean it up): %w", name, name, err)
 	}
 	ip = strings.TrimSpace(ip)
 	if ip == "" {
@@ -102,6 +111,23 @@ func (p *AzureProvisioner) Provision(ctx context.Context, spec Spec) (Provisione
 	}
 	// InstanceID is the RESOURCE GROUP name — see the file comment.
 	return Provisioned{Target: target, InstanceID: name, Region: region}, nil
+}
+
+// FindInstanceByName resolves an Azure resource-group name — which for this
+// adapter IS the instance id (see the file comment). `az group exists` answers
+// true/false without erroring, so this is just that check.
+func (p *AzureProvisioner) FindInstanceByName(ctx context.Context, name, region string) (string, error) {
+	if strings.TrimSpace(name) == "" {
+		return "", nil
+	}
+	out, err := runCLI(ctx, azureCLI, "group", "exists", "--name", name)
+	if err != nil {
+		return "", fmt.Errorf("checking whether Azure resource group %q exists: %w", name, err)
+	}
+	if strings.TrimSpace(out) == "true" {
+		return name, nil
+	}
+	return "", nil
 }
 
 func (p *AzureProvisioner) ConfigureFirewall(ctx context.Context, prov Provisioned, rules []FirewallRule) error {

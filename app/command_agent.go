@@ -51,7 +51,7 @@ func (i *Implementation) AgentPairCommand() cli.Command {
 		Flags: []cli.Flag{
 			cli.BoolFlag{
 				Name:  "force, f",
-				Usage: "re-pair even if this machine is already paired (the previous pairing is NOT revoked; use `nuzur agent unpair` first if you want a clean rotate)",
+				Usage: "re-pair even if this machine is already paired (the previous pairing is NOT revoked; use `nuzur-cli agent unpair` first if you want a clean rotate)",
 			},
 			cli.StringFlag{
 				Name:   "provisioning-token",
@@ -66,8 +66,8 @@ func (i *Implementation) AgentPairCommand() cli.Command {
 			if existing, _ := readExistingPairingUUID(); existing != "" && !c.Bool("force") {
 				return fmt.Errorf(
 					"this machine is already paired (uuid: %s)\n"+
-						"  to rotate credentials cleanly, run: nuzur agent unpair\n"+
-						"  or re-pair while keeping the old row: nuzur agent pair --force",
+						"  to rotate credentials cleanly, run: nuzur-cli agent unpair\n"+
+						"  or re-pair while keeping the old row: nuzur-cli agent pair --force",
 					existing,
 				)
 			}
@@ -85,7 +85,7 @@ func (i *Implementation) AgentPairCommand() cli.Command {
 
 // ensureLocalAgentPaired returns this machine's local agent uuid, pairing it
 // on first use. An existing pairing on disk is reused. This lets connection
-// commands work without a separate `nuzur agent pair` step.
+// commands work without a separate `nuzur-cli agent pair` step.
 func (i *Implementation) ensureLocalAgentPaired() (string, error) {
 	if existing, _ := readExistingPairingUUID(); existing != "" {
 		return existing, nil

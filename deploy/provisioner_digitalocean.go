@@ -17,8 +17,11 @@ const (
 	doDefaultSize = "s-1vcpu-1gb"
 	// Default region — --region is optional; every provider picks a sane default.
 	doDefaultRegion = "nyc3"
-	doDefaultImage  = "ubuntu-22-04-x64"
-	doSSHReadyWait  = 3 * time.Minute
+	// Ubuntu 24.04 LTS (noble), supported to 2029. Not 26.04: it exists here
+	// (ubuntu-26-04-x64) but Azure has no image alias for it, and one uniform default
+	// across providers is worth more than three months of recency. --image overrides.
+	doDefaultImage = "ubuntu-24-04-x64"
+	doSSHReadyWait = 3 * time.Minute
 )
 
 type DigitalOceanProvisioner struct{}
@@ -40,7 +43,7 @@ func (p *DigitalOceanProvisioner) Provision(ctx context.Context, spec Spec) (Pro
 		return Provisioned{}, err
 	}
 
-	name, err := providerResourceName(spec.Identifier)
+	name, err := specResourceName(spec)
 	if err != nil {
 		return Provisioned{}, err
 	}
@@ -56,10 +59,34 @@ func (p *DigitalOceanProvisioner) Provision(ctx context.Context, spec Spec) (Pro
 		return Provisioned{}, fmt.Errorf("could not parse droplet id/ip from doctl output: %q", out)
 	}
 	target := Target{Host: fields[1], User: "root", Port: 22, KeyPath: spec.Target.KeyPath}
+	// The droplet exists and is billing — report it before the SSH wait below.
+	reportInstance(spec, InstanceRef{
+		InstanceID: fields[0], Region: region, Host: fields[1], ResourceName: name,
+	})
 	if err := sshReady(ctx, target, doSSHReadyWait); err != nil {
 		return Provisioned{}, err
 	}
 	return Provisioned{Target: target, InstanceID: fields[0], Region: region}, nil
+}
+
+// FindInstanceByName resolves a droplet name to its id. doctl has no name filter
+// (only --tag-name), so this lists and matches; an empty list exits 0, so "not
+// found" is an empty result rather than an error.
+func (p *DigitalOceanProvisioner) FindInstanceByName(ctx context.Context, name, region string) (string, error) {
+	if strings.TrimSpace(name) == "" {
+		return "", nil
+	}
+	out, err := runCLI(ctx, doCLI, "compute", "droplet", "list", "--format", "ID,Name", "--no-header")
+	if err != nil {
+		return "", fmt.Errorf("listing droplets to find %q: %w", name, err)
+	}
+	for _, line := range strings.Split(out, "\n") {
+		f := strings.Fields(line)
+		if len(f) >= 2 && f[1] == name {
+			return f[0], nil
+		}
+	}
+	return "", nil
 }
 
 // ensureSSHKey returns a droplet-create --ssh-keys value (a key id or

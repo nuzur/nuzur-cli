@@ -13,7 +13,7 @@ import (
 )
 
 // AgentUnpairCommand revokes the local agent registered to this machine on
-// the cloud and wipes the local credentials. After this, `nuzur agent pair`
+// the cloud and wipes the local credentials. After this, `nuzur-cli agent pair`
 // can run cleanly again.
 func (i *Implementation) AgentUnpairCommand() cli.Command {
 	return cli.Command{
@@ -59,7 +59,7 @@ func (i *Implementation) AgentUnpairCommand() cli.Command {
 			}
 
 			removeLocalAgentFiles()
-			fmt.Printf("Unpaired local agent %s. You can now run `nuzur agent pair` again.\n", existing)
+			fmt.Printf("Unpaired local agent %s. You can now run `nuzur-cli agent pair` again.\n", existing)
 			return nil
 		},
 	}

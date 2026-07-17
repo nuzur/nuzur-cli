@@ -30,8 +30,11 @@ const (
 	// which OOMs on 1GB shapes.
 	scalewayDefaultType = "DEV1-S"
 	// Default ZONE — --region is optional and carries a zone for Scaleway.
-	scalewayDefaultZone  = "fr-par-1"
-	scalewayDefaultImage = "ubuntu_jammy"
+	scalewayDefaultZone = "fr-par-1"
+	// Ubuntu 24.04 LTS (noble) — see doDefaultImage. UNVERIFIED against a live
+	// `scw marketplace image list` (needs auth); it follows the codename-label naming
+	// of the ubuntu_jammy value it replaces. Confirm at the first Scaleway E2E.
+	scalewayDefaultImage = "ubuntu_noble"
 	scalewaySSHReadyWait = 3 * time.Minute
 )
 
@@ -56,7 +59,7 @@ func (p *ScalewayProvisioner) Provision(ctx context.Context, spec Spec) (Provisi
 		return Provisioned{}, err
 	}
 
-	name, err := providerResourceName(spec.Identifier)
+	name, err := specResourceName(spec)
 	if err != nil {
 		return Provisioned{}, err
 	}
@@ -72,10 +75,37 @@ func (p *ScalewayProvisioner) Provision(ctx context.Context, spec Spec) (Provisi
 		return Provisioned{}, fmt.Errorf("could not parse server id/ip from scw output: %q", out)
 	}
 	target := Target{Host: fields[1], User: "root", Port: 22, KeyPath: spec.Target.KeyPath}
+	// The server exists and is billing — report it before the SSH wait below.
+	reportInstance(spec, InstanceRef{
+		InstanceID: fields[0], Region: zone, Host: fields[1], ResourceName: name,
+	})
 	if err := sshReady(ctx, target, scalewaySSHReadyWait); err != nil {
 		return Provisioned{}, err
 	}
 	return Provisioned{Target: target, InstanceID: fields[0], Region: zone}, nil
+}
+
+// FindInstanceByName resolves a Scaleway server name to its id. `name=` is a
+// PREFIX filter server-side ("server1" also matches "server100"), so the exact
+// match has to happen here — deleting a VM whose name merely starts with ours
+// would be destroying someone else's box.
+func (p *ScalewayProvisioner) FindInstanceByName(ctx context.Context, name, region string) (string, error) {
+	if strings.TrimSpace(name) == "" {
+		return "", nil
+	}
+	zone := firstNonEmptyStr(region, scalewayDefaultZone)
+	out, err := runCLI(ctx, scalewayCLI, "instance", "server", "list",
+		"zone="+zone, "name="+name, "-o", "template={{.ID}} {{.Name}}")
+	if err != nil {
+		return "", fmt.Errorf("listing Scaleway servers to find %q: %w", name, err)
+	}
+	for _, line := range strings.Split(out, "\n") {
+		f := strings.Fields(line)
+		if len(f) >= 2 && f[1] == name {
+			return f[0], nil
+		}
+	}
+	return "", nil
 }
 
 // ensureAccountSSHKey verifies the account has at least one SSH key, since that's

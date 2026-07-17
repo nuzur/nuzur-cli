@@ -25,7 +25,7 @@ const (
 	linodeDefaultType = "g6-standard-1"
 	// Default region — --region is optional.
 	linodeDefaultRegion = "us-east"
-	linodeDefaultImage  = "linode/ubuntu22.04"
+	linodeDefaultImage  = "linode/ubuntu24.04" // Ubuntu 24.04 LTS (noble) — see doDefaultImage
 	linodeSSHReadyWait  = 3 * time.Minute
 )
 
@@ -34,7 +34,7 @@ type LinodeProvisioner struct{}
 func NewLinodeProvisioner() *LinodeProvisioner { return &LinodeProvisioner{} }
 
 func (p *LinodeProvisioner) Provision(ctx context.Context, spec Spec) (Provisioned, error) {
-	if err := ensureProviderCLI(ctx, linodeCLI, []string{"regions", "list", "--text", "--no-headers"},
+	if err := ensureProviderCLI(ctx, linodeCLI, []string{"account", "view", "--text", "--no-headers"},
 		"install it from https://techdocs.akamai.com/cloud-computing/docs/install-and-configure-the-cli and run `linode-cli configure`"); err != nil {
 		return Provisioned{}, err
 	}
@@ -53,7 +53,7 @@ func (p *LinodeProvisioner) Provision(ctx context.Context, spec Spec) (Provision
 		return Provisioned{}, err
 	}
 
-	name, err := providerResourceName(spec.Identifier)
+	name, err := specResourceName(spec)
 	if err != nil {
 		return Provisioned{}, err
 	}
@@ -73,6 +73,12 @@ func (p *LinodeProvisioner) Provision(ctx context.Context, spec Spec) (Provision
 		return Provisioned{}, fmt.Errorf("could not parse linode id/ip from linode-cli output: %q", out)
 	}
 	target := Target{Host: fields[1], User: "root", Port: 22, KeyPath: spec.Target.KeyPath}
+	// The linode exists and is billing from here on. Report it BEFORE the SSH wait
+	// below, which can take minutes — dying in that gap used to strand the VM with
+	// nothing on disk pointing at it.
+	reportInstance(spec, InstanceRef{
+		InstanceID: fields[0], Region: region, Host: fields[1], ResourceName: name,
+	})
 	if err := sshReady(ctx, target, linodeSSHReadyWait); err != nil {
 		return Provisioned{}, err
 	}
@@ -143,6 +149,29 @@ func (p *LinodeProvisioner) Destroy(ctx context.Context, prov Provisioned) error
 		return fmt.Errorf("deleting linode %s: %w", prov.InstanceID, err)
 	}
 	return nil
+}
+
+// FindInstanceByName resolves a linode label to its id. Linode filters server-side
+// on --label and exits 0 with no output when nothing matches, so an empty result is
+// "no such linode", not an error.
+func (p *LinodeProvisioner) FindInstanceByName(ctx context.Context, name, region string) (string, error) {
+	if strings.TrimSpace(name) == "" {
+		return "", nil
+	}
+	out, err := runCLI(ctx, linodeCLI, "linodes", "list",
+		"--label", name, "--text", "--no-headers", "--format", "id,label")
+	if err != nil {
+		return "", fmt.Errorf("looking up linode %q: %w", name, err)
+	}
+	for _, line := range strings.Split(out, "\n") {
+		f := strings.Fields(line)
+		// Match the label exactly: --label is a filter, but never delete something
+		// whose name isn't the one we minted.
+		if len(f) >= 2 && f[1] == name {
+			return f[0], nil
+		}
+	}
+	return "", nil
 }
 
 // findFirewallID resolves a firewall label to its id, or "" if not found.

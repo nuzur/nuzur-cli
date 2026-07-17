@@ -1,4 +1,4 @@
-// Package deploy implements `nuzur deploy` / `nuzur destroy`: it provisions a
+// Package deploy implements `nuzur-cli deploy` / `nuzur-cli destroy`: it provisions a
 // Linux server, self-hosts the project's database on it (localhost-only), runs
 // the generated API, and pairs the box back to nuzur via an outbound local
 // agent — so the database is fully managed in nuzur with no inbound DB ports.
@@ -77,6 +77,30 @@ type Spec struct {
 	// SourceDir is the local directory of generated app source (from the
 	// go-code-gen extension) that gets copied to the box and built there.
 	SourceDir string
+	// ResourceName is the provider-side name for everything this deploy creates.
+	// The CALLER mints it (providerResourceName) rather than the adapter, so it can
+	// be written to local state BEFORE the create call: a VM whose id we never
+	// learned is still findable — and so deletable — by name. Adapters given an
+	// empty value mint their own, so direct and test callers still work.
+	ResourceName string
+	// OnInstanceCreated, when set, is called by a managed provisioner the instant the
+	// provider acknowledges the VM — BEFORE waiting for it to become reachable, which
+	// takes minutes. That wait is the bulk of the window in which a killed deploy
+	// would otherwise strand a running, billing VM that nothing on disk knows about,
+	// so this is what makes the VM recoverable. Implementations must be quick and
+	// must not error the deploy.
+	OnInstanceCreated func(InstanceRef)
+}
+
+// InstanceRef is a VM the provider has just acknowledged. It is reported the moment
+// it exists — before it is reachable — so the caller can persist it while the
+// deploy is still in flight. Host may be empty for a provider that assigns the
+// address asynchronously (Vultr); the id and name are always enough to delete it.
+type InstanceRef struct {
+	InstanceID   string
+	Region       string
+	Host         string
+	ResourceName string
 }
 
 // Provisioned is the result of Provision: a reachable Target plus the identifiers
@@ -113,4 +137,10 @@ type Provisioner interface {
 	// Destroy tears down provider-created infrastructure. BYO-SSH is a no-op
 	// (the user owns the box); a cloud provider deletes the VM by instance id.
 	Destroy(ctx context.Context, p Provisioned) error
+	// FindInstanceByName resolves a provider-side resource name to an instance id,
+	// returning "" (and no error) when nothing matches. This is the last-resort
+	// recovery path: a deploy killed DURING the create call leaves a VM whose id was
+	// never returned to us, and the name — minted and persisted before the call — is
+	// then the only handle on it. BYO-SSH returns "" (nothing is ours to find).
+	FindInstanceByName(ctx context.Context, name, region string) (string, error)
 }

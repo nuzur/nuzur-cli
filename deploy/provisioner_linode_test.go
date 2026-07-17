@@ -62,10 +62,13 @@ func TestLinodeProvision(t *testing.T) {
 		t.Errorf("Region = %q, want us-east", prov.Region)
 	}
 
-	// The auth/presence probe actually ran (a typo'd auth argv would otherwise
-	// sail through the stub unnoticed).
-	if findCall(*calls, "linode-cli", "regions", "list") == nil {
-		t.Errorf("expected the linode-cli auth check; calls: %+v", *calls)
+	// The auth probe must hit an endpoint that actually REQUIRES a token:
+	// `regions list` is public and would pass on an unauthenticated CLI.
+	if findCall(*calls, "linode-cli", "account", "view") == nil {
+		t.Errorf("expected an auth-requiring linode-cli check; calls: %+v", *calls)
+	}
+	if findCall(*calls, "linode-cli", "regions", "list") != nil {
+		t.Errorf("regions list is a PUBLIC endpoint — useless as an auth probe; calls: %+v", *calls)
 	}
 	// Create carries the defaults and the INLINE public key (Linode registers no key).
 	c := findCall(*calls, "linodes", "create")

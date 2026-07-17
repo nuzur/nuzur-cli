@@ -17,7 +17,7 @@ import (
 //
 //	web/CLI  →  connection-manager  →  LocalAgentChannel  →  agent  →  local DB
 //
-// Requires `nuzur agent start` to be running in another shell.
+// Requires `nuzur-cli agent start` to be running in another shell.
 func (i *Implementation) AgentSelfTestCommand() cli.Command {
 	return cli.Command{
 		Name:  "self-test",
@@ -41,7 +41,7 @@ func (i *Implementation) AgentSelfTestCommand() cli.Command {
 
 			agentUUIDBytes, err := os.ReadFile(files.LocalAgentUUIDFilePath())
 			if err != nil {
-				return fmt.Errorf("agent not paired: %w (run `nuzur agent pair` first)", err)
+				return fmt.Errorf("agent not paired: %w (run `nuzur-cli agent pair` first)", err)
 			}
 			agentUUID := string(agentUUIDBytes)
 

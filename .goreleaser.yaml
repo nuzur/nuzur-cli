@@ -194,10 +194,12 @@ brews:
     # Additional install instructions so you don't need to override `install`.
     #
     # Template: allowed
-    # extra_install: |
-    #   bash_completion.install "completions/foo.bash" => "foo"
-    #   man1.install "man/foo.1.gz"
-    #   # ...
+    #
+    # `nuzur` is a convenience alias for people typing the command; `nuzur-cli` stays
+    # the real binary and the name every doc, message and URL uses (it's also the only
+    # one Scoop and raw-archive installs get, since neither can ship a symlink).
+    extra_install: |
+      bin.install_symlink bin/"nuzur-cli" => "nuzur"
 
     # Custom post_install script for brew.
     # Could be used to do any additional work after the "install" script

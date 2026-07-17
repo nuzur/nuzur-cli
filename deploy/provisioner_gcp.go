@@ -28,8 +28,11 @@ const (
 	// on 1GB shapes like e2-micro.
 	gcpDefaultMachineType = "e2-small"
 	// Default ZONE — --region is optional and carries a zone for GCP.
-	gcpDefaultZone        = "us-central1-a"
-	gcpDefaultImageFamily = "ubuntu-2204-lts"
+	gcpDefaultZone = "us-central1-a"
+	// Ubuntu 24.04 LTS (noble) — see doDefaultImage. UNVERIFIED against a live
+	// `gcloud compute images list --project ubuntu-os-cloud` (needs auth); it follows
+	// the family naming of the 2204 value it replaces. Confirm at the first GCP E2E.
+	gcpDefaultImageFamily = "ubuntu-2404-lts"
 	gcpImageProject       = "ubuntu-os-cloud"
 	gcpSSHReadyWait       = 3 * time.Minute
 )
@@ -61,7 +64,7 @@ func (p *GCPProvisioner) Provision(ctx context.Context, spec Spec) (Provisioned,
 	}
 
 	// The name doubles as the network tag the firewall rule targets.
-	name, err := providerResourceName(spec.Identifier)
+	name, err := specResourceName(spec)
 	if err != nil {
 		return Provisioned{}, err
 	}
@@ -81,11 +84,37 @@ func (p *GCPProvisioner) Provision(ctx context.Context, spec Spec) (Provisioned,
 		return Provisioned{}, fmt.Errorf("could not parse instance name/ip from gcloud output: %q", out)
 	}
 	target := Target{Host: fields[1], User: "root", Port: 22, KeyPath: spec.Target.KeyPath}
+	// The instance exists and is billing — report it before the SSH wait below.
+	// InstanceID is the instance NAME — see the file comment.
+	reportInstance(spec, InstanceRef{
+		InstanceID: fields[0], Region: zone, Host: fields[1], ResourceName: name,
+	})
 	if err := sshReady(ctx, target, gcpSSHReadyWait); err != nil {
 		return Provisioned{}, err
 	}
 	// InstanceID is the instance NAME — see the file comment.
 	return Provisioned{Target: target, InstanceID: fields[0], Region: zone}, nil
+}
+
+// FindInstanceByName resolves a GCP instance name — which for this adapter IS the
+// instance id (see the file comment) — confirming it exists in the zone. gcloud
+// exits 0 with no output when the filter matches nothing.
+func (p *GCPProvisioner) FindInstanceByName(ctx context.Context, name, region string) (string, error) {
+	if strings.TrimSpace(name) == "" {
+		return "", nil
+	}
+	zone := firstNonEmptyStr(region, gcpDefaultZone)
+	out, err := runCLI(ctx, gcpCLI, "compute", "instances", "list",
+		"--filter", "name="+name, "--zones", zone, "--format", "value(name)")
+	if err != nil {
+		return "", fmt.Errorf("listing GCP instances to find %q: %w", name, err)
+	}
+	for _, line := range strings.Split(out, "\n") {
+		if strings.TrimSpace(line) == name {
+			return name, nil
+		}
+	}
+	return "", nil
 }
 
 // ensureProject fails early and actionably when gcloud has no default project.

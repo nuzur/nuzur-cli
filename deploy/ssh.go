@@ -115,22 +115,59 @@ func (r *SSHRunner) Capture(ctx context.Context, command string) (string, error)
 	return strings.TrimSpace(out.String()), nil
 }
 
-// CopyDir copies a local directory to remotePath on the host (recursive scp).
+// CopyDir copies localDir's CONTENTS to remotePath on the host, by streaming a
+// gzipped tar over ssh.
+//
+// This used to be `scp -r`, which transfers each file in its own SFTP
+// round-trip. A generated app is ~650 small source files, so the copy was
+// latency-bound rather than bandwidth-bound — on a transatlantic link it crawled
+// at a few KB/s and took many minutes to move ~4MB. One tar stream is a single
+// round-trip, and Go source gzips ~5-10x, so the same payload ships in seconds.
+//
+// `tar -C localDir .` (contents, not the directory itself) matches the old
+// scp -r semantics: the caller passes a non-existent remotePath and expects it to
+// become a copy of localDir.
 func (r *SSHRunner) CopyDir(ctx context.Context, localDir, remotePath string) error {
-	args := []string{"-r", "-P", strconv.Itoa(r.Target.Port)}
-	if r.Target.KeyPath != "" {
-		args = append(args, "-i", r.Target.KeyPath)
-	}
-	args = append(args, r.commonOpts()...)
-	args = append(args, localDir, fmt.Sprintf("%s:%s", r.userHost(), remotePath))
+	quoted := shellSingleQuote(remotePath)
+	remote := fmt.Sprintf("mkdir -p %s && tar xzf - -C %s", quoted, quoted)
 
-	cmd := exec.CommandContext(ctx, "scp", args...)
-	cmd.Stdout = r.stderr()
-	cmd.Stderr = r.stderr()
-	if err := cmd.Run(); err != nil {
-		return fmt.Errorf("scp %s -> %s failed: %w", localDir, remotePath, err)
+	sshCmd := exec.CommandContext(ctx, "ssh", r.sshArgs(remote)...)
+	tarCmd := exec.CommandContext(ctx, "tar", "czf", "-", "-C", localDir, ".")
+	// macOS tar encodes extended attributes as AppleDouble "._*" entries, which
+	// GNU tar on the box extracts as REAL files — 741 of them for a generated app,
+	// straight into the docker build context. COPYFILE_DISABLE stops bsdtar
+	// emitting them; GNU tar ignores the variable, so this is safe everywhere.
+	tarCmd.Env = append(os.Environ(), "COPYFILE_DISABLE=1")
+
+	stdin, err := sshCmd.StdinPipe()
+	if err != nil {
+		return fmt.Errorf("piping tar to ssh: %w", err)
+	}
+	tarCmd.Stdout = stdin
+	tarCmd.Stderr = r.stderr()
+	sshCmd.Stdout = r.stderr()
+	sshCmd.Stderr = r.stderr()
+
+	if err := sshCmd.Start(); err != nil {
+		stdin.Close()
+		return fmt.Errorf("starting ssh for the source copy: %w", err)
+	}
+	// tar writes into ssh's stdin; closing it afterwards is what EOFs the remote
+	// tar, so it must happen before we wait on ssh.
+	tarErr := tarCmd.Run()
+	stdin.Close()
+	if waitErr := sshCmd.Wait(); waitErr != nil {
+		return fmt.Errorf("copying %s -> %s failed: %w", localDir, remotePath, waitErr)
+	}
+	if tarErr != nil {
+		return fmt.Errorf("archiving %s failed: %w", localDir, tarErr)
 	}
 	return nil
+}
+
+// shellSingleQuote makes s safe as a single-quoted POSIX shell word.
+func shellSingleQuote(s string) string {
+	return "'" + strings.ReplaceAll(s, "'", `'\''`) + "'"
 }
 
 // ─────────────────────────────────────────────
@@ -168,3 +205,9 @@ func (p *SSHProvisioner) ConfigureFirewall(ctx context.Context, prov Provisioned
 // Destroy is a no-op for BYO-SSH: the user owns the box. Agent revocation and
 // local-state cleanup are handled by the destroy command, not the provisioner.
 func (p *SSHProvisioner) Destroy(ctx context.Context, prov Provisioned) error { return nil }
+
+// FindInstanceByName finds nothing for BYO-SSH: nuzur created no instance, so
+// there is never one of ours to recover.
+func (p *SSHProvisioner) FindInstanceByName(ctx context.Context, name, region string) (string, error) {
+	return "", nil
+}

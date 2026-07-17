@@ -20,7 +20,7 @@ import (
 func (i *Implementation) AgentStartCommand() cli.Command {
 	return cli.Command{
 		Name:  "start",
-		Usage: i.localize.Localize("agent_start_desc", "Start the local agent daemon (long-running). Requires `nuzur agent pair` first."),
+		Usage: i.localize.Localize("agent_start_desc", "Start the local agent daemon (long-running). Requires `nuzur-cli agent pair` first."),
 		Flags: []cli.Flag{
 			cli.StringFlag{
 				Name:   "address",
@@ -61,7 +61,7 @@ func (i *Implementation) AgentStartCommand() cli.Command {
 
 			// Fallback DSN was the phase-2 way of giving the daemon a DB to
 			// talk to before the connection registry existed. With registered
-			// connections (`nuzur agent connection add`) it's optional. We
+			// connections (`nuzur-cli agent connection add`) it's optional. We
 			// only prompt for it when there's no registry AND no explicit
 			// flag/env value — otherwise we silently skip it.
 			driver, dsn, err := resolveFallbackDSN(c.String("driver"), c.String("dsn"))

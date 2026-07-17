@@ -58,7 +58,7 @@ func (p *dbPool) Get(connUUID string) (*sqlx.DB, error) {
 		// cleared a keychain entry.
 		if entry.DSN == "" {
 			return nil, fmt.Errorf(
-				"connection %q (%s) has no DSN in the OS keychain — re-register it with `nuzur agent connection remove %s` followed by `nuzur agent connection add %s`",
+				"connection %q (%s) has no DSN in the OS keychain — re-register it with `nuzur-cli agent connection remove %s` followed by `nuzur-cli agent connection add %s`",
 				entry.Name, entry.UUID, entry.Name, entry.Name)
 		}
 		h, err := openLocalDB(entry.Driver, entry.DSN)
@@ -85,7 +85,7 @@ func (p *dbPool) Get(connUUID string) (*sqlx.DB, error) {
 		return p.fallback, nil
 	}
 
-	return nil, fmt.Errorf("no local connection registered for uuid %s (run `nuzur agent connection add` or set NUZUR_AGENT_DSN)", connUUID)
+	return nil, fmt.Errorf("no local connection registered for uuid %s (run `nuzur-cli agent connection add` or set NUZUR_AGENT_DSN)", connUUID)
 }
 
 // Close closes every cached handle, including the fallback. Idempotent.

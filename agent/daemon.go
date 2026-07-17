@@ -76,7 +76,7 @@ const (
 func Run(ctx context.Context, opts DaemonOptions) error {
 	agentUUID, agentToken, err := loadCredentials()
 	if err != nil {
-		return fmt.Errorf("agent not paired: %w (run `nuzur agent pair` first)", err)
+		return fmt.Errorf("agent not paired: %w (run `nuzur-cli agent pair` first)", err)
 	}
 
 	cm, err := cmclient.New(cmclient.Params{
@@ -105,7 +105,7 @@ func Run(ctx context.Context, opts DaemonOptions) error {
 		log.Printf("warning: failed to open fallback DSN (%s): %v — registered connections will still work", driver, err)
 	}
 	if fallback == nil && len(registry.Entries) == 0 {
-		log.Printf("warning: no registered connections and no NUZUR_AGENT_DSN; RunQuery requests will fail until you run `nuzur agent connection add` or pass --dsn.")
+		log.Printf("warning: no registered connections and no NUZUR_AGENT_DSN; RunQuery requests will fail until you run `nuzur-cli agent connection add` or pass --dsn.")
 	}
 
 	pool := newDBPool(registry, fallback)

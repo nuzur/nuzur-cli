@@ -54,7 +54,7 @@ func (i *Implementation) AgentStatusCommand() cli.Command {
 				fmt.Printf("  uuid:  %s\n", uuid)
 				fmt.Printf("  creds: %s\n", files.LocalAgentUUIDFilePath())
 			} else {
-				fmt.Println("  not paired (run `nuzur agent pair`)")
+				fmt.Println("  not paired (run `nuzur-cli agent pair`)")
 			}
 
 			// DSN/driver state
@@ -62,7 +62,7 @@ func (i *Implementation) AgentStatusCommand() cli.Command {
 			dsn, _ := readTrimmedFile(files.LocalAgentDSNFilePath())
 			fmt.Printf("\nDefault DB (fallback for queries without a registered connection)\n")
 			if driver == "" && dsn == "" {
-				fmt.Println("  not configured (will prompt on `nuzur agent start`)")
+				fmt.Println("  not configured (will prompt on `nuzur-cli agent start`)")
 			} else {
 				fmt.Printf("  driver: %s\n", orPlaceholder(driver, "(unset)"))
 				fmt.Printf("  dsn:    %s\n", maskDSN(dsn))
@@ -76,7 +76,7 @@ func (i *Implementation) AgentStatusCommand() cli.Command {
 			} else if _, err := os.Stat(path); err == nil {
 				fmt.Printf("  status:   installed\n  unit:     %s\n", path)
 			} else {
-				fmt.Printf("  status:   not installed (run `nuzur agent install`)\n  expected: %s\n", path)
+				fmt.Printf("  status:   not installed (run `nuzur-cli agent install`)\n  expected: %s\n", path)
 			}
 
 			return nil
@@ -84,7 +84,7 @@ func (i *Implementation) AgentStatusCommand() cli.Command {
 	}
 }
 
-// serviceUnitPath returns the platform service-file path that `nuzur agent
+// serviceUnitPath returns the platform service-file path that `nuzur-cli agent
 // install` would create, or ("", false) on unsupported platforms.
 func serviceUnitPath() (string, bool) {
 	home, err := os.UserHomeDir()

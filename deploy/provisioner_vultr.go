@@ -30,10 +30,11 @@ const (
 	vultrDefaultPlan = "vc2-1c-2gb"
 	// Default region — --region is optional.
 	vultrDefaultRegion = "ewr"
-	// vultrDefaultOS is Vultr's numeric OS id for Ubuntu 22.04 x64. Vultr addresses
-	// images by id, not name — run `vultr-cli os list` if this ever drifts, and
-	// pass the id via --image.
-	vultrDefaultOS    = "1743"
+	// vultrDefaultOS is Vultr's numeric OS id for Ubuntu 24.04 LTS x64 (noble) — see
+	// doDefaultImage. Vultr addresses images by id, not name, so this is the one
+	// default that says nothing about what it is: run `vultr-cli os list` if it ever
+	// drifts, and pass the id via --image. (22.04 = 1743, 26.04 = 2760.)
+	vultrDefaultOS    = "2284"
 	vultrKeyName      = "nuzur-deploy"
 	vultrSSHReadyWait = 3 * time.Minute
 	vultrIPWait       = 2 * time.Minute
@@ -51,6 +52,13 @@ func NewVultrProvisioner() *VultrProvisioner { return &VultrProvisioner{} }
 type vultrInstance struct {
 	ID     string `json:"id"`
 	MainIP string `json:"main_ip"`
+	Label  string `json:"label"`
+}
+
+// vultrInstanceList is `vultr-cli instance list -o json`. Vultr has no server-side
+// label filter, so the match happens here.
+type vultrInstanceList struct {
+	Instances []vultrInstance `json:"instances"`
 }
 
 type vultrInstanceEnvelope struct {
@@ -84,7 +92,7 @@ func (p *VultrProvisioner) Provision(ctx context.Context, spec Spec) (Provisione
 		return Provisioned{}, err
 	}
 
-	name, err := providerResourceName(spec.Identifier)
+	name, err := specResourceName(spec)
 	if err != nil {
 		return Provisioned{}, err
 	}
@@ -94,7 +102,7 @@ func (p *VultrProvisioner) Provision(ctx context.Context, spec Spec) (Provisione
 		"--ssh-keys", keyID, "-o", "json")
 	if err != nil {
 		if strings.Contains(err.Error(), "os") || strings.Contains(err.Error(), "image") {
-			return Provisioned{}, fmt.Errorf("creating Vultr instance (Vultr addresses images by numeric id — run `vultr-cli os list` and pass it via --image; the default is %s = Ubuntu 22.04): %w", vultrDefaultOS, err)
+			return Provisioned{}, fmt.Errorf("creating Vultr instance (Vultr addresses images by numeric id — run `vultr-cli os list` and pass it via --image; the default is %s = Ubuntu 24.04): %w", vultrDefaultOS, err)
 		}
 		return Provisioned{}, fmt.Errorf("creating Vultr instance: %w", err)
 	}
@@ -102,6 +110,14 @@ func (p *VultrProvisioner) Provision(ctx context.Context, spec Spec) (Provisione
 	if err != nil {
 		return Provisioned{}, err
 	}
+	// The instance exists and is billing — report it before the IP poll and SSH wait
+	// below, which together can run for minutes. Host is left empty unless Vultr has
+	// already assigned a real address (a fresh instance reports 0.0.0.0).
+	ref := InstanceRef{InstanceID: inst.ID, Region: region, ResourceName: name}
+	if vultrIPAssigned(inst.MainIP) {
+		ref.Host = inst.MainIP
+	}
+	reportInstance(spec, ref)
 
 	ip, err := p.waitForIP(ctx, inst)
 	if err != nil {
@@ -252,6 +268,28 @@ func (p *VultrProvisioner) ConfigureFirewall(ctx context.Context, prov Provision
 		return fmt.Errorf("attaching Vultr firewall group to instance %s: %w", prov.InstanceID, err)
 	}
 	return nil
+}
+
+// FindInstanceByName resolves a Vultr label to its instance id. Vultr has no
+// server-side label filter, so this lists and matches.
+func (p *VultrProvisioner) FindInstanceByName(ctx context.Context, name, region string) (string, error) {
+	if strings.TrimSpace(name) == "" {
+		return "", nil
+	}
+	out, err := runCLI(ctx, vultrCLI, "instance", "list", "-o", "json")
+	if err != nil {
+		return "", fmt.Errorf("listing Vultr instances to find %q: %w", name, err)
+	}
+	var list vultrInstanceList
+	if err := json.Unmarshal([]byte(out), &list); err != nil {
+		return "", fmt.Errorf("parsing the Vultr instance list: %w", err)
+	}
+	for _, inst := range list.Instances {
+		if inst.Label == name {
+			return inst.ID, nil
+		}
+	}
+	return "", nil
 }
 
 func (p *VultrProvisioner) Destroy(ctx context.Context, prov Provisioned) error {
