@@ -74,7 +74,7 @@ func TestLinodeProvision(t *testing.T) {
 	}
 	full := joined(c.args)
 	for _, want := range []string{
-		"--label nuzur-sfapi", "--region us-east",
+		"--label nuzur-sfapi-abc123", "--region us-east",
 		"--type " + linodeDefaultType, "--image " + linodeDefaultImage,
 		"--authorized_keys", "--root_pass",
 		"--format id,ipv4",

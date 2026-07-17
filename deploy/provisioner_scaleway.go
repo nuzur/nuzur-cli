@@ -55,7 +55,10 @@ func (p *ScalewayProvisioner) Provision(ctx context.Context, spec Spec) (Provisi
 		return Provisioned{}, err
 	}
 
-	name := "nuzur-" + spec.Identifier
+	name, err := providerResourceName(spec.Identifier)
+	if err != nil {
+		return Provisioned{}, err
+	}
 	out, err := runCLI(ctx, scalewayCLI, "instance", "server", "create",
 		"name="+name, "type="+serverType, "image="+image,
 		"zone="+cfg.Region, "ip=new",

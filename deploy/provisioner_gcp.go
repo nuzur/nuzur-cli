@@ -60,7 +60,10 @@ func (p *GCPProvisioner) Provision(ctx context.Context, spec Spec) (Provisioned,
 	}
 
 	// The name doubles as the network tag the firewall rule targets.
-	name := "nuzur-" + spec.Identifier
+	name, err := providerResourceName(spec.Identifier)
+	if err != nil {
+		return Provisioned{}, err
+	}
 	out, err := runCLI(ctx, gcpCLI, "compute", "instances", "create", name,
 		"--zone", cfg.Region,
 		"--machine-type", machineType,

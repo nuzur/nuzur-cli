@@ -34,7 +34,7 @@ type BootstrapParams struct {
 	DBDSN      string // external only: the raw DSN used for the agent connection
 	// DBSchema is the agent connection's default schema — set for Postgres (a
 	// namespace like `public`), empty for MySQL where the database is the schema.
-	DBSchema string
+	DBSchema    string
 	GRPCEnabled bool
 	// JWTAuth means the generated app uses the JWT auth server, which reads its
 	// signing key from config (auth.jwt.key). The generated base.yaml ships a

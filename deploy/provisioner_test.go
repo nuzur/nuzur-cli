@@ -20,6 +20,12 @@ type cliCall struct {
 // wait happens). Everything is restored via t.Cleanup.
 func stubCLI(t *testing.T, handler func(name string, args []string) (string, error)) *[]cliCall {
 	t.Helper()
+	// Pin the resource-name suffix so generated names are assertable. Real names
+	// get a random tail (see providerResourceName) — that randomness is what stops
+	// a "nuzur-<identifier>" collision with the user's own resources.
+	origSuffix := providerNameSuffix
+	providerNameSuffix = func() (string, error) { return "abc123", nil }
+	t.Cleanup(func() { providerNameSuffix = origSuffix })
 	var calls []cliCall
 	origCLI, origLook, origReady := cliRunner, lookPath, sshReady
 	cliRunner = func(ctx context.Context, name string, args ...string) (string, error) {

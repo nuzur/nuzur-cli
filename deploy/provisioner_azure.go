@@ -61,7 +61,19 @@ func (p *AzureProvisioner) Provision(ctx context.Context, spec Spec) (Provisione
 		return Provisioned{}, err
 	}
 
-	name := "nuzur-" + spec.Identifier
+	name, err := providerResourceName(spec.Identifier)
+	if err != nil {
+		return Provisioned{}, err
+	}
+	// Refuse to touch a group we didn't just name. `az group create` is an
+	// idempotent ARM PUT: on an existing group it SUCCEEDS and returns it — so
+	// without this guard a name collision would silently adopt the user's group,
+	// and Destroy (which deletes the whole group) would take their resources with
+	// it. providerResourceName's random suffix already makes this near-impossible;
+	// this is the belt to that braces, because the failure mode is data loss.
+	if exists, _ := runCLI(ctx, azureCLI, "group", "exists", "--name", name); strings.TrimSpace(exists) == "true" {
+		return Provisioned{}, fmt.Errorf("azure resource group %q already exists — refusing to deploy into a group nuzur didn't create (destroy deletes the whole group). Re-run to get a fresh name, or delete it first", name)
+	}
 	// The resource group is the unit of cleanup — see the file comment.
 	if _, err := runCLI(ctx, azureCLI, "group", "create",
 		"--name", name, "--location", cfg.Region); err != nil {

@@ -44,7 +44,10 @@ func (p *HetznerProvisioner) Provision(ctx context.Context, spec Spec) (Provisio
 		return Provisioned{}, err
 	}
 
-	name := "nuzur-" + spec.Identifier
+	name, err := providerResourceName(spec.Identifier)
+	if err != nil {
+		return Provisioned{}, err
+	}
 	// hcloud waits for the create+start actions before returning.
 	if _, err := runCLI(ctx, hetznerCLI, "server", "create",
 		"--name", name, "--type", serverType, "--image", image,

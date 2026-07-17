@@ -179,7 +179,7 @@ func TestRenderBootstrap_ExternalDB(t *testing.T) {
 		Identifier: "pg", DBEngine: DBPostgres, DBName: "shop", DBUser: "app",
 		ExternalDB: true, DBHost: "pg.example.com", DBPort: "5432", DBPassword: "s",
 		DBParams: "sslmode=require", DBDSN: "postgres://app:s@pg.example.com:5432/shop?sslmode=require",
-		DBSchema: "public", // Postgres schema/namespace, distinct from the database
+		DBSchema:     "public", // Postgres schema/namespace, distinct from the database
 		RemoteSrcDir: "/src", ProvisioningToken: "t", ConnUUID: "c", ConnName: "pg-db",
 	})
 	if err != nil {

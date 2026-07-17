@@ -84,7 +84,10 @@ func (p *VultrProvisioner) Provision(ctx context.Context, spec Spec) (Provisione
 		return Provisioned{}, err
 	}
 
-	name := "nuzur-" + spec.Identifier
+	name, err := providerResourceName(spec.Identifier)
+	if err != nil {
+		return Provisioned{}, err
+	}
 	out, err := runCLI(ctx, vultrCLI, "instance", "create",
 		"--region", cfg.Region, "--plan", plan, "--os", os,
 		"--host", name, "--label", name,

@@ -168,7 +168,7 @@ func TestScalewayProvision(t *testing.T) {
 	}
 	full := joined(c.args)
 	// scw takes key=value args, not --flags.
-	for _, want := range []string{"name=nuzur-sfapi", "type=" + scalewayDefaultType, "image=" + scalewayDefaultImage, "zone=fr-par-1", "ip=new"} {
+	for _, want := range []string{"name=nuzur-sfapi-abc123", "type=" + scalewayDefaultType, "image=" + scalewayDefaultImage, "zone=fr-par-1", "ip=new"} {
 		if !strings.Contains(full, want) {
 			t.Errorf("create args missing %q; got: %s", want, full)
 		}

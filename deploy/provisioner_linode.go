@@ -53,7 +53,10 @@ func (p *LinodeProvisioner) Provision(ctx context.Context, spec Spec) (Provision
 		return Provisioned{}, err
 	}
 
-	name := "nuzur-" + spec.Identifier
+	name, err := providerResourceName(spec.Identifier)
+	if err != nil {
+		return Provisioned{}, err
+	}
 	out, err := runCLI(ctx, linodeCLI, "linodes", "create",
 		"--label", name, "--region", cfg.Region,
 		"--type", linodeType, "--image", image,

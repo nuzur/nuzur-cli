@@ -40,7 +40,10 @@ func (p *DigitalOceanProvisioner) Provision(ctx context.Context, spec Spec) (Pro
 		return Provisioned{}, err
 	}
 
-	name := "nuzur-" + spec.Identifier
+	name, err := providerResourceName(spec.Identifier)
+	if err != nil {
+		return Provisioned{}, err
+	}
 	out, err := runCLI(ctx, doCLI, "compute", "droplet", "create", name,
 		"--region", cfg.Region, "--size", size, "--image", image,
 		"--ssh-keys", sshKey, "--wait",

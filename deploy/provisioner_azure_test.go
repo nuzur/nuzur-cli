@@ -44,8 +44,8 @@ func TestAzureProvision(t *testing.T) {
 		t.Errorf("Target = %+v, want 20.51.1.9:22", prov.Target)
 	}
 	// InstanceID is the RESOURCE GROUP — that's what Destroy deletes.
-	if prov.InstanceID != "nuzur-sfapi" {
-		t.Errorf("InstanceID = %q, want the resource group nuzur-sfapi", prov.InstanceID)
+	if prov.InstanceID != "nuzur-sfapi-abc123" {
+		t.Errorf("InstanceID = %q, want the resource group nuzur-sfapi-abc123", prov.InstanceID)
 	}
 
 	if findCall(*calls, "az", "account", "show") == nil {
@@ -61,7 +61,7 @@ func TestAzureProvision(t *testing.T) {
 	}
 	full := joined(v.args)
 	for _, want := range []string{
-		"--resource-group nuzur-sfapi", "--name nuzur-sfapi",
+		"--resource-group nuzur-sfapi-abc123", "--name nuzur-sfapi-abc123",
 		"--image " + azureDefaultImage, "--size " + azureDefaultSize,
 		"--location eastus", "--admin-username " + azureAdminUser,
 		"--ssh-key-values", "--query publicIpAddress",

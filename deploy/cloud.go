@@ -3,6 +3,8 @@ package deploy
 import (
 	"bytes"
 	"context"
+	"crypto/rand"
+	"encoding/hex"
 	"fmt"
 	"net"
 	"os"
@@ -15,8 +17,74 @@ import (
 
 // cloud.go holds the pieces every managed-provisioning adapter reuses: running
 // the provider CLI, checking it's installed + authed, resolving the SSH public
-// key to register, and waiting for a fresh VM's SSH to come up. Adapters shell
-// out to the provider's own CLI so nuzur never handles provider credentials.
+// key to register, waiting for a fresh VM's SSH to come up, and naming the
+// resources we create. Adapters shell out to the provider's own CLI so nuzur
+// never handles provider credentials.
+
+// providerNameMaxLen bounds generated resource names. Linode caps labels at 32
+// characters — the tightest of the providers — so everything is built to fit
+// there and is then valid everywhere else.
+const providerNameMaxLen = 32
+
+// providerNameSuffix returns the random tail of a generated resource name. It's a
+// package var so tests can pin it.
+var providerNameSuffix = func() (string, error) {
+	b := make([]byte, 3) // 6 hex chars
+	if _, err := rand.Read(b); err != nil {
+		return "", fmt.Errorf("generating a resource-name suffix: %w", err)
+	}
+	return hex.EncodeToString(b), nil
+}
+
+// providerResourceName builds the name for a resource we create on a provider (a
+// VM, an Azure resource group, …): "nuzur-<identifier>-<random>".
+//
+// The random tail is the point. A bare "nuzur-<identifier>" collides with
+// anything the user already named that way — and the failure modes are not
+// symmetric:
+//
+//   - Most providers reject a duplicate name, so the deploy fails confusingly.
+//   - AZURE IS WORSE: `az group create` is an idempotent ARM PUT, so a colliding
+//     name silently ADOPTS the user's existing resource group — and the matching
+//     `nuzur destroy` would then `az group delete` it, taking everything inside
+//     with it.
+//
+// Nothing needs to re-derive this name: it's returned in Provisioned (as the
+// InstanceID for GCP/Azure) and persisted on the deployment record, and a managed
+// re-deploy always creates a fresh VM anyway.
+func providerResourceName(identifier string) (string, error) {
+	suffix, err := providerNameSuffix()
+	if err != nil {
+		return "", err
+	}
+	base := sanitizeProviderName(identifier)
+	if base == "" {
+		base = "app"
+	}
+	// Reserve room for the "nuzur-" prefix and the "-<suffix>" tail.
+	if max := providerNameMaxLen - len("nuzur-") - 1 - len(suffix); len(base) > max {
+		base = strings.Trim(base[:max], "-")
+	}
+	return "nuzur-" + base + "-" + suffix, nil
+}
+
+// sanitizeProviderName reduces an identifier to the intersection every provider
+// accepts: lowercase alphanumerics and single dashes.
+func sanitizeProviderName(id string) string {
+	var b strings.Builder
+	lastDash := false
+	for _, r := range strings.ToLower(strings.TrimSpace(id)) {
+		switch {
+		case (r >= 'a' && r <= 'z') || (r >= '0' && r <= '9'):
+			b.WriteRune(r)
+			lastDash = false
+		case !lastDash && b.Len() > 0:
+			b.WriteRune('-')
+			lastDash = true
+		}
+	}
+	return strings.Trim(b.String(), "-")
+}
 
 // cliRunner executes a provider CLI and returns trimmed stdout. It is a package
 // var so tests can stub provider calls without a real cloud account.

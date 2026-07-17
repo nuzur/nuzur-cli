@@ -14,7 +14,7 @@ func gcpHandler() func(name string, args []string) (string, error) {
 		case findArg(args, "config") && findArg(args, "get-value"):
 			return "my-project", nil
 		case findArg(args, "instances") && findArg(args, "create"):
-			return "nuzur-sfapi  34.72.1.5", nil
+			return "nuzur-sfapi-abc123  34.72.1.5", nil
 		}
 		return "", nil
 	}
@@ -33,8 +33,8 @@ func TestGCPProvision(t *testing.T) {
 	}
 	// InstanceID is the instance NAME, which is what makes the tag-targeted
 	// firewall (and the zone-scoped delete) resolvable from Provisioned alone.
-	if prov.InstanceID != "nuzur-sfapi" {
-		t.Errorf("InstanceID = %q, want the instance name nuzur-sfapi", prov.InstanceID)
+	if prov.InstanceID != "nuzur-sfapi-abc123" {
+		t.Errorf("InstanceID = %q, want the instance name nuzur-sfapi-abc123", prov.InstanceID)
 	}
 	if prov.Target.Host != "34.72.1.5" || prov.Target.User != "root" || prov.Target.Port != 22 {
 		t.Errorf("Target = %+v, want root@34.72.1.5:22", prov.Target)
@@ -56,7 +56,7 @@ func TestGCPProvision(t *testing.T) {
 		"--machine-type " + gcpDefaultMachineType,
 		"--image-family " + gcpDefaultImageFamily,
 		"--image-project " + gcpImageProject,
-		"--tags nuzur-sfapi",        // the tag the firewall targets
+		"--tags nuzur-sfapi-abc123",        // the tag the firewall targets
 		"--metadata ssh-keys=root:", // key injected via metadata, not registered
 	} {
 		if !strings.Contains(full, want) {
