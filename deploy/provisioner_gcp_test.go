@@ -56,7 +56,7 @@ func TestGCPProvision(t *testing.T) {
 		"--machine-type " + gcpDefaultMachineType,
 		"--image-family " + gcpDefaultImageFamily,
 		"--image-project " + gcpImageProject,
-		"--tags nuzur-sfapi-abc123",        // the tag the firewall targets
+		"--tags nuzur-sfapi-abc123", // the tag the firewall targets
 		"--metadata ssh-keys=root:", // key injected via metadata, not registered
 	} {
 		if !strings.Contains(full, want) {
@@ -65,16 +65,24 @@ func TestGCPProvision(t *testing.T) {
 	}
 }
 
-func TestGCPRegionRequiredIsAZone(t *testing.T) {
-	stubCLI(t, gcpHandler())
-	_, err := NewGCPProvisioner().Provision(context.Background(), Spec{Identifier: "sfapi"})
-	if err == nil || !strings.Contains(err.Error(), "--region is required") {
-		t.Fatalf("err = %v, want a --region required error", err)
+// Region is optional; for GCP it carries a ZONE, so the default must be one.
+func TestGCPZoneDefaults(t *testing.T) {
+	calls := stubCLI(t, gcpHandler())
+	prov, err := NewGCPProvisioner().Provision(context.Background(), Spec{
+		Identifier: "sfapi",
+		Target:     Target{KeyPath: testPubKeyPath(t)},
+	})
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
 	}
-	// The message must say ZONE — passing a bare region (us-central1) is the
-	// obvious mistake and gcloud's own error for it is opaque.
-	if !strings.Contains(err.Error(), "ZONE") {
-		t.Errorf("error should tell the user --region takes a zone; got: %v", err)
+	if prov.Region != gcpDefaultZone {
+		t.Errorf("Region = %q, want the default zone %q", prov.Region, gcpDefaultZone)
+	}
+	if !strings.Contains(gcpDefaultZone, "-a") {
+		t.Errorf("the GCP default must be a ZONE (e.g. us-central1-a), got %q", gcpDefaultZone)
+	}
+	if findCall(*calls, "instances", "create", "--zone", gcpDefaultZone) == nil {
+		t.Errorf("create should use the default zone; calls: %+v", *calls)
 	}
 }
 

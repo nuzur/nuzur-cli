@@ -28,6 +28,8 @@ const (
 	// vc2-1c-2gb is 1 vCPU / 2GB. The generated Dockerfile compiles Go on the box,
 	// which OOMs on the 1GB plan.
 	vultrDefaultPlan = "vc2-1c-2gb"
+	// Default region — --region is optional.
+	vultrDefaultRegion = "ewr"
 	// vultrDefaultOS is Vultr's numeric OS id for Ubuntu 22.04 x64. Vultr addresses
 	// images by id, not name — run `vultr-cli os list` if this ever drifts, and
 	// pass the id via --image.
@@ -73,9 +75,7 @@ func (p *VultrProvisioner) Provision(ctx context.Context, spec Spec) (Provisione
 		return Provisioned{}, err
 	}
 	cfg := spec.ProviderConfig
-	if strings.TrimSpace(cfg.Region) == "" {
-		return Provisioned{}, fmt.Errorf("--region is required for Vultr (e.g. ewr, fra) — run `vultr-cli regions list` to see them")
-	}
+	region := firstNonEmptyStr(cfg.Region, vultrDefaultRegion)
 	plan := firstNonEmptyStr(cfg.Size, vultrDefaultPlan)
 	os := firstNonEmptyStr(cfg.Image, vultrDefaultOS)
 
@@ -89,7 +89,7 @@ func (p *VultrProvisioner) Provision(ctx context.Context, spec Spec) (Provisione
 		return Provisioned{}, err
 	}
 	out, err := runCLI(ctx, vultrCLI, "instance", "create",
-		"--region", cfg.Region, "--plan", plan, "--os", os,
+		"--region", region, "--plan", plan, "--os", os,
 		"--host", name, "--label", name,
 		"--ssh-keys", keyID, "-o", "json")
 	if err != nil {
@@ -111,7 +111,7 @@ func (p *VultrProvisioner) Provision(ctx context.Context, spec Spec) (Provisione
 	if err := sshReady(ctx, target, vultrSSHReadyWait); err != nil {
 		return Provisioned{}, err
 	}
-	return Provisioned{Target: target, InstanceID: inst.ID, Region: cfg.Region}, nil
+	return Provisioned{Target: target, InstanceID: inst.ID, Region: region}, nil
 }
 
 // waitForIP polls until Vultr has assigned a real public IP. Fresh instances

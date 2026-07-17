@@ -17,10 +17,13 @@ const (
 	// A current shared x86 type available in the EU + Singapore locations
 	// (fsn1/nbg1/hel1/sin). Hetzner's lineup changes and no single type covers
 	// every location (US ash/hil use the cpx1x line), so pass --size for those.
-	hetznerDefaultType  = "cpx22"
-	hetznerDefaultImage = "ubuntu-22.04"
-	hetznerKeyName      = "nuzur-deploy"
-	hetznerSSHReadyWait = 3 * time.Minute
+	hetznerDefaultType = "cpx22"
+	// Default location — --region is optional. nbg1 is deliberate: it's one of the
+	// locations that offers the default cpx22 type (the US ones don't).
+	hetznerDefaultRegion = "nbg1"
+	hetznerDefaultImage  = "ubuntu-22.04"
+	hetznerKeyName       = "nuzur-deploy"
+	hetznerSSHReadyWait  = 3 * time.Minute
 )
 
 type HetznerProvisioner struct{}
@@ -33,9 +36,7 @@ func (p *HetznerProvisioner) Provision(ctx context.Context, spec Spec) (Provisio
 		return Provisioned{}, err
 	}
 	cfg := spec.ProviderConfig
-	if strings.TrimSpace(cfg.Region) == "" {
-		return Provisioned{}, fmt.Errorf("--region is required for Hetzner (a location, e.g. nbg1, fsn1, hel1, ash)")
-	}
+	region := firstNonEmptyStr(cfg.Region, hetznerDefaultRegion)
 	serverType := firstNonEmptyStr(cfg.Size, hetznerDefaultType)
 	image := firstNonEmptyStr(cfg.Image, hetznerDefaultImage)
 
@@ -51,9 +52,9 @@ func (p *HetznerProvisioner) Provision(ctx context.Context, spec Spec) (Provisio
 	// hcloud waits for the create+start actions before returning.
 	if _, err := runCLI(ctx, hetznerCLI, "server", "create",
 		"--name", name, "--type", serverType, "--image", image,
-		"--location", cfg.Region, "--ssh-key", keyName); err != nil {
+		"--location", region, "--ssh-key", keyName); err != nil {
 		if strings.Contains(err.Error(), "unsupported location for server type") {
-			return Provisioned{}, fmt.Errorf("server type %q isn't offered in location %q — run `hcloud server-type list` to see valid types per location and pass a supported one via --size: %w", serverType, cfg.Region, err)
+			return Provisioned{}, fmt.Errorf("server type %q isn't offered in location %q — run `hcloud server-type list` to see valid types per location and pass a supported one via --size: %w", serverType, region, err)
 		}
 		return Provisioned{}, fmt.Errorf("creating Hetzner server: %w", err)
 	}

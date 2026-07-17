@@ -72,11 +72,21 @@ func TestAzureProvision(t *testing.T) {
 	}
 }
 
-func TestAzureRegionRequired(t *testing.T) {
-	stubCLI(t, azureHandler())
-	_, err := NewAzureProvisioner().Provision(context.Background(), Spec{Identifier: "sfapi"})
-	if err == nil || !strings.Contains(err.Error(), "--region is required") {
-		t.Fatalf("err = %v, want a --region required error", err)
+// Region is optional: omitting it uses the provider default rather than failing.
+func TestAzureRegionDefaults(t *testing.T) {
+	calls := stubCLI(t, azureHandler())
+	prov, err := NewAzureProvisioner().Provision(context.Background(), Spec{
+		Identifier: "sfapi",
+		Target:     Target{KeyPath: testPubKeyPath(t)},
+	})
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if prov.Region != azureDefaultRegion {
+		t.Errorf("Region = %q, want the default %q", prov.Region, azureDefaultRegion)
+	}
+	if findCall(*calls, "group", "create", "--location", azureDefaultRegion) == nil {
+		t.Errorf("group create should use the default region; calls: %+v", *calls)
 	}
 }
 

@@ -28,7 +28,9 @@ const (
 	scalewayCLI = "scw"
 	// DEV1-S is 2 vCPU / 2GB. The generated Dockerfile compiles Go on the box,
 	// which OOMs on 1GB shapes.
-	scalewayDefaultType  = "DEV1-S"
+	scalewayDefaultType = "DEV1-S"
+	// Default ZONE — --region is optional and carries a zone for Scaleway.
+	scalewayDefaultZone  = "fr-par-1"
 	scalewayDefaultImage = "ubuntu_jammy"
 	scalewaySSHReadyWait = 3 * time.Minute
 )
@@ -43,9 +45,8 @@ func (p *ScalewayProvisioner) Provision(ctx context.Context, spec Spec) (Provisi
 		return Provisioned{}, err
 	}
 	cfg := spec.ProviderConfig
-	if strings.TrimSpace(cfg.Region) == "" {
-		return Provisioned{}, fmt.Errorf("--region is required for Scaleway and must be a ZONE (e.g. fr-par-1, nl-ams-1) — run `scw instance zone list` to see them")
-	}
+	// NB: for Scaleway --region carries a ZONE (fr-par-1), not a region.
+	zone := firstNonEmptyStr(cfg.Region, scalewayDefaultZone)
 	serverType := firstNonEmptyStr(cfg.Size, scalewayDefaultType)
 	image := firstNonEmptyStr(cfg.Image, scalewayDefaultImage)
 
@@ -61,7 +62,7 @@ func (p *ScalewayProvisioner) Provision(ctx context.Context, spec Spec) (Provisi
 	}
 	out, err := runCLI(ctx, scalewayCLI, "instance", "server", "create",
 		"name="+name, "type="+serverType, "image="+image,
-		"zone="+cfg.Region, "ip=new",
+		"zone="+zone, "ip=new",
 		"-o", "template={{.ID}} {{.PublicIP.Address}}")
 	if err != nil {
 		return Provisioned{}, fmt.Errorf("creating Scaleway server: %w", err)
@@ -74,7 +75,7 @@ func (p *ScalewayProvisioner) Provision(ctx context.Context, spec Spec) (Provisi
 	if err := sshReady(ctx, target, scalewaySSHReadyWait); err != nil {
 		return Provisioned{}, err
 	}
-	return Provisioned{Target: target, InstanceID: fields[0], Region: cfg.Region}, nil
+	return Provisioned{Target: target, InstanceID: fields[0], Region: zone}, nil
 }
 
 // ensureAccountSSHKey verifies the account has at least one SSH key, since that's

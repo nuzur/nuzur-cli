@@ -189,14 +189,21 @@ func TestScalewayNoAccountSSHKey(t *testing.T) {
 	}
 }
 
-func TestScalewayRegionRequiredIsAZone(t *testing.T) {
-	stubCLI(t, scalewayHandler("key-1"))
-	_, err := NewScalewayProvisioner().Provision(context.Background(), Spec{Identifier: "sfapi"})
-	if err == nil || !strings.Contains(err.Error(), "--region is required") {
-		t.Fatalf("err = %v, want a --region required error", err)
+// Region is optional; for Scaleway it carries a ZONE, so the default must be one.
+func TestScalewayZoneDefaults(t *testing.T) {
+	calls := stubCLI(t, scalewayHandler("key-1"))
+	prov, err := NewScalewayProvisioner().Provision(context.Background(), Spec{
+		Identifier: "sfapi",
+		Target:     Target{KeyPath: testPubKeyPath(t)},
+	})
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
 	}
-	if !strings.Contains(err.Error(), "ZONE") {
-		t.Errorf("error should say --region takes a zone; got: %v", err)
+	if prov.Region != scalewayDefaultZone {
+		t.Errorf("Region = %q, want the default zone %q", prov.Region, scalewayDefaultZone)
+	}
+	if findCall(*calls, "server", "create", "zone="+scalewayDefaultZone) == nil {
+		t.Errorf("create should use the default zone; calls: %+v", *calls)
 	}
 }
 

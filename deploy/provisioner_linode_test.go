@@ -85,11 +85,21 @@ func TestLinodeProvision(t *testing.T) {
 	}
 }
 
-func TestLinodeRegionRequired(t *testing.T) {
-	stubCLI(t, linodeHandler(t))
-	_, err := NewLinodeProvisioner().Provision(context.Background(), Spec{Identifier: "sfapi"})
-	if err == nil || !strings.Contains(err.Error(), "--region is required") {
-		t.Fatalf("err = %v, want a --region required error", err)
+// Region is optional: omitting it uses the provider default rather than failing.
+func TestLinodeRegionDefaults(t *testing.T) {
+	calls := stubCLI(t, linodeHandler(t))
+	prov, err := NewLinodeProvisioner().Provision(context.Background(), Spec{
+		Identifier: "sfapi",
+		Target:     Target{KeyPath: testPubKeyPath(t)},
+	})
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if prov.Region != linodeDefaultRegion {
+		t.Errorf("Region = %q, want the default %q", prov.Region, linodeDefaultRegion)
+	}
+	if findCall(*calls, "linodes", "create", "--region", linodeDefaultRegion) == nil {
+		t.Errorf("create should use the default region; calls: %+v", *calls)
 	}
 }
 

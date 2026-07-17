@@ -22,9 +22,11 @@ const (
 	linodeCLI = "linode-cli"
 	// Linode 2GB. The generated Dockerfile compiles Go on the box, which OOMs on
 	// the 1GB nanode — so the default is the smallest tier that reliably builds.
-	linodeDefaultType  = "g6-standard-1"
-	linodeDefaultImage = "linode/ubuntu22.04"
-	linodeSSHReadyWait = 3 * time.Minute
+	linodeDefaultType = "g6-standard-1"
+	// Default region — --region is optional.
+	linodeDefaultRegion = "us-east"
+	linodeDefaultImage  = "linode/ubuntu22.04"
+	linodeSSHReadyWait  = 3 * time.Minute
 )
 
 type LinodeProvisioner struct{}
@@ -37,9 +39,7 @@ func (p *LinodeProvisioner) Provision(ctx context.Context, spec Spec) (Provision
 		return Provisioned{}, err
 	}
 	cfg := spec.ProviderConfig
-	if strings.TrimSpace(cfg.Region) == "" {
-		return Provisioned{}, fmt.Errorf("--region is required for Linode (e.g. us-east, eu-west) — run `linode-cli regions list` to see them")
-	}
+	region := firstNonEmptyStr(cfg.Region, linodeDefaultRegion)
 	linodeType := firstNonEmptyStr(cfg.Size, linodeDefaultType)
 	image := firstNonEmptyStr(cfg.Image, linodeDefaultImage)
 
@@ -58,13 +58,13 @@ func (p *LinodeProvisioner) Provision(ctx context.Context, spec Spec) (Provision
 		return Provisioned{}, err
 	}
 	out, err := runCLI(ctx, linodeCLI, "linodes", "create",
-		"--label", name, "--region", cfg.Region,
+		"--label", name, "--region", region,
 		"--type", linodeType, "--image", image,
 		"--authorized_keys", pub, "--root_pass", rootPass,
 		"--text", "--no-headers", "--format", "id,ipv4")
 	if err != nil {
 		if strings.Contains(err.Error(), "not valid") || strings.Contains(err.Error(), "type") && strings.Contains(err.Error(), "region") {
-			return Provisioned{}, fmt.Errorf("creating linode (check that type %q is offered in region %q — `linode-cli linodes types` / `linode-cli regions list`): %w", linodeType, cfg.Region, err)
+			return Provisioned{}, fmt.Errorf("creating linode (check that type %q is offered in region %q — `linode-cli linodes types` / `linode-cli regions list`): %w", linodeType, region, err)
 		}
 		return Provisioned{}, fmt.Errorf("creating linode: %w", err)
 	}
@@ -76,7 +76,7 @@ func (p *LinodeProvisioner) Provision(ctx context.Context, spec Spec) (Provision
 	if err := sshReady(ctx, target, linodeSSHReadyWait); err != nil {
 		return Provisioned{}, err
 	}
-	return Provisioned{Target: target, InstanceID: fields[0], Region: cfg.Region}, nil
+	return Provisioned{Target: target, InstanceID: fields[0], Region: region}, nil
 }
 
 // linodeRootPassword generates a throwaway root password. Linode requires one at

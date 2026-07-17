@@ -27,6 +27,8 @@ const (
 	// e2-small is 2GB: the generated Dockerfile compiles Go on the box, which OOMs
 	// on 1GB shapes like e2-micro.
 	gcpDefaultMachineType = "e2-small"
+	// Default ZONE — --region is optional and carries a zone for GCP.
+	gcpDefaultZone        = "us-central1-a"
 	gcpDefaultImageFamily = "ubuntu-2204-lts"
 	gcpImageProject       = "ubuntu-os-cloud"
 	gcpSSHReadyWait       = 3 * time.Minute
@@ -48,9 +50,8 @@ func (p *GCPProvisioner) Provision(ctx context.Context, spec Spec) (Provisioned,
 		return Provisioned{}, err
 	}
 	cfg := spec.ProviderConfig
-	if strings.TrimSpace(cfg.Region) == "" {
-		return Provisioned{}, fmt.Errorf("--region is required for GCP and must be a ZONE (e.g. us-central1-a, europe-west1-b) — run `gcloud compute zones list` to see them")
-	}
+	// NB: for GCP --region carries a ZONE (us-central1-a), not a region.
+	zone := firstNonEmptyStr(cfg.Region, gcpDefaultZone)
 	machineType := firstNonEmptyStr(cfg.Size, gcpDefaultMachineType)
 	imageFamily := firstNonEmptyStr(cfg.Image, gcpDefaultImageFamily)
 
@@ -65,7 +66,7 @@ func (p *GCPProvisioner) Provision(ctx context.Context, spec Spec) (Provisioned,
 		return Provisioned{}, err
 	}
 	out, err := runCLI(ctx, gcpCLI, "compute", "instances", "create", name,
-		"--zone", cfg.Region,
+		"--zone", zone,
 		"--machine-type", machineType,
 		"--image-family", imageFamily,
 		"--image-project", gcpImageProject,
@@ -84,7 +85,7 @@ func (p *GCPProvisioner) Provision(ctx context.Context, spec Spec) (Provisioned,
 		return Provisioned{}, err
 	}
 	// InstanceID is the instance NAME — see the file comment.
-	return Provisioned{Target: target, InstanceID: fields[0], Region: cfg.Region}, nil
+	return Provisioned{Target: target, InstanceID: fields[0], Region: zone}, nil
 }
 
 // ensureProject fails early and actionably when gcloud has no default project.

@@ -13,10 +13,12 @@ import (
 // the droplet on destroy.
 
 const (
-	doCLI          = "doctl"
-	doDefaultSize  = "s-1vcpu-1gb"
-	doDefaultImage = "ubuntu-22-04-x64"
-	doSSHReadyWait = 3 * time.Minute
+	doCLI         = "doctl"
+	doDefaultSize = "s-1vcpu-1gb"
+	// Default region — --region is optional; every provider picks a sane default.
+	doDefaultRegion = "nyc3"
+	doDefaultImage  = "ubuntu-22-04-x64"
+	doSSHReadyWait  = 3 * time.Minute
 )
 
 type DigitalOceanProvisioner struct{}
@@ -29,9 +31,7 @@ func (p *DigitalOceanProvisioner) Provision(ctx context.Context, spec Spec) (Pro
 		return Provisioned{}, err
 	}
 	cfg := spec.ProviderConfig
-	if strings.TrimSpace(cfg.Region) == "" {
-		return Provisioned{}, fmt.Errorf("--region is required for DigitalOcean (e.g. nyc3, fra1)")
-	}
+	region := firstNonEmptyStr(cfg.Region, doDefaultRegion)
 	size := firstNonEmptyStr(cfg.Size, doDefaultSize)
 	image := firstNonEmptyStr(cfg.Image, doDefaultImage)
 
@@ -45,7 +45,7 @@ func (p *DigitalOceanProvisioner) Provision(ctx context.Context, spec Spec) (Pro
 		return Provisioned{}, err
 	}
 	out, err := runCLI(ctx, doCLI, "compute", "droplet", "create", name,
-		"--region", cfg.Region, "--size", size, "--image", image,
+		"--region", region, "--size", size, "--image", image,
 		"--ssh-keys", sshKey, "--wait",
 		"--format", "ID,PublicIPv4", "--no-header")
 	if err != nil {
@@ -59,7 +59,7 @@ func (p *DigitalOceanProvisioner) Provision(ctx context.Context, spec Spec) (Pro
 	if err := sshReady(ctx, target, doSSHReadyWait); err != nil {
 		return Provisioned{}, err
 	}
-	return Provisioned{Target: target, InstanceID: fields[0], Region: cfg.Region}, nil
+	return Provisioned{Target: target, InstanceID: fields[0], Region: region}, nil
 }
 
 // ensureSSHKey returns a droplet-create --ssh-keys value (a key id or

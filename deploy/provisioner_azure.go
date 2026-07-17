@@ -28,8 +28,10 @@ const (
 	azureCLI = "az"
 	// Standard_B2s is 2 vCPU / 4GB. The generated Dockerfile compiles Go on the
 	// box; B1s (1GB) OOMs.
-	azureDefaultSize  = "Standard_B2s"
-	azureDefaultImage = "Ubuntu2204"
+	azureDefaultSize = "Standard_B2s"
+	// Default location — --region is optional.
+	azureDefaultRegion = "eastus"
+	azureDefaultImage  = "Ubuntu2204"
 	// azureAdminUser is the SSH user. Azure rejects "root" (and a list of other
 	// reserved names) as --admin-username.
 	azureAdminUser    = "nuzur"
@@ -50,9 +52,7 @@ func (p *AzureProvisioner) Provision(ctx context.Context, spec Spec) (Provisione
 		return Provisioned{}, err
 	}
 	cfg := spec.ProviderConfig
-	if strings.TrimSpace(cfg.Region) == "" {
-		return Provisioned{}, fmt.Errorf("--region is required for Azure (e.g. eastus, westeurope) — run `az account list-locations --query \"[].name\" -o tsv` to see them")
-	}
+	region := firstNonEmptyStr(cfg.Region, azureDefaultRegion)
 	size := firstNonEmptyStr(cfg.Size, azureDefaultSize)
 	image := firstNonEmptyStr(cfg.Image, azureDefaultImage)
 
@@ -76,13 +76,13 @@ func (p *AzureProvisioner) Provision(ctx context.Context, spec Spec) (Provisione
 	}
 	// The resource group is the unit of cleanup — see the file comment.
 	if _, err := runCLI(ctx, azureCLI, "group", "create",
-		"--name", name, "--location", cfg.Region); err != nil {
+		"--name", name, "--location", region); err != nil {
 		return Provisioned{}, fmt.Errorf("creating Azure resource group: %w", err)
 	}
 
 	ip, err := runCLI(ctx, azureCLI, "vm", "create",
 		"--resource-group", name, "--name", name,
-		"--image", image, "--size", size, "--location", cfg.Region,
+		"--image", image, "--size", size, "--location", region,
 		"--admin-username", azureAdminUser,
 		"--ssh-key-values", pub,
 		"--public-ip-sku", "Standard",
@@ -101,7 +101,7 @@ func (p *AzureProvisioner) Provision(ctx context.Context, spec Spec) (Provisione
 		return Provisioned{}, err
 	}
 	// InstanceID is the RESOURCE GROUP name — see the file comment.
-	return Provisioned{Target: target, InstanceID: name, Region: cfg.Region}, nil
+	return Provisioned{Target: target, InstanceID: name, Region: region}, nil
 }
 
 func (p *AzureProvisioner) ConfigureFirewall(ctx context.Context, prov Provisioned, rules []FirewallRule) error {

@@ -138,11 +138,29 @@ func TestDigitalOceanProvision(t *testing.T) {
 	}
 }
 
-func TestDigitalOceanProvisionRequiresRegion(t *testing.T) {
-	stubCLI(t, func(string, []string) (string, error) { return "", nil })
-	_, err := NewDigitalOceanProvisioner().Provision(context.Background(), Spec{Identifier: "x"})
-	if err == nil || !strings.Contains(err.Error(), "--region is required") {
-		t.Fatalf("expected region-required error, got %v", err)
+// Region is optional: omitting it uses the provider default rather than failing.
+func TestDigitalOceanRegionDefaults(t *testing.T) {
+	calls := stubCLI(t, func(name string, args []string) (string, error) {
+		switch {
+		case findArg(args, "ssh-key") && findArg(args, "list"):
+			return "999\tnuzur-deploy", nil // key already present
+		case findArg(args, "droplet") && findArg(args, "create"):
+			return "3164444  159.203.10.20", nil
+		}
+		return "", nil
+	})
+	prov, err := NewDigitalOceanProvisioner().Provision(context.Background(), Spec{
+		Identifier: "x",
+		Target:     Target{KeyPath: "/home/me/.ssh/id_ed25519"},
+	})
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if prov.Region != doDefaultRegion {
+		t.Errorf("Region = %q, want the default %q", prov.Region, doDefaultRegion)
+	}
+	if findCall(*calls, "droplet", "create", "--region", doDefaultRegion) == nil {
+		t.Errorf("create should use the default region; calls: %v", *calls)
 	}
 }
 
