@@ -69,6 +69,15 @@ type BootstrapParams struct {
 	// NuzurBin is the absolute path to the installed nuzur binary (used in the
 	// agent systemd unit).
 	NuzurBin string
+	// S3* configure the generated app's file-upload endpoints (/upload, /sign).
+	// Unlike the DB password, these credentials are resolved from the team's
+	// ObjectStore (KMS) and passed IN, then written into prod.yaml (0600) — like
+	// the external --db-dsn path, the secret does travel through the bootstrap.
+	S3Enabled bool
+	S3Region  string
+	S3Bucket  string
+	S3Key     string
+	S3Secret  string
 }
 
 // defaults fills unset fields with sensible values.

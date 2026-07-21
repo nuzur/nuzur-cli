@@ -48,6 +48,37 @@ func (i *Implementation) resolveConnectionForDeploy(connUUID, teamUUID string) (
 	return engine, host, port, user, pass, name, params, conn.GetStoreUuid(), nil
 }
 
+// resolveObjectStoreForDeploy fetches a team ObjectStore (with its KMS-held S3
+// key/secret) and returns the four values the bootstrap writes into the app's
+// `aws:` config so the generated /upload and /sign endpoints can reach the
+// bucket. It mirrors resolveConnectionForDeploy: the caller supplies only the
+// object-store uuid, never the plaintext credentials.
+//
+// The team is the deployed project's team; a store that doesn't belong to that
+// team resolves as not-found.
+func (i *Implementation) resolveObjectStoreForDeploy(storeUUID, teamUUID string) (region, bucket, key, secret string, err error) {
+	authCtx, err := productclient.ClientContext()
+	if err != nil {
+		return "", "", "", "", err
+	}
+	store, err := i.productClient.ProductClient.GetObjectStoreWithSecret(authCtx, &pb.GetObjectStoreWithSecretRequest{
+		ObjectStoreUuid: storeUUID,
+		TeamUuid:        teamUUID,
+	})
+	if err != nil {
+		return "", "", "", "", fmt.Errorf("object store %s not found in this project's team: %w", storeUUID, err)
+	}
+	s3 := store.GetTypeConfig().GetS3()
+	if s3 == nil {
+		return "", "", "", "", fmt.Errorf("object store %s has no S3 configuration", storeUUID)
+	}
+	region, bucket, key, secret = s3.GetRegion(), s3.GetBucket(), s3.GetKey(), s3.GetSecret()
+	if strings.TrimSpace(bucket) == "" {
+		return "", "", "", "", fmt.Errorf("object store %s is missing a bucket", storeUUID)
+	}
+	return region, bucket, key, secret, nil
+}
+
 // connectionToDSNParts maps a nem Connection into the seven DSN pieces the deploy
 // bootstrap needs. Only direct TCP/IP connections are supported (SSH-tunnel
 // connections can't be reached from the box the same way). Postgres connections

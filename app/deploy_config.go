@@ -45,6 +45,18 @@ type DeployConfig struct {
 	SaveConnection   *bool   `json:"save_connection,omitempty"`
 	NoSaveConnection *bool   `json:"no_save_connection,omitempty"`
 
+	// StorageEnabled turns on the generated /upload and /sign endpoints (the S3
+	// storage zone) independently of where credentials come from. A web-authored
+	// config sets this alongside Storage; the manual --s3-* flags also imply it.
+	StorageEnabled *bool `json:"storage_enabled,omitempty"`
+	// Storage is the team ObjectStore (S3) UUID whose credentials are resolved
+	// server-side at deploy time and written into the app's `aws:` config, so the
+	// generated /upload and /sign endpoints can reach the bucket. Like Connection,
+	// a web-authored config carries only the UUID, never the plaintext secret.
+	// Raw S3 credentials are provided instead via the CLI-only --s3-* flags
+	// (mirroring how db_dsn is CLI-only), never in a web-authored config.
+	Storage *string `json:"storage,omitempty"`
+
 	API    *string `json:"api,omitempty"`
 	Auth   *string `json:"auth,omitempty"`
 	Custom *bool   `json:"custom,omitempty"`
@@ -116,6 +128,14 @@ type deploySettings struct {
 	Connection       string
 	SaveConnection   bool
 	NoSaveConnection bool
+	StorageEnabled   bool
+	Storage          string
+	// Manual S3 credentials (CLI-only, never from a web-authored config), the
+	// alternative to referencing a team ObjectStore via Storage.
+	S3Bucket    string
+	S3Region    string
+	S3AccessKey string
+	S3Secret    string
 
 	API    string
 	Auth   string
@@ -166,6 +186,14 @@ func resolveDeploySettings(c *cli.Context) (*deploySettings, error) {
 		Connection:       strSetting(c, "connection", cfg.Connection, ""),
 		SaveConnection:   boolSetting(c, "save-connection", cfg.SaveConnection),
 		NoSaveConnection: boolSetting(c, "no-save-connection", cfg.NoSaveConnection),
+		StorageEnabled:   boolSetting(c, "storage-enabled", cfg.StorageEnabled),
+		Storage:          strSetting(c, "storage", cfg.Storage, ""),
+		// Manual creds are flag-only (fileVal nil): never read from a config file,
+		// so a shared/web-authored config can't carry a plaintext S3 secret.
+		S3Bucket:    strSetting(c, "s3-bucket", nil, ""),
+		S3Region:    strSetting(c, "s3-region", nil, ""),
+		S3AccessKey: strSetting(c, "s3-access-key", nil, ""),
+		S3Secret:    strSetting(c, "s3-secret", nil, ""),
 
 		API:    strSetting(c, "api", cfg.API, ""),
 		Auth:   strSetting(c, "auth", cfg.Auth, ""),
@@ -272,7 +300,11 @@ func (s *deploySettings) toDeployConfig() *DeployConfig {
 		Connection:       sp(s.Connection),
 		SaveConnection:   bp(s.SaveConnection),
 		NoSaveConnection: bp(s.NoSaveConnection),
-		API:              sp(s.API),
+		StorageEnabled:   bp(s.StorageEnabled),
+		Storage:          sp(s.Storage),
+		// Manual S3 creds are deliberately NOT round-tripped into a config snapshot
+		// (they're flag-only secrets, like db_dsn's password should not be shared).
+		API: sp(s.API),
 		Auth:             sp(s.Auth),
 		Custom:           bp(s.Custom),
 		SourceDir:        sp(s.SourceDir),

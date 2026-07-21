@@ -212,6 +212,16 @@ else
 fi
 echo "[nuzur-deploy] {{.Identifier}} internal ports: http=$HTTP_PORT grpc=$GRPC_PORT"
 
+{{if .S3Enabled}}
+# S3 storage credentials, resolved from the team's ObjectStore (KMS) at deploy
+# time. Written into prod.yaml (0600) so the generated app's /upload and /sign
+# endpoints can reach the bucket. Single-quoted to avoid shell interpolation.
+S3_REGION='{{.S3Region}}'
+S3_BUCKET='{{.S3Bucket}}'
+S3_KEY_ID='{{.S3Key}}'
+S3_SECRET='{{.S3Secret}}'
+{{end}}
+
 cat > "$PROD_YAML" <<YAML
 db:
   - name: {{.DBName}}
@@ -228,6 +238,11 @@ db:
 {{if .JWTAuth}}auth:
   jwt:
     key: ${JWT_KEY}
+{{end}}{{if .S3Enabled}}aws:
+  region: ${S3_REGION}
+  key_id: ${S3_KEY_ID}
+  secret: ${S3_SECRET}
+  bucket: ${S3_BUCKET}
 {{end}}YAML
 chmod 600 "$PROD_YAML"
 

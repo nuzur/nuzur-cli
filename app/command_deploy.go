@@ -51,6 +51,12 @@ func (i *Implementation) DeployCommand() cli.Command {
 			cli.BoolFlag{Name: "no-save-connection", Usage: "Never prompt to save the deployed external database as a team connection."},
 			cli.StringFlag{Name: "db-schema", Usage: "Postgres schema/namespace to target (default: public). Ignored for MySQL, where the database IS the schema."},
 			cli.StringFlag{Name: "db", Value: "mysql", Usage: "Self-hosted database engine: mysql | postgres"},
+			cli.BoolFlag{Name: "storage-enabled", Usage: "Generate the S3 file-upload endpoints (/upload, /sign) even without a team object store — provide credentials via the --s3-* flags below or by editing prod.yaml. Implied by --storage or any --s3-* flag."},
+			cli.StringFlag{Name: "storage", Usage: "Enable S3 file uploads using a nuzur team ObjectStore (by UUID): its S3 credentials are resolved server-side and written into the app's config, so /upload and /sign can reach the bucket. Defaults to the object store saved in the project's go-code-gen config. For credentials NOT stored in nuzur, use --s3-* instead."},
+			cli.StringFlag{Name: "s3-bucket", Usage: "Manual S3 credentials (not stored in nuzur): bucket name. Enables storage and is written into prod.yaml. Alternative to --storage."},
+			cli.StringFlag{Name: "s3-region", Usage: "Manual S3 credentials: region (used with --s3-bucket)."},
+			cli.StringFlag{Name: "s3-access-key", Usage: "Manual S3 credentials: access key id (used with --s3-bucket)."},
+			cli.StringFlag{Name: "s3-secret", Usage: "Manual S3 credentials: secret access key (used with --s3-bucket). CLI-only — never read from a deploy-config file."},
 			cli.StringFlag{Name: "api", Usage: "API surface to generate: rest | grpc | both. Pick by the consumer — REST for JS/web/browser clients, gRPC for Go/backend clients (leave unset to use the project's last/provided config)"},
 			cli.StringFlag{Name: "auth", Usage: "Auth middleware: disabled | jwt | keycloak (leave unset to use the project's last/provided config)"},
 			cli.BoolFlag{Name: "custom", Usage: "Generate the custom application layer (app package for custom endpoints)"},
@@ -253,6 +259,11 @@ func (i *Implementation) runDeploy(c *cli.Context) (rerr error) {
 	var sourceRoot string
 	var workspaceDir string // persistent app-source workspace (full-app deploys)
 	jwtAuth := false
+	// S3 storage: resolved from the team ObjectStore referenced by --storage (or
+	// the object_store saved in the project's go-code-gen config). Enables the
+	// generated /upload + /sign endpoints and is written into the box's prod.yaml.
+	var s3Enabled bool
+	var s3Region, s3Bucket, s3Key, s3Secret string
 	if !dbOnly {
 		// The go-code-gen config: the deploy-config's `codegen` block overlaid by a
 		// --gen-config file (resolved in s.Codegen), then the deploy-level knobs
@@ -290,9 +301,39 @@ func (i *Implementation) runDeploy(c *cli.Context) (rerr error) {
 		if a := s.Auth; a != "" {
 			provided["auth"] = a
 		}
+		// Storage: --storage-enabled, --storage <uuid>, or any --s3-* flag turns the
+		// generation switch on (the saved config's storage_enabled/object_store flow
+		// through lastConfig otherwise). --storage overrides the saved object store.
+		manualS3 := strings.TrimSpace(s.S3Bucket) != ""
+		if s.StorageEnabled || strings.TrimSpace(s.Storage) != "" || manualS3 {
+			provided["storage_enabled"] = true
+		}
+		if ref := strings.TrimSpace(s.Storage); ref != "" {
+			provided["object_store"] = ref
+		}
 		configValues, err = targets.er.BuildConfigFromJSON(targets.project, targets.projectVersion.Uuid, targets.configEntity, provided, targets.lastConfig)
 		if err != nil {
 			return fmt.Errorf("building generator config (pass --config-file, or run `nuzur-cli go-code-gen` once): %w", err)
+		}
+
+		// If storage generation is on, resolve credentials for prod.yaml — from a
+		// team ObjectStore (nuzur-stored) or the manual --s3-* flags. Storage may be
+		// enabled with no creds yet (endpoints return 503 until prod.yaml is set).
+		if boolValue(configValues, "storage_enabled") || strings.TrimSpace(stringValue(configValues, "object_store", "")) != "" {
+			storeUUID := strings.TrimSpace(stringValue(configValues, "object_store", ""))
+			switch {
+			case storeUUID != "":
+				s3Region, s3Bucket, s3Key, s3Secret, err = i.resolveObjectStoreForDeploy(storeUUID, targets.project.TeamUuid)
+				if err != nil {
+					return err
+				}
+				s3Enabled = true
+			case manualS3:
+				s3Region, s3Bucket, s3Key, s3Secret = strings.TrimSpace(s.S3Region), strings.TrimSpace(s.S3Bucket), strings.TrimSpace(s.S3AccessKey), s.S3Secret
+				s3Enabled = true
+			default:
+				outputtools.PrintlnColoredErr("S3 storage is enabled but no credentials were provided (no --storage / --s3-* and none saved) — /upload and /sign will return 503 until you set the aws: block in the app's prod.yaml.", outputtools.Yellow)
+			}
 		}
 		// Generation happens below (step 2), once the identifier + any prior
 		// deployment are known — so it targets the persistent workspace.
@@ -643,6 +684,11 @@ func (i *Implementation) runDeploy(c *cli.Context) (rerr error) {
 		ConnName:          connName,
 		Domain:            s.Domain,
 		Host:              host,
+		S3Enabled:         s3Enabled,
+		S3Region:          s3Region,
+		S3Bucket:          s3Bucket,
+		S3Key:             s3Key,
+		S3Secret:          s3Secret,
 	}
 	if !dbOnly {
 		bp.RemoteSrcDir = remoteSrc
