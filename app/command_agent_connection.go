@@ -40,7 +40,7 @@ func (i *Implementation) AgentConnectionAddCommand() cli.Command {
 			cli.StringFlag{Name: "dsn", Usage: "Connection DSN; skips the connection-details prompt"},
 			cli.StringFlag{Name: "schema", Usage: "Default schema (postgres); optional"},
 			cli.StringFlag{Name: "uuid", Usage: "Use a specific connection UUID instead of generating one"},
-			cli.BoolFlag{Name: "no-publish", Usage: "Register locally only; do not publish the catalog to nuzur (headless boxes have no user login to publish with)"},
+			cli.BoolFlag{Name: "no-publish", Usage: "Register on this machine only; do not tell nuzur about the connection (headless boxes have no user login to publish with). Unpublished connections do not appear in the data manager"},
 			cli.BoolFlag{Name: "non-interactive", Usage: "Never prompt; requires [name], --driver and --dsn"},
 		},
 		Action: func(c *cli.Context) error {
@@ -124,15 +124,16 @@ func (i *Implementation) AgentConnectionAddCommand() cli.Command {
 			fmt.Printf("Added connection %q (uuid: %s, dsn: %s).\n", entry.Name, entry.UUID, maskDSN(entry.DSN))
 
 			if c.Bool("no-publish") {
-				fmt.Println("Registered locally (catalog not published).")
+				fmt.Println("Registered on this machine only — nuzur has not been told about this connection, so it will not appear in the data manager yet.")
+				fmt.Println("To publish it, re-run this command without --no-publish from a machine signed in to nuzur; it then shows up under \"Via agent\".")
 				return nil
 			}
 			if err := i.publishCatalog(reg); err != nil {
-				fmt.Printf("Saved locally but publishing the catalog to nuzur failed: %v\n", err)
+				fmt.Printf("Saved on this machine but publishing the connection to nuzur failed: %v\n", err)
 				fmt.Println("Run `nuzur-cli agent connection list` to retry; the entry is safe on disk.")
 				return nil
 			}
-			fmt.Println("Catalog published.")
+			fmt.Println("Published — the connection now appears in the nuzur data manager under \"Via agent\", served through this agent. The database itself is never exposed to the internet.")
 			return nil
 		},
 	}
@@ -169,7 +170,7 @@ func (i *Implementation) AgentConnectionRemoveCommand() cli.Command {
 		Usage:     "Remove a local DB connection by name or uuid (and republish the catalog)",
 		ArgsUsage: "<name-or-uuid>",
 		Flags: []cli.Flag{
-			cli.BoolFlag{Name: "no-publish", Usage: "Only remove the connection locally; don't republish the catalog to nuzur (the box has no user token — the CLI running the teardown updates nuzur itself)"},
+			cli.BoolFlag{Name: "no-publish", Usage: "Only remove the connection on this machine; don't republish the catalog to nuzur (the box has no user token — the CLI running the teardown updates nuzur itself)"},
 		},
 		Action: func(c *cli.Context) error {
 			if !c.Args().Present() {
@@ -191,14 +192,14 @@ func (i *Implementation) AgentConnectionRemoveCommand() cli.Command {
 			fmt.Printf("Removed connection %q (uuid: %s).\n", removed.Name, removed.UUID)
 
 			if c.Bool("no-publish") {
-				fmt.Println("Removed locally (catalog not published).")
+				fmt.Println("Removed on this machine only — nuzur still lists this connection under \"Via agent\" until the catalog is republished.")
 				return nil
 			}
 			if err := i.publishCatalog(reg); err != nil {
-				fmt.Printf("Removed locally but publishing the catalog to nuzur failed: %v\n", err)
+				fmt.Printf("Removed on this machine but republishing the catalog to nuzur failed: %v\n", err)
 				return nil
 			}
-			fmt.Println("Catalog republished.")
+			fmt.Println("Republished — the connection no longer appears in the nuzur data manager.")
 			return nil
 		},
 	}

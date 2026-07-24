@@ -865,6 +865,8 @@ func (i *Implementation) runDeploy(c *cli.Context) (rerr error) {
 
 	outputtools.PrintlnColored("\nManage your data:", outputtools.Green)
 	fmt.Printf("  %s\n", dataManagerURL)
+	fmt.Printf("  The connection is listed under \"Via agent\" — nuzur reaches it through the agent on this box,\n")
+	fmt.Printf("  which dials out to nuzur. The database stays private; nothing is exposed to the internet.\n")
 	if !schemaApplied {
 		// Auto-apply is supported for both engines over the agent; if it was
 		// skipped it's because the diff step errored (see the message above).
