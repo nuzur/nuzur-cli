@@ -829,7 +829,28 @@ func (i *Implementation) runDeploy(c *cli.Context) (rerr error) {
 			fmt.Printf("  Database:  self-hosted %s on the box (localhost), schema applied.\n", dbEngine)
 		}
 		fmt.Printf("  Managed:   through nuzur — data manager, SQL Push, and queries via the agent.\n")
-		fmt.Printf("  No app/API or Caddy was installed. Add one later with a normal deploy.\n")
+
+		// Loud, actionable notice: db-only is a materially different outcome from
+		// a normal deploy (no HTTP API at all), and users who just said "deploy my
+		// database" often still expect the generated API. Make the consequence
+		// impossible to miss and give the one-step way to add it.
+		outputtools.PrintlnColoredErr("\n  This was a DATABASE-ONLY deploy — no REST/gRPC API or app was created.", outputtools.Yellow)
+		fmt.Printf("  Nothing serves this data over HTTP; it is reachable only through nuzur (data manager, SQL Push, queries).\n")
+		fmt.Printf("  If you also want nuzur's generated API in front of this database, re-run the same deploy\n")
+		fmt.Printf("  WITHOUT --db-only (the database, agent, schema and data are reused) — for example:\n")
+		rerun := "nuzur-cli deploy"
+		if p := strings.TrimSpace(s.Provider); p != "" {
+			rerun += " --provider " + p
+		}
+		if h := strings.TrimSpace(s.Host); h != "" {
+			rerun += " --host " + h
+		}
+		if pr := strings.TrimSpace(s.Project); pr != "" {
+			rerun += " --project " + pr
+		}
+		rerun += " --version " + targets.projectVersion.Uuid + " --api both"
+		fmt.Printf("    %s\n", rerun)
+		fmt.Printf("  (add your original --ssh-key / --auth / --domain flags as needed).\n")
 	} else {
 		// What's deployed: this project's own Caddy front door (HTTPS via a domain,
 		// otherwise plain HTTP on its auto-assigned public port).
