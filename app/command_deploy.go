@@ -963,10 +963,7 @@ func agentConnDbType(engine deploy.DBEngine) nemgen.LocalAgentConnectionDbType {
 
 // SQL-push extensions. Which one applies the schema is derived from the
 // deployment's topology, never configured — see publishAndApplySchema.
-const (
-	sqlPushLocalExtensionIdentifier = "sql-push-local" // via the box's agent
-	sqlPushExtensionIdentifier      = "sql-push"       // direct from nuzur to a team connection
-)
+var sqlPushPair = mustPairForFront("sql-push")
 
 // publishAndApplySchema publishes the box's DB as a named agent connection (so
 // nuzur can serve it in the data manager) and then applies the project's schema to
@@ -1016,14 +1013,14 @@ func (i *Implementation) publishAndApplySchema(targets *runTargets, agentUUID, c
 	// agent → sql-push-local. An existing team connection is reachable from nuzur
 	// directly, so push remotely → sql-push, which keeps the shared connection in
 	// sync the same way any other schema change to it would.
-	sqlPushExtID := sqlPushLocalExtensionIdentifier
+	sqlPushExtID := sqlPushPair.Local
 	configValues := map[string]interface{}{
 		"local_agent":            agentUUID,
 		"local_agent_connection": connUUID,
 		"local_agent_schema":     schema,
 	}
 	if teamConnUUID != "" {
-		sqlPushExtID = sqlPushExtensionIdentifier
+		sqlPushExtID = sqlPushPair.Front
 		configValues = map[string]interface{}{
 			"store":      teamConnStore,
 			"connection": teamConnUUID,

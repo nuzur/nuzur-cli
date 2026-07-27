@@ -47,7 +47,7 @@ func (i *Implementation) BuildConfigFromJSON(
 		return values, nil
 	}
 
-	resolver := i.newConfigResolver(project, projectVersionUUID)
+	resolver := i.NewConfigResolver(project, projectVersionUUID)
 	var fieldErrs []FieldError
 
 	// known identifiers, to flag unknown keys the caller supplied (likely typos)
@@ -101,7 +101,7 @@ func (i *Implementation) BuildConfigFromJSON(
 // coerceField validates and normalizes a single raw value into the shape the
 // extension expects (mirroring the interactive BuildConfigValues: scalars are
 // stored as strings except booleans, arrays as []string).
-func (r *configResolver) coerceField(field *extensiongen.ExtensionInputField, raw interface{}) (interface{}, error) {
+func (r *ConfigResolver) coerceField(field *extensiongen.ExtensionInputField, raw interface{}) (interface{}, error) {
 	switch field.Type {
 	case extensiongen.ExtensionInputType_EXTENSION_INPUT_TYPE_BOOLEAN:
 		return coerceBool(raw)
@@ -123,7 +123,7 @@ func (r *configResolver) coerceField(field *extensiongen.ExtensionInputField, ra
 			return nil, err
 		}
 		if field.TypeConfig != nil && field.TypeConfig.Uuid != nil {
-			opts, err := r.optionsForEntityType(field.TypeConfig.Uuid.EntityType)
+			opts, err := r.OptionsForEntityType(field.TypeConfig.Uuid.EntityType, "")
 			if err != nil {
 				return nil, err
 			}
@@ -155,7 +155,7 @@ func (r *configResolver) coerceField(field *extensiongen.ExtensionInputField, ra
 			case extensiongen.ExtensionInputType_EXTENSION_INPUT_TYPE_UUID:
 				if arr.ArrayTypeConfig != nil && arr.ArrayTypeConfig.Uuid != nil {
 					var err error
-					opts, err = r.optionsForEntityType(arr.ArrayTypeConfig.Uuid.EntityType)
+					opts, err = r.OptionsForEntityType(arr.ArrayTypeConfig.Uuid.EntityType, "")
 					if err != nil {
 						return nil, err
 					}

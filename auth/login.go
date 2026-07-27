@@ -43,19 +43,23 @@ func (c *AuthClientImplementation) Login(params LoginParams) error {
 	return c.LoginStatus(params)
 }
 
+// LoginStatus reports who is logged in. Every command calls Login() first, so
+// these lines are a side effect of running something else — they go to stderr,
+// leaving stdout carrying only the command's own output. That contract matters
+// for `describe` and `--json`, whose stdout is piped straight into a JSON parser.
 func (c *AuthClientImplementation) LoginStatus(params LoginParams) error {
 	if !filetools.FileExists(files.TokenFilePath()) {
-		outputtools.PrintlnColored(params.LoggedOut, outputtools.Red)
+		outputtools.PrintlnColoredErr(params.LoggedOut, outputtools.Red)
 		return nil
 	}
 	user, err := c.GetTokenUser()
 	if err != nil {
-		outputtools.PrintlnColored(params.LoggedOut, outputtools.Red)
+		outputtools.PrintlnColoredErr(params.LoggedOut, outputtools.Red)
 		return err
 	}
 
 	finalSuccessMsg := fmt.Sprintf("%s [%s - %s]", params.LoggedIn, user.Name, user.Email)
-	outputtools.PrintlnColored(finalSuccessMsg, outputtools.Green)
+	outputtools.PrintlnColoredErr(finalSuccessMsg, outputtools.Green)
 	return nil
 }
 

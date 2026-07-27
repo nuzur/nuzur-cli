@@ -27,7 +27,7 @@ func (c *AuthClientImplementation) startServer() {
 				w.Header().Set("Content-Type", "text/html; charset=utf-8")
 				render, err := c.RenderResponseHTML(true, nil)
 				if err == nil && render != nil {
-					fmt.Fprintf(w, *render)
+					fmt.Fprintf(w, "%s", *render)
 				} else {
 					fmt.Printf("error render: %v", err)
 				}
@@ -36,7 +36,7 @@ func (c *AuthClientImplementation) startServer() {
 				w.Header().Set("Content-Type", "text/html; charset=utf-8")
 				render, err := c.RenderResponseHTML(false, err)
 				if err == nil && render != nil {
-					fmt.Fprintf(w, *render)
+					fmt.Fprintf(w, "%s", *render)
 				} else {
 					fmt.Printf("error fetch: %v", err)
 				}

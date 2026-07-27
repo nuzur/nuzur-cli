@@ -54,6 +54,7 @@ type extRunFlags struct {
 	version        string
 	output         string
 	extension      string // which generator to run (run-extension only; go-code-gen presets it)
+	connectionMode string // paired extensions only: remote|direct or local|agent
 	config         string // inline JSON config, or "-" to read JSON from stdin
 	configFile     string // path to a JSON config file
 	reuseConfig    bool
@@ -79,6 +80,7 @@ func extensionRunFlags() []cli.Flag {
 		cli.StringFlag{Name: "version", Usage: "Project version identifier or UUID (skips the version selection prompt)"},
 		cli.StringFlag{Name: "output, o", Usage: "Output path for generated code (skips the output path prompt)"},
 		cli.StringFlag{Name: "extension, e", Usage: "Extension identifier to run (skips the extension selection prompt)"},
+		cli.StringFlag{Name: "connection-mode", Usage: "For paired extensions (sql-push, sql-import): 'remote' (aka 'direct') connects from nuzur to a team connection; 'local' (aka 'agent') goes through a local agent"},
 		cli.StringFlag{Name: "config", Usage: "Full config as a JSON object; use '-' to read JSON from stdin. Implies non-interactive."},
 		cli.StringFlag{Name: "config-file", Usage: "Path to a JSON file with the full config. Implies non-interactive."},
 		cli.BoolFlag{Name: "reuse-config", Usage: "Reuse the last-used config for this extension without prompting"},
@@ -94,6 +96,7 @@ func extRunFlagsFromContext(c *cli.Context) extRunFlags {
 		version:        c.String("version"),
 		output:         c.String("output"),
 		extension:      c.String("extension"),
+		connectionMode: c.String("connection-mode"),
 		config:         c.String("config"),
 		configFile:     c.String("config-file"),
 		reuseConfig:    c.Bool("reuse-config"),
@@ -110,11 +113,24 @@ func extRunFlagsFromContext(c *cli.Context) extRunFlags {
 func (i *Implementation) runExtensionFlow(extensionIdentifier string, flags extRunFlags) error {
 	interactive := !flags.isNonInteractive()
 
+	// Parsed up front: for a paired extension the fields it carries also tell us
+	// which connection mode the caller means.
+	var provided map[string]interface{}
+	if flags.hasConfigInput() {
+		var err error
+		provided, err = loadProvidedConfig(flags)
+		if err != nil {
+			return i.failRun(flags, err)
+		}
+	}
+
 	targets, err := i.resolveRunTargets(flags, resolveOptions{
 		extensionIdentifier: extensionIdentifier,
 		interactive:         interactive,
 		checkAccess:         true,
 		checkLimit:          true,
+		providedConfig:      provided,
+		allowModePrompt:     true,
 	})
 	if err != nil {
 		return i.failRun(flags, err)
@@ -129,23 +145,15 @@ func (i *Implementation) runExtensionFlow(extensionIdentifier string, flags extR
 	if interactive {
 		configValues, err = i.BuildConfigValues(targets.er, targets.project, targets.projectVersion.Uuid, targets.configEntity, targets.lastConfig, flags.reuseConfig)
 	} else {
-		var provided map[string]interface{}
-		provided, err = loadProvidedConfig(flags)
-		if err == nil {
-			configValues, err = targets.er.BuildConfigFromJSON(targets.project, targets.projectVersion.Uuid, targets.configEntity, provided, targets.lastConfig)
-		}
+		configValues, err = targets.er.BuildConfigFromJSON(targets.project, targets.projectVersion.Uuid, targets.configEntity, provided, targets.lastConfig)
 	}
 	if err != nil {
 		return i.failRun(flags, err)
 	}
 
-	// save config for next time
-	allLastConfigs := targets.allLastConfigs
-	if allLastConfigs == nil {
-		allLastConfigs = make(map[string]map[string]interface{})
-	}
-	allLastConfigs[targets.extension.Identifier] = configValues
-	if saveErr := targets.er.SaveLastUsedConfig(targets.projectVersion.Uuid, allLastConfigs); saveErr != nil {
+	// Save the config under the identifier that actually ran, in that backend's
+	// field shape, so both a later CLI run and the web app pick it up.
+	if saveErr := targets.er.SaveLastUsedConfigEntry(targets.projectVersion.Uuid, targets.extension.Identifier, configValues); saveErr != nil {
 		// non-fatal: just log and continue
 		outputtools.PrintlnColoredErr(fmt.Sprintf("warning: could not save config: %v", saveErr), outputtools.Yellow)
 	}
@@ -297,6 +305,13 @@ func (i *Implementation) BuildConfigValues(
 		return values, nil
 	}
 
+	resolver := er.NewConfigResolver(project, projectVersionUUID)
+	// Remembers the agent picked for a local_agent field so the
+	// local_agent_connection field that follows only lists that agent's
+	// databases. Fields are prompted in the order the extension declares them,
+	// and the agent always comes first.
+	selectedLocalAgentUUID := ""
+
 	// if we have a last config, reuse it (when --reuse-config is set) or ask
 	if len(lastConfig) > 0 {
 		outputtools.PrintlnColored(
@@ -360,130 +375,40 @@ func (i *Implementation) BuildConfigValues(
 			values[field.Identifier] = choice == "true"
 
 		case extensiongen.ExtensionInputType_EXTENSION_INPUT_TYPE_UUID:
+			var opts []extensionrun.ConfigOption
 			if field.TypeConfig != nil && field.TypeConfig.Uuid != nil {
-				switch field.TypeConfig.Uuid.EntityType {
-				case extensiongen.EntityType_ENTITY_TYPE_ENTITY_STANDALONE:
-					entities, err := er.GetStandaloneEntities(projectVersionUUID)
-					if err != nil || len(entities) == 0 {
-						// fall back to text prompt
-						val, err := runTextPrompt(label, configValueToDisplay(lastVal), field.Required, isIdentifierField(field.Identifier))
-						if err != nil {
-							return nil, err
-						}
-						values[field.Identifier] = val
-					} else {
-						identifiers := make([]string, len(entities))
-						uuids := make([]string, len(entities))
-						for idx, e := range entities {
-							identifiers[idx] = e.Identifier
-							uuids[idx] = e.Uuid
-						}
-						cursorPos := 0
-						if lastStr, ok := lastVal.(string); ok {
-							for idx, u := range uuids {
-								if u == lastStr {
-									cursorPos = idx
-									break
-								}
-							}
-						}
-						entityPrompt := promptui.Select{
-							Label:     label,
-							Items:     identifiers,
-							CursorPos: cursorPos,
-						}
-						selectedIdx, _, err := entityPrompt.Run()
-						if err != nil {
-							return nil, err
-						}
-						values[field.Identifier] = uuids[selectedIdx]
-					}
-
-				case extensiongen.EntityType_ENTITY_TYPE_DB_CONNECTION:
-					connections, err := er.GetTeamConnections(project.TeamUuid)
-					if err != nil || len(connections) == 0 {
-						val, err := runTextPrompt(label, configValueToDisplay(lastVal), field.Required, isIdentifierField(field.Identifier))
-						if err != nil {
-							return nil, err
-						}
-						values[field.Identifier] = val
-					} else {
-						identifiers := make([]string, len(connections))
-						uuids := make([]string, len(connections))
-						for idx, c := range connections {
-							identifiers[idx] = c.Identifier
-							uuids[idx] = c.Uuid
-						}
-						cursorPos := 0
-						if lastStr, ok := lastVal.(string); ok {
-							for idx, u := range uuids {
-								if u == lastStr {
-									cursorPos = idx
-									break
-								}
-							}
-						}
-						connPrompt := promptui.Select{
-							Label:     label,
-							Items:     identifiers,
-							CursorPos: cursorPos,
-						}
-						selectedIdx, _, err := connPrompt.Run()
-						if err != nil {
-							return nil, err
-						}
-						values[field.Identifier] = uuids[selectedIdx]
-					}
-
-				case extensiongen.EntityType_ENTITY_TYPE_DB_STORE:
-					stores, err := er.GetTeamObjectStores(project.TeamUuid)
-					if err != nil || len(stores) == 0 {
-						val, err := runTextPrompt(label, configValueToDisplay(lastVal), field.Required, isIdentifierField(field.Identifier))
-						if err != nil {
-							return nil, err
-						}
-						values[field.Identifier] = val
-					} else {
-						identifiers := make([]string, len(stores))
-						uuids := make([]string, len(stores))
-						for idx, s := range stores {
-							identifiers[idx] = s.Identifier
-							uuids[idx] = s.Uuid
-						}
-						cursorPos := 0
-						if lastStr, ok := lastVal.(string); ok {
-							for idx, u := range uuids {
-								if u == lastStr {
-									cursorPos = idx
-									break
-								}
-							}
-						}
-						storePrompt := promptui.Select{
-							Label:     label,
-							Items:     identifiers,
-							CursorPos: cursorPos,
-						}
-						selectedIdx, _, err := storePrompt.Run()
-						if err != nil {
-							return nil, err
-						}
-						values[field.Identifier] = uuids[selectedIdx]
-					}
-
-				default:
-					val, err := runTextPrompt(label, configValueToDisplay(lastVal), field.Required, isIdentifierField(field.Identifier))
-					if err != nil {
-						return nil, err
-					}
-					values[field.Identifier] = val
+				entityType := field.TypeConfig.Uuid.EntityType
+				// Agent connections are scoped to the agent chosen a field
+				// earlier, so the list only offers reachable databases.
+				resolved, err := resolver.OptionsForEntityType(entityType, selectedLocalAgentUUID)
+				if err == nil {
+					opts = resolved
 				}
-			} else {
+				if len(opts) == 0 {
+					i.printNoOptionsHint(entityType)
+				}
+			}
+
+			if len(opts) == 0 {
+				// fall back to text prompt
 				val, err := runTextPrompt(label, configValueToDisplay(lastVal), field.Required, isIdentifierField(field.Identifier))
 				if err != nil {
 					return nil, err
 				}
 				values[field.Identifier] = val
+			} else {
+				val, err := selectFromOptions(label, opts, lastVal)
+				if err != nil {
+					return nil, err
+				}
+				values[field.Identifier] = val
+			}
+
+			if field.TypeConfig != nil && field.TypeConfig.Uuid != nil &&
+				field.TypeConfig.Uuid.EntityType == extensiongen.EntityType_ENTITY_TYPE_LOCAL_AGENT {
+				if agentUUID, ok := values[field.Identifier].(string); ok {
+					selectedLocalAgentUUID = agentUUID
+				}
 			}
 
 		case extensiongen.ExtensionInputType_EXTENSION_INPUT_TYPE_ENUM:
@@ -595,30 +520,10 @@ func (i *Implementation) BuildConfigValues(
 				var displayItems []string
 				var uuidItems []string
 
-				switch uuidCfg.EntityType {
-				case extensiongen.EntityType_ENTITY_TYPE_ENTITY_STANDALONE:
-					entities, err := er.GetStandaloneEntities(projectVersionUUID)
-					if err == nil {
-						for _, e := range entities {
-							displayItems = append(displayItems, e.Identifier)
-							uuidItems = append(uuidItems, e.Uuid)
-						}
-					}
-				case extensiongen.EntityType_ENTITY_TYPE_DB_CONNECTION:
-					connections, err := er.GetTeamConnections(project.TeamUuid)
-					if err == nil {
-						for _, c := range connections {
-							displayItems = append(displayItems, c.Identifier)
-							uuidItems = append(uuidItems, c.Uuid)
-						}
-					}
-				case extensiongen.EntityType_ENTITY_TYPE_DB_STORE:
-					stores, err := er.GetTeamObjectStores(project.TeamUuid)
-					if err == nil {
-						for _, s := range stores {
-							displayItems = append(displayItems, s.Identifier)
-							uuidItems = append(uuidItems, s.Uuid)
-						}
+				if opts, err := resolver.OptionsForEntityType(uuidCfg.EntityType, selectedLocalAgentUUID); err == nil {
+					for _, o := range opts {
+						displayItems = append(displayItems, o.Label)
+						uuidItems = append(uuidItems, o.Value)
 					}
 				}
 
@@ -737,6 +642,53 @@ func (i *Implementation) BuildConfigValues(
 	return values, nil
 }
 
+// selectFromOptions prompts with resolved options, starting the cursor on the
+// previously used value when it is still on offer, and returns the chosen value.
+func selectFromOptions(label string, opts []extensionrun.ConfigOption, lastVal interface{}) (string, error) {
+	labels := make([]string, len(opts))
+	for idx, o := range opts {
+		labels[idx] = o.Label
+		if labels[idx] == "" {
+			labels[idx] = o.Value
+		}
+	}
+
+	cursorPos := 0
+	if lastStr, ok := lastVal.(string); ok {
+		for idx, o := range opts {
+			if o.Value == lastStr {
+				cursorPos = idx
+				break
+			}
+		}
+	}
+
+	prompt := promptui.Select{
+		Label:     label,
+		Items:     labels,
+		CursorPos: cursorPos,
+	}
+	selectedIdx, _, err := prompt.Run()
+	if err != nil {
+		return "", err
+	}
+	return opts[selectedIdx].Value, nil
+}
+
+// printNoOptionsHint explains an empty option list where the reason is
+// actionable, so the raw-UUID fallback prompt doesn't look like a dead end.
+func (i *Implementation) printNoOptionsHint(entityType extensiongen.EntityType) {
+	switch entityType {
+	case extensiongen.EntityType_ENTITY_TYPE_LOCAL_AGENT,
+		extensiongen.EntityType_ENTITY_TYPE_LOCAL_AGENT_CONNECTION:
+		outputtools.PrintlnColoredErr(
+			i.localize.Localize("extension_run_no_online_agents",
+				"No online local agents found. Start one with 'nuzur-cli agent start' (pair a new machine with 'nuzur-cli agent install'), then re-run."),
+			outputtools.Yellow,
+		)
+	}
+}
+
 // configValueToDisplay converts an interface{} config value to a human-readable string.
 func configValueToDisplay(v interface{}) string {
 	if v == nil {
@@ -834,7 +786,7 @@ func trimSpace(s string) string {
 
 func (i *Implementation) SelectPublicExtension(er *extensionrun.Implementation) (*nemgen.Extension, error) {
 	outputtools.PrintlnColoredErr(i.localize.Localize("extension_scaffold_loading", ""), outputtools.Blue)
-	extensions, err := er.ListGeneratorExtensions()
+	extensions, err := er.ListRunnableExtensions(pairFrontIdentifiers())
 	if err != nil {
 		return nil, err
 	}

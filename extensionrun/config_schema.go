@@ -79,12 +79,12 @@ func typeName(t extensiongen.ExtensionInputType) string {
 	}
 }
 
-// configResolver resolves and caches the concrete option lists (entities,
-// connections, object stores) for a project version, so uuid/enum fields can be
-// described and validated without re-fetching per field. It is shared by both
-// `describe` (to list options) and the non-interactive config apply (to validate
-// membership).
-type configResolver struct {
+// ConfigResolver resolves and caches the concrete option lists (entities,
+// connections, object stores, local agents) for a project version, so uuid/enum
+// fields can be described and validated without re-fetching per field. It is
+// shared by `describe` (to list options), the non-interactive config apply (to
+// validate membership) and the interactive prompts (to offer choices).
+type ConfigResolver struct {
 	er                 *Implementation
 	project            *nemgen.Project
 	projectVersionUUID string
@@ -95,21 +95,27 @@ type configResolver struct {
 	connDone     bool
 	stores       []ConfigOption
 	storesDone   bool
+	agents       []*nemgen.LocalAgent
+	agentsDone   bool
 }
 
-func (i *Implementation) newConfigResolver(project *nemgen.Project, projectVersionUUID string) *configResolver {
-	return &configResolver{
+func (i *Implementation) NewConfigResolver(project *nemgen.Project, projectVersionUUID string) *ConfigResolver {
+	return &ConfigResolver{
 		er:                 i,
 		project:            project,
 		projectVersionUUID: projectVersionUUID,
 	}
 }
 
-// optionsForEntityType returns the allowed uuid options for a given uuid entity
+// OptionsForEntityType returns the allowed uuid options for a given uuid entity
 // type. A nil error with an empty slice means "no options available" (the
 // interactive flow falls back to a free-text prompt in that case, and validation
 // accepts any string).
-func (r *configResolver) optionsForEntityType(et extensiongen.EntityType) ([]ConfigOption, error) {
+//
+// agentUUID scopes LOCAL_AGENT_CONNECTION options to a single agent; passing ""
+// lists the connections of every online agent, which is what `describe` and
+// non-interactive validation want.
+func (r *ConfigResolver) OptionsForEntityType(et extensiongen.EntityType, agentUUID string) ([]ConfigOption, error) {
 	switch et {
 	case extensiongen.EntityType_ENTITY_TYPE_ENTITY_STANDALONE:
 		if !r.entitiesDone {
@@ -147,9 +153,50 @@ func (r *configResolver) optionsForEntityType(et extensiongen.EntityType) ([]Con
 			r.storesDone = true
 		}
 		return r.stores, nil
+	case extensiongen.EntityType_ENTITY_TYPE_LOCAL_AGENT:
+		agents, err := r.onlineAgents()
+		if err != nil {
+			return nil, err
+		}
+		opts := make([]ConfigOption, 0, len(agents))
+		for _, a := range agents {
+			opts = append(opts, ConfigOption{Value: a.GetUuid(), Label: a.GetMachineName()})
+		}
+		return opts, nil
+	case extensiongen.EntityType_ENTITY_TYPE_LOCAL_AGENT_CONNECTION:
+		agents, err := r.onlineAgents()
+		if err != nil {
+			return nil, err
+		}
+		var opts []ConfigOption
+		for _, a := range agents {
+			if agentUUID != "" && a.GetUuid() != agentUUID {
+				continue
+			}
+			for _, c := range a.GetConnections() {
+				opts = append(opts, ConfigOption{
+					Value: c.GetUuid(),
+					Label: a.GetMachineName() + "/" + c.GetName(),
+				})
+			}
+		}
+		return opts, nil
 	default:
 		return nil, nil
 	}
+}
+
+// onlineAgents fetches the caller's online agents once per resolver.
+func (r *ConfigResolver) onlineAgents() ([]*nemgen.LocalAgent, error) {
+	if !r.agentsDone {
+		agents, err := r.er.GetOnlineLocalAgents()
+		if err != nil {
+			return nil, err
+		}
+		r.agents = agents
+		r.agentsDone = true
+	}
+	return r.agents, nil
 }
 
 // enumOptions converts a field's enum options into ConfigOptions. The config
@@ -167,7 +214,7 @@ func enumOptions(cfg *extensiongen.ExtensionInputTypeEnumConfig) []ConfigOption 
 
 // fieldSchema builds the schema for a single configuration field, resolving
 // option lists for uuid/enum (including array-of-uuid and array-of-enum).
-func (r *configResolver) fieldSchema(field *extensiongen.ExtensionInputField) (ConfigFieldSchema, error) {
+func (r *ConfigResolver) fieldSchema(field *extensiongen.ExtensionInputField) (ConfigFieldSchema, error) {
 	fs := ConfigFieldSchema{
 		Identifier:  field.Identifier,
 		DisplayName: field.DisplayName,
@@ -179,7 +226,7 @@ func (r *configResolver) fieldSchema(field *extensiongen.ExtensionInputField) (C
 	switch field.Type {
 	case extensiongen.ExtensionInputType_EXTENSION_INPUT_TYPE_UUID:
 		if field.TypeConfig != nil && field.TypeConfig.Uuid != nil {
-			opts, err := r.optionsForEntityType(field.TypeConfig.Uuid.EntityType)
+			opts, err := r.OptionsForEntityType(field.TypeConfig.Uuid.EntityType, "")
 			if err != nil {
 				return fs, err
 			}
@@ -200,7 +247,7 @@ func (r *configResolver) fieldSchema(field *extensiongen.ExtensionInputField) (C
 			switch arr.ArrayType {
 			case extensiongen.ExtensionInputType_EXTENSION_INPUT_TYPE_UUID:
 				if arr.ArrayTypeConfig != nil && arr.ArrayTypeConfig.Uuid != nil {
-					opts, err := r.optionsForEntityType(arr.ArrayTypeConfig.Uuid.EntityType)
+					opts, err := r.OptionsForEntityType(arr.ArrayTypeConfig.Uuid.EntityType, "")
 					if err != nil {
 						return fs, err
 					}
@@ -227,7 +274,7 @@ func (i *Implementation) DescribeConfig(
 	configEntity *extensiongen.ExtensionConfigurationEntity,
 	lastConfig map[string]interface{},
 ) (*ConfigSchema, error) {
-	resolver := i.newConfigResolver(project, projectVersion.Uuid)
+	resolver := i.NewConfigResolver(project, projectVersion.Uuid)
 
 	schema := &ConfigSchema{
 		Extension: SchemaExtension{

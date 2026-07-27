@@ -15,9 +15,6 @@ import (
 	"strings"
 	"time"
 
-	"google.golang.org/grpc/codes"
-	"google.golang.org/grpc/status"
-
 	extensiongen "github.com/nuzur/extension-sdk/idl/gen"
 	nemgen "github.com/nuzur/nem/idl/gen"
 	"github.com/nuzur/nuzur-cli/constants"
@@ -505,103 +502,7 @@ type projectVersionData struct {
 	ExtensionsMetadata map[string]extensionMetadata `json:"ExtensionsMetadata"`
 }
 
-// GetLastUsedConfig returns a map of extensionIdentifier -> configValues (parsed map) from the stored project version data.
-func (i *Implementation) GetLastUsedConfig(projectVersionUUID string) (map[string]map[string]interface{}, error) {
-	ctx, err := productclient.ClientContext()
-	if err != nil {
-		return nil, err
-	}
-
-	res, err := i.productClient.ProductClient.GetUserProjectVersionData(ctx, &gen.GetUserProjectVersionDataRequest{
-		ProjectVersionUuid: projectVersionUUID,
-	})
-
-	if err != nil {
-		return nil, err
-	}
-
-	if res.Data == "" {
-		return nil, nil
-	}
-
-	var pvd projectVersionData
-	if err := json.Unmarshal([]byte(res.Data), &pvd); err != nil {
-		return nil, nil
-	}
-
-	if len(pvd.ExtensionsMetadata) == 0 {
-		return nil, nil
-	}
-
-	result := make(map[string]map[string]interface{}, len(pvd.ExtensionsMetadata))
-	for identifier, meta := range pvd.ExtensionsMetadata {
-		var configValues map[string]interface{}
-		if meta.ConfigValues != "" {
-			if err := json.Unmarshal([]byte(meta.ConfigValues), &configValues); err != nil {
-				configValues = nil
-			}
-		}
-		result[identifier] = configValues
-	}
-
-	return result, nil
-}
-
-// SaveLastUsedConfig persists configValues per extension identifier into the ExtensionsMetadata field,
-// preserving any other top-level keys (e.g. DataManagerMetadata) already in the stored data.
-func (i *Implementation) SaveLastUsedConfig(projectVersionUUID string, configs map[string]map[string]interface{}) error {
-	ctx, err := productclient.ClientContext()
-	if err != nil {
-		return err
-	}
-
-	// fetch existing data to preserve other keys; NotFound means no record yet, which is fine
-	res, err := i.productClient.ProductClient.GetUserProjectVersionData(ctx, &gen.GetUserProjectVersionDataRequest{
-		ProjectVersionUuid: projectVersionUUID,
-	})
-	if err != nil && status.Code(err) != codes.NotFound {
-		return err
-	}
-
-	// unmarshal into a generic map so we don't clobber other top-level keys
-	raw := make(map[string]json.RawMessage)
-	if err == nil && res.Data != "" {
-		if err := json.Unmarshal([]byte(res.Data), &raw); err != nil {
-			raw = make(map[string]json.RawMessage)
-		}
-	}
-
-	now := time.Now().UTC().Format(time.RFC3339Nano)
-	extMeta := make(map[string]extensionMetadata, len(configs))
-	for identifier, configValues := range configs {
-		cvBytes, err := json.Marshal(configValues)
-		if err != nil {
-			return fmt.Errorf("failed to marshal config values for %s: %w", identifier, err)
-		}
-		extMeta[identifier] = extensionMetadata{
-			LastUsed:            now,
-			ConfigValues:        string(cvBytes),
-			ExtensionIdentifier: identifier,
-		}
-	}
-
-	extMetaBytes, err := json.Marshal(extMeta)
-	if err != nil {
-		return err
-	}
-	raw["ExtensionsMetadata"] = extMetaBytes
-
-	data, err := json.Marshal(raw)
-	if err != nil {
-		return err
-	}
-
-	_, err = i.productClient.ProductClient.SaveUserProjectVersionData(ctx, &gen.SaveUserProjectVersionDataRequest{
-		ProjectVersionUuid: projectVersionUUID,
-		Data:               string(data),
-	})
-	return err
-}
+// Reading and writing these entries lives in last_used_config.go.
 
 func (i *Implementation) GetConfigEntity(extensionVersion *nemgen.ExtensionVersion) (*extensiongen.ExtensionConfigurationEntity, error) {
 	configEntity := &extensiongen.ExtensionConfigurationEntity{}

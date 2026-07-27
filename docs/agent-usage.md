@@ -22,7 +22,7 @@ as breaking. The Go types backing them live in
 
 ```bash
 nuzur-cli go-code-gen describe --project my-project --version v3
-# or, for any generator:
+# or, for any extension:
 nuzur-cli run-extension describe --project my-project --version v3 --extension go-code-gen
 ```
 
@@ -60,6 +60,52 @@ Field schema semantics:
 
 If `options` is absent for a uuid field, the allowed set couldn't be enumerated
 and any string is accepted.
+
+### Paired extensions: `sql-push` and `sql-import`
+
+Two capabilities ship as a pair of backend extensions that do the same job over
+a different connection path:
+
+| what you ask for | direct connection | via a local agent |
+|------------------|-------------------|-------------------|
+| `sql-push`   | `sql-push` — `store`, `connection`, `schema` | `sql-push-local` — `local_agent`, `local_agent_connection`, `local_agent_schema` |
+| `sql-import` | `sql-import` — same three, plus `mode` and `infer_weak_relationships` | `sql-import-local` — same three, plus `mode` and `infer_weak_relationships` |
+
+Both are addressed as one extension (`--extension sql-push`); the connection
+mode selects the member that actually runs:
+
+- **`--connection-mode remote`** (aliases `direct`) — nuzur connects to a team
+  connection over the network. This is the **default** for `describe` and for
+  non-interactive runs with no other signal.
+- **`--connection-mode local`** (aliases `agent`) — the run goes through a local
+  agent running next to the database. Requires an **online** agent
+  (`nuzur-cli agent start`); `local_agent`/`local_agent_connection` options list
+  only online agents you own.
+
+When the flag is absent, the mode is inferred from the config you supply: a
+config carrying `local_agent` runs the agent-side member, one carrying `store` or
+`connection` runs the direct member. Naming a member outright still works
+(`--extension sql-push-local`) and implies local mode; combining it with
+`--connection-mode remote` is an error rather than a silent choice.
+
+```bash
+# describe the agent-side variant
+nuzur-cli run-extension describe --project my-project --version v3 \
+  --extension sql-push --connection-mode local
+
+# run it (mode inferred from the config's fields)
+nuzur-cli run-extension --project my-project --version v3 --extension sql-push \
+  --config '{"local_agent":"…","local_agent_connection":"…","local_agent_schema":"public"}' \
+  --confirm-steps --json
+```
+
+Interactively, picking `sql-push` or `sql-import` asks for the connection mode,
+starting on whichever member you ran last for that project version.
+
+Last-used configs are stored per **executed** member, so the direct and agent
+configs of a pair are remembered separately and neither overwrites the other.
+The web editor reads the same records, so a mode chosen in one client is the
+default in the other.
 
 ## 2. Run with a full config
 
@@ -126,8 +172,10 @@ just `message`.
 The [`nuzur_cc`](https://github.com/nuzur/nuzur-go/tree/main/ccmcp) MCP server
 (used by claude.ai / Claude Desktop, where there's no local shell) exposes a
 **`describeExtensionConfig`** tool that returns the *same* schema shape as
-`nuzur-cli … describe`. It cannot run the extension — code generation writes to
-the local filesystem, which a remote server can't reach — so the split is:
+`nuzur-cli … describe`, for every extension type. It cannot run the extension —
+code generation writes to the local filesystem, which a remote server can't
+reach, and importer/synchronizer runs need interactive confirmation — so the
+split is:
 
 - **Remote (`nuzur_cc`)** assembles the config schema from backend data it
   already serves (entities, connections, stores, enum options).
@@ -141,7 +189,7 @@ Params:
 |---|---|---|
 | `projectUuid` | yes | the project to run against |
 | `projectVersionUuid` | yes | the version whose entities become the uuid options |
-| `extensionIdentifier` | yes | e.g. `"go-code-gen"` |
+| `extensionIdentifier` | yes | e.g. `"go-code-gen"`. Any extension type; for paired extensions name the member you want (`"sql-push"` or `"sql-push-local"`) — the remote tool has no connection-mode parameter |
 
 Result: the `ConfigSchema` documented above (`extension`, `project`,
 `project_version`, `fields`, `last_used_config`) **plus** an `execution` block

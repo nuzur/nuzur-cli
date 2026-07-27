@@ -30,7 +30,7 @@ type runTargets struct {
 	extensionVersion *nemgen.ExtensionVersion
 	configEntity     *extensiongen.ExtensionConfigurationEntity
 	lastConfig       map[string]interface{}
-	allLastConfigs   map[string]map[string]interface{}
+	allLastConfigs   map[string]extensionrun.LastUsedEntry
 }
 
 // resolveOptions controls how runTargets are resolved.
@@ -39,6 +39,12 @@ type resolveOptions struct {
 	interactive         bool   // allow interactive prompts when a value isn't supplied via flags
 	checkAccess         bool   // enforce that the user can run extensions on the project
 	checkLimit          bool   // enforce the monthly Pro execution limit
+	// providedConfig is the parsed --config/--config-file, used to infer the
+	// connection mode of a paired extension from the fields it carries.
+	providedConfig map[string]interface{}
+	// allowModePrompt permits asking for the connection mode of a paired
+	// extension. `describe` leaves it off so its schema stays deterministic.
+	allowModePrompt bool
 }
 
 // describeSubcommand builds the `describe` subcommand shared by run-extension and
@@ -51,13 +57,15 @@ func (i *Implementation) describeSubcommand(extensionIdentifier string) cli.Comm
 			cli.StringFlag{Name: "project, p", Usage: "Project name or UUID"},
 			cli.StringFlag{Name: "version", Usage: "Project version identifier or UUID"},
 			cli.StringFlag{Name: "extension, e", Usage: "Extension identifier (run-extension only)"},
+			cli.StringFlag{Name: "connection-mode", Usage: "For paired extensions (sql-push, sql-import): describe the 'remote' (default) or 'local' variant"},
 		},
 		Action: func(c *cli.Context) error {
 			flags := extRunFlags{
-				project:    c.String("project"),
-				version:    c.String("version"),
-				extension:  c.String("extension"),
-				jsonOutput: true, // describe output is always machine-readable
+				project:        c.String("project"),
+				version:        c.String("version"),
+				extension:      c.String("extension"),
+				connectionMode: c.String("connection-mode"),
+				jsonOutput:     true, // describe output is always machine-readable
 			}
 			return i.describeFlow(extensionIdentifier, flags)
 		},
@@ -73,6 +81,10 @@ func (i *Implementation) describeFlow(extensionIdentifier string, flags extRunFl
 		interactive:         true,
 		checkAccess:         false,
 		checkLimit:          false,
+		// A schema is a machine contract: for a paired extension the variant
+		// comes from --connection-mode (or the named member), defaulting to
+		// remote, rather than from a prompt or from what ran last.
+		allowModePrompt: false,
 	})
 	if err != nil {
 		return i.failRun(flags, err)
@@ -149,6 +161,13 @@ func (i *Implementation) resolveRunTargets(flags extRunFlags, opts resolveOption
 		return nil, err
 	}
 
+	// Saved configs are read before the extension is resolved: for a paired
+	// extension they also tell us which mode ran last, which seeds the prompt.
+	allLastConfigs, err := er.GetLastUsedConfigs(projectVersion.Uuid)
+	if err != nil {
+		allLastConfigs = nil
+	}
+
 	// extension
 	extIdentifier := opts.extensionIdentifier
 	if extIdentifier == "" {
@@ -169,6 +188,30 @@ func (i *Implementation) resolveRunTargets(flags extRunFlags, opts resolveOption
 		return nil, err
 	}
 
+	// Paired extensions (sql-push, sql-import) are picked as one entry; the
+	// connection mode decides which backend member actually runs.
+	pair, isPair := pairForIdentifier(extension.Identifier)
+	if isPair {
+		member, needPrompt, seed, decideErr := decidePairMember(
+			pair, extension.Identifier, flags.connectionMode, opts.providedConfig, allLastConfigs, opts.interactive && opts.allowModePrompt)
+		if decideErr != nil {
+			return nil, decideErr
+		}
+		if needPrompt {
+			mode, promptErr := i.promptConnectionMode(seed)
+			if promptErr != nil {
+				return nil, promptErr
+			}
+			member = pair.memberForMode(mode)
+		}
+		if member != extension.Identifier {
+			extension, err = er.FindExtensionByIdentifier(member)
+			if err != nil {
+				return nil, err
+			}
+		}
+	}
+
 	// The former monthly Pro-execution cap has been replaced by a server-side
 	// admission queue: free users are no longer blocked, they simply wait longer
 	// under load. The extension server handles queueing during StartExecution, so
@@ -184,13 +227,17 @@ func (i *Implementation) resolveRunTargets(flags extRunFlags, opts resolveOption
 		return nil, err
 	}
 
-	allLastConfigs, err := er.GetLastUsedConfig(projectVersion.Uuid)
-	if err != nil {
-		allLastConfigs = nil
-	}
 	var lastConfig map[string]interface{}
 	if allLastConfigs != nil {
-		lastConfig = allLastConfigs[extension.Identifier]
+		if isPair {
+			// Seed from whichever member ran last, then keep only the fields the
+			// resolved member declares — the merged map holds both modes'
+			// connection fields, and "reuse previous configuration" hands its
+			// result to the backend verbatim.
+			lastConfig = filterConfigToFields(aliasAwareLastConfig(pair, allLastConfigs), configEntityFieldIdentifiers(configEntity))
+		} else {
+			lastConfig = allLastConfigs[extension.Identifier].ConfigValues
+		}
 	}
 
 	return &runTargets{
@@ -203,6 +250,18 @@ func (i *Implementation) resolveRunTargets(flags extRunFlags, opts resolveOption
 		lastConfig:       lastConfig,
 		allLastConfigs:   allLastConfigs,
 	}, nil
+}
+
+// configEntityFieldIdentifiers lists the field identifiers an extension declares.
+func configEntityFieldIdentifiers(configEntity *extensiongen.ExtensionConfigurationEntity) []string {
+	if configEntity == nil {
+		return nil
+	}
+	ids := make([]string, 0, len(configEntity.Fields))
+	for _, f := range configEntity.Fields {
+		ids = append(ids, f.Identifier)
+	}
+	return ids
 }
 
 // loadProvidedConfig reads the caller-supplied config from --config (inline JSON
