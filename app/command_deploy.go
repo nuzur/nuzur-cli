@@ -75,6 +75,22 @@ func (i *Implementation) DeployCommand() cli.Command {
 	}
 }
 
+// deployResolveOptions is how deploy resolves its project/version/extension. It
+// is a function rather than an inline literal so a test can assert on the policy
+// bits — particularly requireApprovedVersion, which is the only thing standing
+// between a draft schema and a production box.
+func deployResolveOptions() resolveOptions {
+	return resolveOptions{
+		extensionIdentifier: goCodeGenExtensionIdentifier,
+		interactive:         false,
+		checkAccess:         true,
+		checkLimit:          true,
+		// Production runs reviewed schemas only. Checked here, before the CLI
+		// provisions or bills anything.
+		requireApprovedVersion: true,
+	}
+}
+
 func (i *Implementation) runDeploy(c *cli.Context) (rerr error) {
 	// Set once the deploy is recorded in nuzur (right after the box exists). If
 	// anything fails after that, mark the revision FAILED with the error — a broken
@@ -233,12 +249,7 @@ func (i *Implementation) runDeploy(c *cli.Context) (rerr error) {
 		project:        s.Project,
 		version:        s.Version,
 		nonInteractive: true,
-	}, resolveOptions{
-		extensionIdentifier: goCodeGenExtensionIdentifier,
-		interactive:         false,
-		checkAccess:         true,
-		checkLimit:          true,
-	})
+	}, deployResolveOptions())
 	if err != nil {
 		return err
 	}

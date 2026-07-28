@@ -39,12 +39,52 @@ type resolveOptions struct {
 	interactive         bool   // allow interactive prompts when a value isn't supplied via flags
 	checkAccess         bool   // enforce that the user can run extensions on the project
 	checkLimit          bool   // enforce the monthly Pro execution limit
+	// requireApprovedVersion rejects a project version that has not cleared
+	// review. Set by deploy: what runs in production must be what a reviewer
+	// signed off on. Generation and describe leave it off — writing files locally
+	// from a draft is the normal way to iterate on one.
+	requireApprovedVersion bool
 	// providedConfig is the parsed --config/--config-file, used to infer the
 	// connection mode of a paired extension from the fields it carries.
 	providedConfig map[string]interface{}
 	// allowModePrompt permits asking for the connection mode of a paired
 	// extension. `describe` leaves it off so its schema stays deterministic.
 	allowModePrompt bool
+}
+
+// requireApprovedProjectVersion rejects a project version that has not cleared
+// review.
+//
+// Deploy used to accept any version the user could name — draft, in review, even
+// rejected — so what ran in production was not necessarily what a reviewer signed
+// off on, and the review step was advisory in the one place it should bind. There
+// is deliberately no --force escape hatch: an override flag is the first thing
+// anything driving this CLI reaches for, which lands us back where we started.
+// A version that genuinely needs deploying can be approved in seconds.
+func requireApprovedProjectVersion(pv *nemgen.ProjectVersion) error {
+	switch pv.GetReviewStatus() {
+	case nemgen.ProjectVersionReviewStatus_PROJECT_VERSION_REVIEW_STATUS_APPROVED,
+		nemgen.ProjectVersionReviewStatus_PROJECT_VERSION_REVIEW_STATUS_PUBLISHED:
+		return nil
+	}
+	return fmt.Errorf(
+		"project version %q is %s: deploy builds only from an approved or published version. Send it for review in nuzur, have it approved (or published), then deploy that version",
+		pv.GetIdentifier(), reviewStatusLabel(pv.GetReviewStatus()))
+}
+
+// reviewStatusLabel renders a review status the way the error above reads it:
+// as a state the user has to move the version out of, not an enum name.
+func reviewStatusLabel(s nemgen.ProjectVersionReviewStatus) string {
+	switch s {
+	case nemgen.ProjectVersionReviewStatus_PROJECT_VERSION_REVIEW_STATUS_DRAFT:
+		return "still a draft"
+	case nemgen.ProjectVersionReviewStatus_PROJECT_VERSION_REVIEW_STATUS_IN_REVIEW:
+		return "still in review"
+	case nemgen.ProjectVersionReviewStatus_PROJECT_VERSION_REVIEW_STATUS_REJECTED:
+		return "rejected"
+	default:
+		return fmt.Sprintf("in review state %d", int32(s))
+	}
 }
 
 // describeSubcommand builds the `describe` subcommand shared by run-extension and
@@ -159,6 +199,12 @@ func (i *Implementation) resolveRunTargets(flags extRunFlags, opts resolveOption
 	}
 	if err != nil {
 		return nil, err
+	}
+
+	if opts.requireApprovedVersion {
+		if err := requireApprovedProjectVersion(projectVersion); err != nil {
+			return nil, err
+		}
 	}
 
 	// Saved configs are read before the extension is resolved: for a paired
