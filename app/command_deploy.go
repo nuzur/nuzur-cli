@@ -316,6 +316,20 @@ func (i *Implementation) runDeploy(c *cli.Context) (rerr error) {
 			return fmt.Errorf("building generator config (pass --config-file, or run `nuzur-cli go-code-gen` once): %w", err)
 		}
 
+		// Catch an unsupportable JWT config here: left alone it generates fine and
+		// only fails on the remote host, during the docker build, after the VPS has
+		// already been provisioned.
+		configErr, jwtWarnings, checkErr := targets.er.ValidateJWTAuthRequirements(targets.projectVersion.Uuid, configValues)
+		if checkErr != nil {
+			return checkErr
+		}
+		if configErr != nil {
+			return configErr
+		}
+		for _, w := range jwtWarnings {
+			outputtools.PrintlnColoredErr(fmt.Sprintf("warning: %s", w), outputtools.Yellow)
+		}
+
 		// If storage generation is on, resolve credentials for prod.yaml — from a
 		// team ObjectStore (nuzur-stored) or the manual --s3-* flags. Storage may be
 		// enabled with no creds yet (endpoints return 503 until prod.yaml is set).

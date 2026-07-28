@@ -151,6 +151,21 @@ func (i *Implementation) runExtensionFlow(extensionIdentifier string, flags extR
 		return i.failRun(flags, err)
 	}
 
+	// Generating a JWT server against a schema that cannot support it produces a
+	// workspace that only fails later at go build, so stop here instead.
+	if targets.extension.Identifier == goCodeGenExtensionIdentifier {
+		configErr, warnings, checkErr := targets.er.ValidateJWTAuthRequirements(targets.projectVersion.Uuid, configValues)
+		if checkErr != nil {
+			return i.failRun(flags, checkErr)
+		}
+		if configErr != nil {
+			return i.failRun(flags, configErr)
+		}
+		for _, w := range warnings {
+			outputtools.PrintlnColoredErr(fmt.Sprintf("warning: %s", w), outputtools.Yellow)
+		}
+	}
+
 	// Save the config under the identifier that actually ran, in that backend's
 	// field shape, so both a later CLI run and the web app pick it up.
 	if saveErr := targets.er.SaveLastUsedConfigEntry(targets.projectVersion.Uuid, targets.extension.Identifier, configValues); saveErr != nil {
