@@ -376,17 +376,15 @@ func (i *Implementation) BuildConfigValues(
 
 		case extensiongen.ExtensionInputType_EXTENSION_INPUT_TYPE_UUID:
 			var opts []extensionrun.ConfigOption
-			if field.TypeConfig != nil && field.TypeConfig.Uuid != nil {
-				entityType := field.TypeConfig.Uuid.EntityType
-				// Agent connections are scoped to the agent chosen a field
-				// earlier, so the list only offers reachable databases.
-				resolved, err := resolver.OptionsForEntityType(entityType, selectedLocalAgentUUID)
-				if err == nil {
-					opts = resolved
-				}
-				if len(opts) == 0 {
-					i.printNoOptionsHint(entityType)
-				}
+			declared := extensionrun.UUIDFieldEntityType(field)
+			entityType := extensionrun.EffectiveEntityType(declared, field.Identifier)
+			// Agent connections are scoped to the agent chosen a field
+			// earlier, so the list only offers reachable databases.
+			if resolved, err := resolver.OptionsForEntityType(declared, field.Identifier, selectedLocalAgentUUID); err == nil {
+				opts = resolved
+			}
+			if len(opts) == 0 {
+				i.printNoOptionsHint(entityType)
 			}
 
 			if len(opts) == 0 {
@@ -404,8 +402,7 @@ func (i *Implementation) BuildConfigValues(
 				values[field.Identifier] = val
 			}
 
-			if field.TypeConfig != nil && field.TypeConfig.Uuid != nil &&
-				field.TypeConfig.Uuid.EntityType == extensiongen.EntityType_ENTITY_TYPE_LOCAL_AGENT {
+			if entityType == extensiongen.EntityType_ENTITY_TYPE_LOCAL_AGENT {
 				if agentUUID, ok := values[field.Identifier].(string); ok {
 					selectedLocalAgentUUID = agentUUID
 				}
@@ -520,7 +517,7 @@ func (i *Implementation) BuildConfigValues(
 				var displayItems []string
 				var uuidItems []string
 
-				if opts, err := resolver.OptionsForEntityType(uuidCfg.EntityType, selectedLocalAgentUUID); err == nil {
+				if opts, err := resolver.OptionsForEntityType(uuidCfg.EntityType, field.Identifier, selectedLocalAgentUUID); err == nil {
 					for _, o := range opts {
 						displayItems = append(displayItems, o.Label)
 						uuidItems = append(uuidItems, o.Value)

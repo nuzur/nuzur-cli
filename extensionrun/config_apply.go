@@ -122,14 +122,12 @@ func (r *ConfigResolver) coerceField(field *extensiongen.ExtensionInputField, ra
 		if err != nil {
 			return nil, err
 		}
-		if field.TypeConfig != nil && field.TypeConfig.Uuid != nil {
-			opts, err := r.OptionsForEntityType(field.TypeConfig.Uuid.EntityType, "")
-			if err != nil {
-				return nil, err
-			}
-			if err := validateOption(s, opts); err != nil {
-				return nil, err
-			}
+		opts, err := r.OptionsForEntityType(UUIDFieldEntityType(field), field.Identifier, "")
+		if err != nil {
+			return nil, err
+		}
+		if err := validateOption(s, opts); err != nil {
+			return nil, err
 		}
 		return s, nil
 
@@ -155,7 +153,7 @@ func (r *ConfigResolver) coerceField(field *extensiongen.ExtensionInputField, ra
 			case extensiongen.ExtensionInputType_EXTENSION_INPUT_TYPE_UUID:
 				if arr.ArrayTypeConfig != nil && arr.ArrayTypeConfig.Uuid != nil {
 					var err error
-					opts, err = r.OptionsForEntityType(arr.ArrayTypeConfig.Uuid.EntityType, "")
+					opts, err = r.OptionsForEntityType(arr.ArrayTypeConfig.Uuid.EntityType, field.Identifier, "")
 					if err != nil {
 						return nil, err
 					}

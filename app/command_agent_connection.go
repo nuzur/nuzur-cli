@@ -1,12 +1,17 @@
 package app
 
 import (
+	"context"
 	"fmt"
 	"os"
 	"text/tabwriter"
+	"time"
 
+	"github.com/nuzur/filetools"
 	nemgen "github.com/nuzur/nem/idl/gen"
 	"github.com/nuzur/nuzur-cli/agent/connections"
+	"github.com/nuzur/nuzur-cli/constants"
+	"github.com/nuzur/nuzur-cli/files"
 	"github.com/nuzur/nuzur-cli/productclient"
 	pb "github.com/nuzur/nuzur-cli/protodeps/gen"
 	"github.com/urfave/cli"
@@ -205,17 +210,34 @@ func (i *Implementation) AgentConnectionRemoveCommand() cli.Command {
 	}
 }
 
-// publishCatalog reads the local agent uuid + sends the registry's non-secret
-// metadata to nuzur via UpdateLocalAgentConnections. DSNs never leave the
-// machine.
-func (i *Implementation) publishCatalog(reg *connections.Registry) error {
-	// Pair this machine automatically on first publish so users don't need a
-	// separate `nuzur-cli agent pair` step. ensureLocalAgentPaired also logs in.
-	agentUUID, err := i.ensureLocalAgentPaired()
-	if err != nil {
-		return err
-	}
+// publishMode is how a catalog publish authenticates itself.
+type publishMode int
 
+const (
+	// publishViaUser signs the call with the logged-in user's token.
+	publishViaUser publishMode = iota
+	// publishViaAgent signs it with this machine's agent credentials — the
+	// only option on a headless box, which has no user session.
+	publishViaAgent
+	publishImpossible
+)
+
+// choosePublishMode prefers the user token when one is present: it can re-pair
+// a machine whose agent row is gone, which agent credentials cannot do.
+func choosePublishMode(hasUserToken, hasAgentCreds bool) publishMode {
+	switch {
+	case hasUserToken:
+		return publishViaUser
+	case hasAgentCreds:
+		return publishViaAgent
+	default:
+		return publishImpossible
+	}
+}
+
+// catalogProtos converts the local registry into the metadata nuzur stores.
+// DSNs are deliberately absent — they never leave this machine.
+func catalogProtos(reg *connections.Registry) []*nemgen.LocalAgentConnection {
 	protos := make([]*nemgen.LocalAgentConnection, 0, len(reg.Entries))
 	for _, e := range reg.Entries {
 		protos = append(protos, &nemgen.LocalAgentConnection{
@@ -224,6 +246,44 @@ func (i *Implementation) publishCatalog(reg *connections.Registry) error {
 			DbType:        nemgen.LocalAgentConnectionDbType(e.DBType),
 			DefaultSchema: e.DefaultSchema,
 		})
+	}
+	return protos
+}
+
+// publishCatalog sends the registry's non-secret metadata to nuzur, signing the
+// call with whichever credentials this machine has: the logged-in user's, or —
+// on a server paired from a pairing token, where no login exists — the agent's
+// own. The catalog is always sent whole, because both server-side RPCs replace
+// it rather than merge.
+func (i *Implementation) publishCatalog(reg *connections.Registry) error {
+	protos := catalogProtos(reg)
+	agentUUID, agentToken, _ := readExistingPairingCreds()
+	hasAgentCreds := agentUUID != "" && agentToken != ""
+	hasUserToken := filetools.FileExists(files.TokenFilePath())
+
+	switch choosePublishMode(hasUserToken, hasAgentCreds) {
+	case publishViaUser:
+		err := i.publishCatalogAsUser(protos)
+		// A token file can outlive its session. Rather than pop a browser on
+		// what may be a server, fall back to the agent's own credentials.
+		if status.Code(err) == codes.Unauthenticated && hasAgentCreds {
+			return i.publishCatalogWithAgentCreds(agentUUID, agentToken, protos)
+		}
+		return err
+	case publishViaAgent:
+		return i.publishCatalogWithAgentCreds(agentUUID, agentToken, protos)
+	default:
+		return fmt.Errorf("cannot publish: this machine is not signed in to nuzur and is not paired\n" +
+			"  run `nuzur-cli connect` to pair it, or re-run with --no-publish and publish later from a signed-in machine")
+	}
+}
+
+// publishCatalogAsUser is the interactive path: it pairs this machine on first
+// use (logging in if needed) and re-pairs if the stored agent row is gone.
+func (i *Implementation) publishCatalogAsUser(protos []*nemgen.LocalAgentConnection) error {
+	agentUUID, err := i.ensureLocalAgentPaired()
+	if err != nil {
+		return err
 	}
 
 	err = i.updateConnections(agentUUID, protos)
@@ -235,6 +295,29 @@ func (i *Implementation) publishCatalog(reg *connections.Registry) error {
 			return perr
 		}
 		err = i.updateConnections(newUUID, protos)
+	}
+	return err
+}
+
+// publishCatalogWithAgentCreds publishes using this machine's agent token. The
+// token travels in the request body, so the call carries no auth metadata —
+// same shape as the provisioning-token exchange.
+func (i *Implementation) publishCatalogWithAgentCreds(agentUUID, agentToken string, protos []*nemgen.LocalAgentConnection) error {
+	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
+	defer cancel()
+
+	_, err := i.productClient.ProductClient.PublishLocalAgentCatalog(ctx, &pb.PublishLocalAgentCatalogRequest{
+		LocalAgentUuid:  agentUUID,
+		LocalAgentToken: agentToken,
+		Connections:     protos,
+	})
+	// Agent credentials cannot re-pair themselves, so a dead pairing needs a
+	// fresh pairing token rather than a silent retry.
+	switch status.Code(err) {
+	case codes.PermissionDenied:
+		return fmt.Errorf("this agent has been revoked — pair this machine again with a new token from %s/pair (`nuzur-cli agent pair --force`)", constants.WEB_PROD_URL)
+	case codes.Unauthenticated, codes.NotFound:
+		return fmt.Errorf("this machine's agent credentials are no longer valid — pair it again with a new token from %s/pair (`nuzur-cli agent pair --force`)", constants.WEB_PROD_URL)
 	}
 	return err
 }

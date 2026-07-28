@@ -64,6 +64,7 @@ const (
 	NuzurProduct_CreateProjectVersionFromJSON_FullMethodName                = "/NuzurProduct/CreateProjectVersionFromJSON"
 	NuzurProduct_CreateDraftProjectVersionForExistingProject_FullMethodName = "/NuzurProduct/CreateDraftProjectVersionForExistingProject"
 	NuzurProduct_UpdateProjectVersion_FullMethodName                        = "/NuzurProduct/UpdateProjectVersion"
+	NuzurProduct_ApplyProjectVersionOps_FullMethodName                      = "/NuzurProduct/ApplyProjectVersionOps"
 	NuzurProduct_DiscardDraftProjectVersion_FullMethodName                  = "/NuzurProduct/DiscardDraftProjectVersion"
 	NuzurProduct_SendProjectVersionForReview_FullMethodName                 = "/NuzurProduct/SendProjectVersionForReview"
 	NuzurProduct_WithdrawFromReviewProjectVersion_FullMethodName            = "/NuzurProduct/WithdrawFromReviewProjectVersion"
@@ -90,10 +91,14 @@ const (
 	NuzurProduct_CreateExtensionExecution_FullMethodName                    = "/NuzurProduct/CreateExtensionExecution"
 	NuzurProduct_UpdateExtensionExecution_FullMethodName                    = "/NuzurProduct/UpdateExtensionExecution"
 	NuzurProduct_CheckExtensionExecutionLimit_FullMethodName                = "/NuzurProduct/CheckExtensionExecutionLimit"
+	NuzurProduct_AcquireExecutionSlot_FullMethodName                        = "/NuzurProduct/AcquireExecutionSlot"
+	NuzurProduct_HeartbeatExecution_FullMethodName                          = "/NuzurProduct/HeartbeatExecution"
 	NuzurProduct_ListUserChangeRequests_FullMethodName                      = "/NuzurProduct/ListUserChangeRequests"
 	NuzurProduct_GetChangeRequest_FullMethodName                            = "/NuzurProduct/GetChangeRequest"
 	NuzurProduct_CreateChangeRequest_FullMethodName                         = "/NuzurProduct/CreateChangeRequest"
 	NuzurProduct_UpdateChangeRequest_FullMethodName                         = "/NuzurProduct/UpdateChangeRequest"
+	NuzurProduct_ApplyChangeRequestOps_FullMethodName                       = "/NuzurProduct/ApplyChangeRequestOps"
+	NuzurProduct_WithdrawChangeRequestFromReview_FullMethodName             = "/NuzurProduct/WithdrawChangeRequestFromReview"
 	NuzurProduct_ListChangeRequestsForReview_FullMethodName                 = "/NuzurProduct/ListChangeRequestsForReview"
 	NuzurProduct_GetUserProjectVersionData_FullMethodName                   = "/NuzurProduct/GetUserProjectVersionData"
 	NuzurProduct_SaveUserProjectVersionData_FullMethodName                  = "/NuzurProduct/SaveUserProjectVersionData"
@@ -133,8 +138,11 @@ const (
 	NuzurProduct_ListLocalAgents_FullMethodName                             = "/NuzurProduct/ListLocalAgents"
 	NuzurProduct_UpdateLocalAgentConnections_FullMethodName                 = "/NuzurProduct/UpdateLocalAgentConnections"
 	NuzurProduct_GetLocalAgentConnections_FullMethodName                    = "/NuzurProduct/GetLocalAgentConnections"
+	NuzurProduct_UpdateLocalAgentConnectionSharing_FullMethodName           = "/NuzurProduct/UpdateLocalAgentConnectionSharing"
+	NuzurProduct_ListTeamAgentConnections_FullMethodName                    = "/NuzurProduct/ListTeamAgentConnections"
 	NuzurProduct_IssueProvisioningToken_FullMethodName                      = "/NuzurProduct/IssueProvisioningToken"
 	NuzurProduct_ExchangeProvisioningToken_FullMethodName                   = "/NuzurProduct/ExchangeProvisioningToken"
+	NuzurProduct_PublishLocalAgentCatalog_FullMethodName                    = "/NuzurProduct/PublishLocalAgentCatalog"
 	NuzurProduct_UpsertDeployment_FullMethodName                            = "/NuzurProduct/UpsertDeployment"
 	NuzurProduct_ListDeployments_FullMethodName                             = "/NuzurProduct/ListDeployments"
 	NuzurProduct_ListDeploymentRevisions_FullMethodName                     = "/NuzurProduct/ListDeploymentRevisions"
@@ -212,6 +220,7 @@ type NuzurProductClient interface {
 	CreateProjectVersionFromJSON(ctx context.Context, in *CreateProjectVersionFromJSONRequest, opts ...grpc.CallOption) (*gen.ProjectVersion, error)
 	CreateDraftProjectVersionForExistingProject(ctx context.Context, in *CreateDraftProjectVersionForExistingProjectRequest, opts ...grpc.CallOption) (*gen.ProjectVersion, error)
 	UpdateProjectVersion(ctx context.Context, in *UpdateProjectVersionRequest, opts ...grpc.CallOption) (*gen.ProjectVersion, error)
+	ApplyProjectVersionOps(ctx context.Context, in *ApplyProjectVersionOpsRequest, opts ...grpc.CallOption) (*ApplyProjectVersionOpsResponse, error)
 	DiscardDraftProjectVersion(ctx context.Context, in *DiscardDraftProjectVersionRequest, opts ...grpc.CallOption) (*gen.ProjectVersion, error)
 	SendProjectVersionForReview(ctx context.Context, in *SendProjectVersionForReviewRequest, opts ...grpc.CallOption) (*gen.ProjectVersion, error)
 	WithdrawFromReviewProjectVersion(ctx context.Context, in *WithdrawFromReviewProjectVersionRequest, opts ...grpc.CallOption) (*gen.ProjectVersion, error)
@@ -243,11 +252,15 @@ type NuzurProductClient interface {
 	CreateExtensionExecution(ctx context.Context, in *CreateExtensionExecutionRequest, opts ...grpc.CallOption) (*gen.ExtensionExecution, error)
 	UpdateExtensionExecution(ctx context.Context, in *UpdateExtensionExecutionRequest, opts ...grpc.CallOption) (*gen.ExtensionExecution, error)
 	CheckExtensionExecutionLimit(ctx context.Context, in *CheckExtensionExecutionLimitRequest, opts ...grpc.CallOption) (*CheckExtensionExecutionLimitResponse, error)
+	AcquireExecutionSlot(ctx context.Context, in *AcquireExecutionSlotRequest, opts ...grpc.CallOption) (*AcquireExecutionSlotResponse, error)
+	HeartbeatExecution(ctx context.Context, in *HeartbeatExecutionRequest, opts ...grpc.CallOption) (*HeartbeatExecutionResponse, error)
 	// change request
 	ListUserChangeRequests(ctx context.Context, in *ListUserChangeRequestsRequest, opts ...grpc.CallOption) (*ListUserChangeRequestsResponse, error)
 	GetChangeRequest(ctx context.Context, in *GetChangeRequestRequest, opts ...grpc.CallOption) (*gen.ChangeRequest, error)
 	CreateChangeRequest(ctx context.Context, in *CreateChangeRequestRequest, opts ...grpc.CallOption) (*gen.ChangeRequest, error)
 	UpdateChangeRequest(ctx context.Context, in *UpdateChangeRequestRequest, opts ...grpc.CallOption) (*gen.ChangeRequest, error)
+	ApplyChangeRequestOps(ctx context.Context, in *ApplyChangeRequestOpsRequest, opts ...grpc.CallOption) (*ApplyChangeRequestOpsResponse, error)
+	WithdrawChangeRequestFromReview(ctx context.Context, in *WithdrawChangeRequestFromReviewRequest, opts ...grpc.CallOption) (*gen.ChangeRequest, error)
 	ListChangeRequestsForReview(ctx context.Context, in *ListChangeRequestsForReviewRequest, opts ...grpc.CallOption) (*ListChangeRequestsForReviewResponse, error)
 	// user project version data
 	GetUserProjectVersionData(ctx context.Context, in *GetUserProjectVersionDataRequest, opts ...grpc.CallOption) (*GetUserProjectVersionDataResponse, error)
@@ -295,10 +308,18 @@ type NuzurProductClient interface {
 	ListLocalAgents(ctx context.Context, in *ListLocalAgentsRequest, opts ...grpc.CallOption) (*ListLocalAgentsResponse, error)
 	UpdateLocalAgentConnections(ctx context.Context, in *UpdateLocalAgentConnectionsRequest, opts ...grpc.CallOption) (*UpdateLocalAgentConnectionsResponse, error)
 	GetLocalAgentConnections(ctx context.Context, in *GetLocalAgentConnectionsRequest, opts ...grpc.CallOption) (*GetLocalAgentConnectionsResponse, error)
+	// Team-visible agent connections: the owner shares one specific connection
+	// with one or more of their teams; teammates then reach it through the
+	// owner's agent stream, so the database is never exposed.
+	UpdateLocalAgentConnectionSharing(ctx context.Context, in *UpdateLocalAgentConnectionSharingRequest, opts ...grpc.CallOption) (*UpdateLocalAgentConnectionSharingResponse, error)
+	ListTeamAgentConnections(ctx context.Context, in *ListTeamAgentConnectionsRequest, opts ...grpc.CallOption) (*ListTeamAgentConnectionsResponse, error)
 	// Headless pairing: an authenticated user mints a short-lived provisioning
 	// token; a fresh (non-logged-in) machine exchanges it for agent creds.
 	IssueProvisioningToken(ctx context.Context, in *IssueProvisioningTokenRequest, opts ...grpc.CallOption) (*IssueProvisioningTokenResponse, error)
 	ExchangeProvisioningToken(ctx context.Context, in *ExchangeProvisioningTokenRequest, opts ...grpc.CallOption) (*ExchangeProvisioningTokenResponse, error)
+	// Lets a headless box publish its own catalog: authenticated by the agent
+	// token in the body, since such a machine has no user session to sign with.
+	PublishLocalAgentCatalog(ctx context.Context, in *PublishLocalAgentCatalogRequest, opts ...grpc.CallOption) (*PublishLocalAgentCatalogResponse, error)
 	// deployments — the CLI records a deployment on success and marks it
 	// destroyed on teardown; the web lists them (user-scoped) + pulls live health.
 	UpsertDeployment(ctx context.Context, in *UpsertDeploymentRequest, opts ...grpc.CallOption) (*UpsertDeploymentResponse, error)
@@ -768,6 +789,16 @@ func (c *nuzurProductClient) UpdateProjectVersion(ctx context.Context, in *Updat
 	return out, nil
 }
 
+func (c *nuzurProductClient) ApplyProjectVersionOps(ctx context.Context, in *ApplyProjectVersionOpsRequest, opts ...grpc.CallOption) (*ApplyProjectVersionOpsResponse, error) {
+	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
+	out := new(ApplyProjectVersionOpsResponse)
+	err := c.cc.Invoke(ctx, NuzurProduct_ApplyProjectVersionOps_FullMethodName, in, out, cOpts...)
+	if err != nil {
+		return nil, err
+	}
+	return out, nil
+}
+
 func (c *nuzurProductClient) DiscardDraftProjectVersion(ctx context.Context, in *DiscardDraftProjectVersionRequest, opts ...grpc.CallOption) (*gen.ProjectVersion, error) {
 	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
 	out := new(gen.ProjectVersion)
@@ -1028,6 +1059,26 @@ func (c *nuzurProductClient) CheckExtensionExecutionLimit(ctx context.Context, i
 	return out, nil
 }
 
+func (c *nuzurProductClient) AcquireExecutionSlot(ctx context.Context, in *AcquireExecutionSlotRequest, opts ...grpc.CallOption) (*AcquireExecutionSlotResponse, error) {
+	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
+	out := new(AcquireExecutionSlotResponse)
+	err := c.cc.Invoke(ctx, NuzurProduct_AcquireExecutionSlot_FullMethodName, in, out, cOpts...)
+	if err != nil {
+		return nil, err
+	}
+	return out, nil
+}
+
+func (c *nuzurProductClient) HeartbeatExecution(ctx context.Context, in *HeartbeatExecutionRequest, opts ...grpc.CallOption) (*HeartbeatExecutionResponse, error) {
+	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
+	out := new(HeartbeatExecutionResponse)
+	err := c.cc.Invoke(ctx, NuzurProduct_HeartbeatExecution_FullMethodName, in, out, cOpts...)
+	if err != nil {
+		return nil, err
+	}
+	return out, nil
+}
+
 func (c *nuzurProductClient) ListUserChangeRequests(ctx context.Context, in *ListUserChangeRequestsRequest, opts ...grpc.CallOption) (*ListUserChangeRequestsResponse, error) {
 	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
 	out := new(ListUserChangeRequestsResponse)
@@ -1062,6 +1113,26 @@ func (c *nuzurProductClient) UpdateChangeRequest(ctx context.Context, in *Update
 	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
 	out := new(gen.ChangeRequest)
 	err := c.cc.Invoke(ctx, NuzurProduct_UpdateChangeRequest_FullMethodName, in, out, cOpts...)
+	if err != nil {
+		return nil, err
+	}
+	return out, nil
+}
+
+func (c *nuzurProductClient) ApplyChangeRequestOps(ctx context.Context, in *ApplyChangeRequestOpsRequest, opts ...grpc.CallOption) (*ApplyChangeRequestOpsResponse, error) {
+	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
+	out := new(ApplyChangeRequestOpsResponse)
+	err := c.cc.Invoke(ctx, NuzurProduct_ApplyChangeRequestOps_FullMethodName, in, out, cOpts...)
+	if err != nil {
+		return nil, err
+	}
+	return out, nil
+}
+
+func (c *nuzurProductClient) WithdrawChangeRequestFromReview(ctx context.Context, in *WithdrawChangeRequestFromReviewRequest, opts ...grpc.CallOption) (*gen.ChangeRequest, error) {
+	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
+	out := new(gen.ChangeRequest)
+	err := c.cc.Invoke(ctx, NuzurProduct_WithdrawChangeRequestFromReview_FullMethodName, in, out, cOpts...)
 	if err != nil {
 		return nil, err
 	}
@@ -1458,6 +1529,26 @@ func (c *nuzurProductClient) GetLocalAgentConnections(ctx context.Context, in *G
 	return out, nil
 }
 
+func (c *nuzurProductClient) UpdateLocalAgentConnectionSharing(ctx context.Context, in *UpdateLocalAgentConnectionSharingRequest, opts ...grpc.CallOption) (*UpdateLocalAgentConnectionSharingResponse, error) {
+	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
+	out := new(UpdateLocalAgentConnectionSharingResponse)
+	err := c.cc.Invoke(ctx, NuzurProduct_UpdateLocalAgentConnectionSharing_FullMethodName, in, out, cOpts...)
+	if err != nil {
+		return nil, err
+	}
+	return out, nil
+}
+
+func (c *nuzurProductClient) ListTeamAgentConnections(ctx context.Context, in *ListTeamAgentConnectionsRequest, opts ...grpc.CallOption) (*ListTeamAgentConnectionsResponse, error) {
+	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
+	out := new(ListTeamAgentConnectionsResponse)
+	err := c.cc.Invoke(ctx, NuzurProduct_ListTeamAgentConnections_FullMethodName, in, out, cOpts...)
+	if err != nil {
+		return nil, err
+	}
+	return out, nil
+}
+
 func (c *nuzurProductClient) IssueProvisioningToken(ctx context.Context, in *IssueProvisioningTokenRequest, opts ...grpc.CallOption) (*IssueProvisioningTokenResponse, error) {
 	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
 	out := new(IssueProvisioningTokenResponse)
@@ -1472,6 +1563,16 @@ func (c *nuzurProductClient) ExchangeProvisioningToken(ctx context.Context, in *
 	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
 	out := new(ExchangeProvisioningTokenResponse)
 	err := c.cc.Invoke(ctx, NuzurProduct_ExchangeProvisioningToken_FullMethodName, in, out, cOpts...)
+	if err != nil {
+		return nil, err
+	}
+	return out, nil
+}
+
+func (c *nuzurProductClient) PublishLocalAgentCatalog(ctx context.Context, in *PublishLocalAgentCatalogRequest, opts ...grpc.CallOption) (*PublishLocalAgentCatalogResponse, error) {
+	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
+	out := new(PublishLocalAgentCatalogResponse)
+	err := c.cc.Invoke(ctx, NuzurProduct_PublishLocalAgentCatalog_FullMethodName, in, out, cOpts...)
 	if err != nil {
 		return nil, err
 	}
@@ -1697,6 +1798,7 @@ type NuzurProductServer interface {
 	CreateProjectVersionFromJSON(context.Context, *CreateProjectVersionFromJSONRequest) (*gen.ProjectVersion, error)
 	CreateDraftProjectVersionForExistingProject(context.Context, *CreateDraftProjectVersionForExistingProjectRequest) (*gen.ProjectVersion, error)
 	UpdateProjectVersion(context.Context, *UpdateProjectVersionRequest) (*gen.ProjectVersion, error)
+	ApplyProjectVersionOps(context.Context, *ApplyProjectVersionOpsRequest) (*ApplyProjectVersionOpsResponse, error)
 	DiscardDraftProjectVersion(context.Context, *DiscardDraftProjectVersionRequest) (*gen.ProjectVersion, error)
 	SendProjectVersionForReview(context.Context, *SendProjectVersionForReviewRequest) (*gen.ProjectVersion, error)
 	WithdrawFromReviewProjectVersion(context.Context, *WithdrawFromReviewProjectVersionRequest) (*gen.ProjectVersion, error)
@@ -1728,11 +1830,15 @@ type NuzurProductServer interface {
 	CreateExtensionExecution(context.Context, *CreateExtensionExecutionRequest) (*gen.ExtensionExecution, error)
 	UpdateExtensionExecution(context.Context, *UpdateExtensionExecutionRequest) (*gen.ExtensionExecution, error)
 	CheckExtensionExecutionLimit(context.Context, *CheckExtensionExecutionLimitRequest) (*CheckExtensionExecutionLimitResponse, error)
+	AcquireExecutionSlot(context.Context, *AcquireExecutionSlotRequest) (*AcquireExecutionSlotResponse, error)
+	HeartbeatExecution(context.Context, *HeartbeatExecutionRequest) (*HeartbeatExecutionResponse, error)
 	// change request
 	ListUserChangeRequests(context.Context, *ListUserChangeRequestsRequest) (*ListUserChangeRequestsResponse, error)
 	GetChangeRequest(context.Context, *GetChangeRequestRequest) (*gen.ChangeRequest, error)
 	CreateChangeRequest(context.Context, *CreateChangeRequestRequest) (*gen.ChangeRequest, error)
 	UpdateChangeRequest(context.Context, *UpdateChangeRequestRequest) (*gen.ChangeRequest, error)
+	ApplyChangeRequestOps(context.Context, *ApplyChangeRequestOpsRequest) (*ApplyChangeRequestOpsResponse, error)
+	WithdrawChangeRequestFromReview(context.Context, *WithdrawChangeRequestFromReviewRequest) (*gen.ChangeRequest, error)
 	ListChangeRequestsForReview(context.Context, *ListChangeRequestsForReviewRequest) (*ListChangeRequestsForReviewResponse, error)
 	// user project version data
 	GetUserProjectVersionData(context.Context, *GetUserProjectVersionDataRequest) (*GetUserProjectVersionDataResponse, error)
@@ -1780,10 +1886,18 @@ type NuzurProductServer interface {
 	ListLocalAgents(context.Context, *ListLocalAgentsRequest) (*ListLocalAgentsResponse, error)
 	UpdateLocalAgentConnections(context.Context, *UpdateLocalAgentConnectionsRequest) (*UpdateLocalAgentConnectionsResponse, error)
 	GetLocalAgentConnections(context.Context, *GetLocalAgentConnectionsRequest) (*GetLocalAgentConnectionsResponse, error)
+	// Team-visible agent connections: the owner shares one specific connection
+	// with one or more of their teams; teammates then reach it through the
+	// owner's agent stream, so the database is never exposed.
+	UpdateLocalAgentConnectionSharing(context.Context, *UpdateLocalAgentConnectionSharingRequest) (*UpdateLocalAgentConnectionSharingResponse, error)
+	ListTeamAgentConnections(context.Context, *ListTeamAgentConnectionsRequest) (*ListTeamAgentConnectionsResponse, error)
 	// Headless pairing: an authenticated user mints a short-lived provisioning
 	// token; a fresh (non-logged-in) machine exchanges it for agent creds.
 	IssueProvisioningToken(context.Context, *IssueProvisioningTokenRequest) (*IssueProvisioningTokenResponse, error)
 	ExchangeProvisioningToken(context.Context, *ExchangeProvisioningTokenRequest) (*ExchangeProvisioningTokenResponse, error)
+	// Lets a headless box publish its own catalog: authenticated by the agent
+	// token in the body, since such a machine has no user session to sign with.
+	PublishLocalAgentCatalog(context.Context, *PublishLocalAgentCatalogRequest) (*PublishLocalAgentCatalogResponse, error)
 	// deployments — the CLI records a deployment on success and marks it
 	// destroyed on teardown; the web lists them (user-scoped) + pulls live health.
 	UpsertDeployment(context.Context, *UpsertDeploymentRequest) (*UpsertDeploymentResponse, error)
@@ -1945,6 +2059,9 @@ func (UnimplementedNuzurProductServer) CreateDraftProjectVersionForExistingProje
 func (UnimplementedNuzurProductServer) UpdateProjectVersion(context.Context, *UpdateProjectVersionRequest) (*gen.ProjectVersion, error) {
 	return nil, status.Error(codes.Unimplemented, "method UpdateProjectVersion not implemented")
 }
+func (UnimplementedNuzurProductServer) ApplyProjectVersionOps(context.Context, *ApplyProjectVersionOpsRequest) (*ApplyProjectVersionOpsResponse, error) {
+	return nil, status.Error(codes.Unimplemented, "method ApplyProjectVersionOps not implemented")
+}
 func (UnimplementedNuzurProductServer) DiscardDraftProjectVersion(context.Context, *DiscardDraftProjectVersionRequest) (*gen.ProjectVersion, error) {
 	return nil, status.Error(codes.Unimplemented, "method DiscardDraftProjectVersion not implemented")
 }
@@ -2023,6 +2140,12 @@ func (UnimplementedNuzurProductServer) UpdateExtensionExecution(context.Context,
 func (UnimplementedNuzurProductServer) CheckExtensionExecutionLimit(context.Context, *CheckExtensionExecutionLimitRequest) (*CheckExtensionExecutionLimitResponse, error) {
 	return nil, status.Error(codes.Unimplemented, "method CheckExtensionExecutionLimit not implemented")
 }
+func (UnimplementedNuzurProductServer) AcquireExecutionSlot(context.Context, *AcquireExecutionSlotRequest) (*AcquireExecutionSlotResponse, error) {
+	return nil, status.Error(codes.Unimplemented, "method AcquireExecutionSlot not implemented")
+}
+func (UnimplementedNuzurProductServer) HeartbeatExecution(context.Context, *HeartbeatExecutionRequest) (*HeartbeatExecutionResponse, error) {
+	return nil, status.Error(codes.Unimplemented, "method HeartbeatExecution not implemented")
+}
 func (UnimplementedNuzurProductServer) ListUserChangeRequests(context.Context, *ListUserChangeRequestsRequest) (*ListUserChangeRequestsResponse, error) {
 	return nil, status.Error(codes.Unimplemented, "method ListUserChangeRequests not implemented")
 }
@@ -2034,6 +2157,12 @@ func (UnimplementedNuzurProductServer) CreateChangeRequest(context.Context, *Cre
 }
 func (UnimplementedNuzurProductServer) UpdateChangeRequest(context.Context, *UpdateChangeRequestRequest) (*gen.ChangeRequest, error) {
 	return nil, status.Error(codes.Unimplemented, "method UpdateChangeRequest not implemented")
+}
+func (UnimplementedNuzurProductServer) ApplyChangeRequestOps(context.Context, *ApplyChangeRequestOpsRequest) (*ApplyChangeRequestOpsResponse, error) {
+	return nil, status.Error(codes.Unimplemented, "method ApplyChangeRequestOps not implemented")
+}
+func (UnimplementedNuzurProductServer) WithdrawChangeRequestFromReview(context.Context, *WithdrawChangeRequestFromReviewRequest) (*gen.ChangeRequest, error) {
+	return nil, status.Error(codes.Unimplemented, "method WithdrawChangeRequestFromReview not implemented")
 }
 func (UnimplementedNuzurProductServer) ListChangeRequestsForReview(context.Context, *ListChangeRequestsForReviewRequest) (*ListChangeRequestsForReviewResponse, error) {
 	return nil, status.Error(codes.Unimplemented, "method ListChangeRequestsForReview not implemented")
@@ -2152,11 +2281,20 @@ func (UnimplementedNuzurProductServer) UpdateLocalAgentConnections(context.Conte
 func (UnimplementedNuzurProductServer) GetLocalAgentConnections(context.Context, *GetLocalAgentConnectionsRequest) (*GetLocalAgentConnectionsResponse, error) {
 	return nil, status.Error(codes.Unimplemented, "method GetLocalAgentConnections not implemented")
 }
+func (UnimplementedNuzurProductServer) UpdateLocalAgentConnectionSharing(context.Context, *UpdateLocalAgentConnectionSharingRequest) (*UpdateLocalAgentConnectionSharingResponse, error) {
+	return nil, status.Error(codes.Unimplemented, "method UpdateLocalAgentConnectionSharing not implemented")
+}
+func (UnimplementedNuzurProductServer) ListTeamAgentConnections(context.Context, *ListTeamAgentConnectionsRequest) (*ListTeamAgentConnectionsResponse, error) {
+	return nil, status.Error(codes.Unimplemented, "method ListTeamAgentConnections not implemented")
+}
 func (UnimplementedNuzurProductServer) IssueProvisioningToken(context.Context, *IssueProvisioningTokenRequest) (*IssueProvisioningTokenResponse, error) {
 	return nil, status.Error(codes.Unimplemented, "method IssueProvisioningToken not implemented")
 }
 func (UnimplementedNuzurProductServer) ExchangeProvisioningToken(context.Context, *ExchangeProvisioningTokenRequest) (*ExchangeProvisioningTokenResponse, error) {
 	return nil, status.Error(codes.Unimplemented, "method ExchangeProvisioningToken not implemented")
+}
+func (UnimplementedNuzurProductServer) PublishLocalAgentCatalog(context.Context, *PublishLocalAgentCatalogRequest) (*PublishLocalAgentCatalogResponse, error) {
+	return nil, status.Error(codes.Unimplemented, "method PublishLocalAgentCatalog not implemented")
 }
 func (UnimplementedNuzurProductServer) UpsertDeployment(context.Context, *UpsertDeploymentRequest) (*UpsertDeploymentResponse, error) {
 	return nil, status.Error(codes.Unimplemented, "method UpsertDeployment not implemented")
@@ -3019,6 +3157,24 @@ func _NuzurProduct_UpdateProjectVersion_Handler(srv interface{}, ctx context.Con
 	return interceptor(ctx, in, info, handler)
 }
 
+func _NuzurProduct_ApplyProjectVersionOps_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
+	in := new(ApplyProjectVersionOpsRequest)
+	if err := dec(in); err != nil {
+		return nil, err
+	}
+	if interceptor == nil {
+		return srv.(NuzurProductServer).ApplyProjectVersionOps(ctx, in)
+	}
+	info := &grpc.UnaryServerInfo{
+		Server:     srv,
+		FullMethod: NuzurProduct_ApplyProjectVersionOps_FullMethodName,
+	}
+	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
+		return srv.(NuzurProductServer).ApplyProjectVersionOps(ctx, req.(*ApplyProjectVersionOpsRequest))
+	}
+	return interceptor(ctx, in, info, handler)
+}
+
 func _NuzurProduct_DiscardDraftProjectVersion_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
 	in := new(DiscardDraftProjectVersionRequest)
 	if err := dec(in); err != nil {
@@ -3487,6 +3643,42 @@ func _NuzurProduct_CheckExtensionExecutionLimit_Handler(srv interface{}, ctx con
 	return interceptor(ctx, in, info, handler)
 }
 
+func _NuzurProduct_AcquireExecutionSlot_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
+	in := new(AcquireExecutionSlotRequest)
+	if err := dec(in); err != nil {
+		return nil, err
+	}
+	if interceptor == nil {
+		return srv.(NuzurProductServer).AcquireExecutionSlot(ctx, in)
+	}
+	info := &grpc.UnaryServerInfo{
+		Server:     srv,
+		FullMethod: NuzurProduct_AcquireExecutionSlot_FullMethodName,
+	}
+	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
+		return srv.(NuzurProductServer).AcquireExecutionSlot(ctx, req.(*AcquireExecutionSlotRequest))
+	}
+	return interceptor(ctx, in, info, handler)
+}
+
+func _NuzurProduct_HeartbeatExecution_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
+	in := new(HeartbeatExecutionRequest)
+	if err := dec(in); err != nil {
+		return nil, err
+	}
+	if interceptor == nil {
+		return srv.(NuzurProductServer).HeartbeatExecution(ctx, in)
+	}
+	info := &grpc.UnaryServerInfo{
+		Server:     srv,
+		FullMethod: NuzurProduct_HeartbeatExecution_FullMethodName,
+	}
+	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
+		return srv.(NuzurProductServer).HeartbeatExecution(ctx, req.(*HeartbeatExecutionRequest))
+	}
+	return interceptor(ctx, in, info, handler)
+}
+
 func _NuzurProduct_ListUserChangeRequests_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
 	in := new(ListUserChangeRequestsRequest)
 	if err := dec(in); err != nil {
@@ -3555,6 +3747,42 @@ func _NuzurProduct_UpdateChangeRequest_Handler(srv interface{}, ctx context.Cont
 	}
 	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
 		return srv.(NuzurProductServer).UpdateChangeRequest(ctx, req.(*UpdateChangeRequestRequest))
+	}
+	return interceptor(ctx, in, info, handler)
+}
+
+func _NuzurProduct_ApplyChangeRequestOps_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
+	in := new(ApplyChangeRequestOpsRequest)
+	if err := dec(in); err != nil {
+		return nil, err
+	}
+	if interceptor == nil {
+		return srv.(NuzurProductServer).ApplyChangeRequestOps(ctx, in)
+	}
+	info := &grpc.UnaryServerInfo{
+		Server:     srv,
+		FullMethod: NuzurProduct_ApplyChangeRequestOps_FullMethodName,
+	}
+	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
+		return srv.(NuzurProductServer).ApplyChangeRequestOps(ctx, req.(*ApplyChangeRequestOpsRequest))
+	}
+	return interceptor(ctx, in, info, handler)
+}
+
+func _NuzurProduct_WithdrawChangeRequestFromReview_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
+	in := new(WithdrawChangeRequestFromReviewRequest)
+	if err := dec(in); err != nil {
+		return nil, err
+	}
+	if interceptor == nil {
+		return srv.(NuzurProductServer).WithdrawChangeRequestFromReview(ctx, in)
+	}
+	info := &grpc.UnaryServerInfo{
+		Server:     srv,
+		FullMethod: NuzurProduct_WithdrawChangeRequestFromReview_FullMethodName,
+	}
+	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
+		return srv.(NuzurProductServer).WithdrawChangeRequestFromReview(ctx, req.(*WithdrawChangeRequestFromReviewRequest))
 	}
 	return interceptor(ctx, in, info, handler)
 }
@@ -4261,6 +4489,42 @@ func _NuzurProduct_GetLocalAgentConnections_Handler(srv interface{}, ctx context
 	return interceptor(ctx, in, info, handler)
 }
 
+func _NuzurProduct_UpdateLocalAgentConnectionSharing_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
+	in := new(UpdateLocalAgentConnectionSharingRequest)
+	if err := dec(in); err != nil {
+		return nil, err
+	}
+	if interceptor == nil {
+		return srv.(NuzurProductServer).UpdateLocalAgentConnectionSharing(ctx, in)
+	}
+	info := &grpc.UnaryServerInfo{
+		Server:     srv,
+		FullMethod: NuzurProduct_UpdateLocalAgentConnectionSharing_FullMethodName,
+	}
+	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
+		return srv.(NuzurProductServer).UpdateLocalAgentConnectionSharing(ctx, req.(*UpdateLocalAgentConnectionSharingRequest))
+	}
+	return interceptor(ctx, in, info, handler)
+}
+
+func _NuzurProduct_ListTeamAgentConnections_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
+	in := new(ListTeamAgentConnectionsRequest)
+	if err := dec(in); err != nil {
+		return nil, err
+	}
+	if interceptor == nil {
+		return srv.(NuzurProductServer).ListTeamAgentConnections(ctx, in)
+	}
+	info := &grpc.UnaryServerInfo{
+		Server:     srv,
+		FullMethod: NuzurProduct_ListTeamAgentConnections_FullMethodName,
+	}
+	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
+		return srv.(NuzurProductServer).ListTeamAgentConnections(ctx, req.(*ListTeamAgentConnectionsRequest))
+	}
+	return interceptor(ctx, in, info, handler)
+}
+
 func _NuzurProduct_IssueProvisioningToken_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
 	in := new(IssueProvisioningTokenRequest)
 	if err := dec(in); err != nil {
@@ -4293,6 +4557,24 @@ func _NuzurProduct_ExchangeProvisioningToken_Handler(srv interface{}, ctx contex
 	}
 	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
 		return srv.(NuzurProductServer).ExchangeProvisioningToken(ctx, req.(*ExchangeProvisioningTokenRequest))
+	}
+	return interceptor(ctx, in, info, handler)
+}
+
+func _NuzurProduct_PublishLocalAgentCatalog_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
+	in := new(PublishLocalAgentCatalogRequest)
+	if err := dec(in); err != nil {
+		return nil, err
+	}
+	if interceptor == nil {
+		return srv.(NuzurProductServer).PublishLocalAgentCatalog(ctx, in)
+	}
+	info := &grpc.UnaryServerInfo{
+		Server:     srv,
+		FullMethod: NuzurProduct_PublishLocalAgentCatalog_FullMethodName,
+	}
+	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
+		return srv.(NuzurProductServer).PublishLocalAgentCatalog(ctx, req.(*PublishLocalAgentCatalogRequest))
 	}
 	return interceptor(ctx, in, info, handler)
 }
@@ -4769,6 +5051,10 @@ var NuzurProduct_ServiceDesc = grpc.ServiceDesc{
 			Handler:    _NuzurProduct_UpdateProjectVersion_Handler,
 		},
 		{
+			MethodName: "ApplyProjectVersionOps",
+			Handler:    _NuzurProduct_ApplyProjectVersionOps_Handler,
+		},
+		{
 			MethodName: "DiscardDraftProjectVersion",
 			Handler:    _NuzurProduct_DiscardDraftProjectVersion_Handler,
 		},
@@ -4873,6 +5159,14 @@ var NuzurProduct_ServiceDesc = grpc.ServiceDesc{
 			Handler:    _NuzurProduct_CheckExtensionExecutionLimit_Handler,
 		},
 		{
+			MethodName: "AcquireExecutionSlot",
+			Handler:    _NuzurProduct_AcquireExecutionSlot_Handler,
+		},
+		{
+			MethodName: "HeartbeatExecution",
+			Handler:    _NuzurProduct_HeartbeatExecution_Handler,
+		},
+		{
 			MethodName: "ListUserChangeRequests",
 			Handler:    _NuzurProduct_ListUserChangeRequests_Handler,
 		},
@@ -4887,6 +5181,14 @@ var NuzurProduct_ServiceDesc = grpc.ServiceDesc{
 		{
 			MethodName: "UpdateChangeRequest",
 			Handler:    _NuzurProduct_UpdateChangeRequest_Handler,
+		},
+		{
+			MethodName: "ApplyChangeRequestOps",
+			Handler:    _NuzurProduct_ApplyChangeRequestOps_Handler,
+		},
+		{
+			MethodName: "WithdrawChangeRequestFromReview",
+			Handler:    _NuzurProduct_WithdrawChangeRequestFromReview_Handler,
 		},
 		{
 			MethodName: "ListChangeRequestsForReview",
@@ -5045,12 +5347,24 @@ var NuzurProduct_ServiceDesc = grpc.ServiceDesc{
 			Handler:    _NuzurProduct_GetLocalAgentConnections_Handler,
 		},
 		{
+			MethodName: "UpdateLocalAgentConnectionSharing",
+			Handler:    _NuzurProduct_UpdateLocalAgentConnectionSharing_Handler,
+		},
+		{
+			MethodName: "ListTeamAgentConnections",
+			Handler:    _NuzurProduct_ListTeamAgentConnections_Handler,
+		},
+		{
 			MethodName: "IssueProvisioningToken",
 			Handler:    _NuzurProduct_IssueProvisioningToken_Handler,
 		},
 		{
 			MethodName: "ExchangeProvisioningToken",
 			Handler:    _NuzurProduct_ExchangeProvisioningToken_Handler,
+		},
+		{
+			MethodName: "PublishLocalAgentCatalog",
+			Handler:    _NuzurProduct_PublishLocalAgentCatalog_Handler,
 		},
 		{
 			MethodName: "UpsertDeployment",

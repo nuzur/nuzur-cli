@@ -12,6 +12,7 @@ func (i *Implementation) Commands() []cli.Command {
 		i.GoCodeGenCommand(),
 		i.ExtensionCheckLimitCommand(),
 		i.AgentCommand(),
+		i.ConnectCommand(),
 		i.DeployCommand(),
 		i.DestroyCommand(),
 	}

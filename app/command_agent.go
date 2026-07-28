@@ -58,6 +58,10 @@ func (i *Implementation) AgentPairCommand() cli.Command {
 				EnvVar: "NUZUR_PROVISIONING_TOKEN",
 				Usage:  "pair headlessly (no interactive login) by exchanging a short-lived provisioning token minted from nuzur; intended for freshly provisioned servers",
 			},
+			cli.BoolFlag{
+				Name:  "headless",
+				Usage: "prompt for a pairing token instead of opening a browser (detected automatically over SSH or with no display)",
+			},
 		},
 		Action: func(c *cli.Context) error {
 			// Refuse to silently overwrite an existing pairing — that creates
@@ -74,6 +78,13 @@ func (i *Implementation) AgentPairCommand() cli.Command {
 
 			if token := strings.TrimSpace(c.String("provisioning-token")); token != "" {
 				_, err := i.pairLocalAgentWithProvisioningToken(token)
+				return err
+			}
+
+			// No browser to log in with (a server over SSH, or no display):
+			// pair from a token the user copies from the web app instead.
+			if c.Bool("headless") || detectHeadless() {
+				_, err := i.pairHeadlessInteractive()
 				return err
 			}
 
@@ -161,6 +172,21 @@ func readExistingPairingUUID() (string, error) {
 		return "", err
 	}
 	return strings.TrimSpace(string(b)), nil
+}
+
+// readExistingPairingCreds returns this machine's agent uuid and token, both
+// trimmed (a stray newline from an editor would otherwise fail the server-side
+// hash comparison). Empty strings mean "not paired".
+func readExistingPairingCreds() (string, string, error) {
+	uuidStr, err := readExistingPairingUUID()
+	if err != nil {
+		return "", "", err
+	}
+	b, err := os.ReadFile(files.LocalAgentTokenFilePath())
+	if err != nil {
+		return "", "", err
+	}
+	return uuidStr, strings.TrimSpace(string(b)), nil
 }
 
 func (i *Implementation) AgentListCommand() cli.Command {

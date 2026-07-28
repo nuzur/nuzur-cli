@@ -107,6 +107,38 @@ func (i *Implementation) NewConfigResolver(project *nemgen.Project, projectVersi
 	}
 }
 
+// UUIDFieldEntityType reads the entity type declared on a uuid field. The
+// sql-*-local extensions omit type_config entirely, so a missing one is normal
+// rather than a reason to skip resolving options — see EffectiveEntityType.
+func UUIDFieldEntityType(field *extensiongen.ExtensionInputField) extensiongen.EntityType {
+	if tc := field.GetTypeConfig(); tc != nil && tc.GetUuid() != nil {
+		return tc.GetUuid().GetEntityType()
+	}
+	return extensiongen.EntityType_ENTITY_TYPE_INVALID
+}
+
+// EffectiveEntityType supplies the entity type for uuid fields whose extension
+// version was registered without one. The sql-*-local extensions declare
+// local_agent and local_agent_connection as bare uuid fields, so on their own
+// they would prompt for a hand-typed UUID instead of offering the agents this
+// machine can actually reach. Those field identifiers are already a contract
+// across the CLI and the web UI, so keying off them is safe.
+//
+// TODO: remove once those extension versions declare entity types
+// LOCAL_AGENT / LOCAL_AGENT_CONNECTION themselves.
+func EffectiveEntityType(declared extensiongen.EntityType, fieldIdentifier string) extensiongen.EntityType {
+	if declared != extensiongen.EntityType_ENTITY_TYPE_INVALID {
+		return declared
+	}
+	switch fieldIdentifier {
+	case "local_agent":
+		return extensiongen.EntityType_ENTITY_TYPE_LOCAL_AGENT
+	case "local_agent_connection":
+		return extensiongen.EntityType_ENTITY_TYPE_LOCAL_AGENT_CONNECTION
+	}
+	return declared
+}
+
 // OptionsForEntityType returns the allowed uuid options for a given uuid entity
 // type. A nil error with an empty slice means "no options available" (the
 // interactive flow falls back to a free-text prompt in that case, and validation
@@ -115,8 +147,8 @@ func (i *Implementation) NewConfigResolver(project *nemgen.Project, projectVersi
 // agentUUID scopes LOCAL_AGENT_CONNECTION options to a single agent; passing ""
 // lists the connections of every online agent, which is what `describe` and
 // non-interactive validation want.
-func (r *ConfigResolver) OptionsForEntityType(et extensiongen.EntityType, agentUUID string) ([]ConfigOption, error) {
-	switch et {
+func (r *ConfigResolver) OptionsForEntityType(declared extensiongen.EntityType, fieldIdentifier string, agentUUID string) ([]ConfigOption, error) {
+	switch EffectiveEntityType(declared, fieldIdentifier) {
 	case extensiongen.EntityType_ENTITY_TYPE_ENTITY_STANDALONE:
 		if !r.entitiesDone {
 			entities, err := r.er.GetStandaloneEntities(r.projectVersionUUID)
@@ -225,13 +257,11 @@ func (r *ConfigResolver) fieldSchema(field *extensiongen.ExtensionInputField) (C
 
 	switch field.Type {
 	case extensiongen.ExtensionInputType_EXTENSION_INPUT_TYPE_UUID:
-		if field.TypeConfig != nil && field.TypeConfig.Uuid != nil {
-			opts, err := r.OptionsForEntityType(field.TypeConfig.Uuid.EntityType, "")
-			if err != nil {
-				return fs, err
-			}
-			fs.Options = opts
+		opts, err := r.OptionsForEntityType(UUIDFieldEntityType(field), field.Identifier, "")
+		if err != nil {
+			return fs, err
 		}
+		fs.Options = opts
 
 	case extensiongen.ExtensionInputType_EXTENSION_INPUT_TYPE_ENUM:
 		if field.TypeConfig != nil && field.TypeConfig.Enum != nil {
@@ -247,7 +277,7 @@ func (r *ConfigResolver) fieldSchema(field *extensiongen.ExtensionInputField) (C
 			switch arr.ArrayType {
 			case extensiongen.ExtensionInputType_EXTENSION_INPUT_TYPE_UUID:
 				if arr.ArrayTypeConfig != nil && arr.ArrayTypeConfig.Uuid != nil {
-					opts, err := r.OptionsForEntityType(arr.ArrayTypeConfig.Uuid.EntityType, "")
+					opts, err := r.OptionsForEntityType(arr.ArrayTypeConfig.Uuid.EntityType, field.Identifier, "")
 					if err != nil {
 						return fs, err
 					}
