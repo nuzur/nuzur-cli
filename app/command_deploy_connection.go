@@ -28,7 +28,7 @@ import (
 //
 // store is the connection's store uuid — needed by the REMOTE sql-push extension,
 // which applies the schema to a team connection directly from nuzur (rather than
-// through the box's agent). See publishAndApplySchema.
+// through the box's agent). See applySchema.
 func (i *Implementation) resolveConnectionForDeploy(connUUID, teamUUID string) (engine deploy.DBEngine, host, port, user, pass, name, params, store string, err error) {
 	authCtx, err := productclient.ClientContext()
 	if err != nil {

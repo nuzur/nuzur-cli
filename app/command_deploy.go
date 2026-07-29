@@ -758,13 +758,22 @@ func (i *Implementation) runDeploy(c *cli.Context) (rerr error) {
 		outputtools.PrintlnColoredErr("Agent registered but not observed online yet; schema auto-apply may fail until it connects.", outputtools.Yellow)
 	}
 
-	// 10. Publish the connection catalog (needs the user token — the box can't)
-	// and auto-apply the schema to the empty DB.
-	schemaApplied := true
+	// 10. Publish the connection catalog (needs the user token — the box can't) and
+	// auto-apply the schema to the empty DB. Two independent steps, tracked and
+	// reported separately: a failure in one must neither skip nor be mistaken for
+	// the other.
+	outcome := deployOutcome{catalogPublished: true, schemaApplied: true}
+	i.updateDeployRevision(ctx, deployRev(),
+		nemgen.DeploymentRevisionStatus_DEPLOYMENT_REVISION_STATUS_IN_PROGRESS, "publishing the connection to nuzur")
+	if err := i.publishConnectionCatalog(agentUUID, connUUID, connName, dbEngine); err != nil {
+		outcome.catalogPublished = false
+		outputtools.PrintlnColoredErr("Connection not published to nuzur: "+err.Error(), outputtools.Yellow)
+	}
+
 	i.updateDeployRevision(ctx, deployRev(),
 		nemgen.DeploymentRevisionStatus_DEPLOYMENT_REVISION_STATUS_IN_PROGRESS, "applying the schema to the database")
-	if err := i.publishAndApplySchema(targets, agentUUID, connUUID, connName, dbEngine, schema, connFlag, connStore); err != nil {
-		schemaApplied = false
+	if err := i.applySchema(targets, agentUUID, connUUID, schema, connFlag, connStore); err != nil {
+		outcome.schemaApplied = false
 		outputtools.PrintlnColoredErr("Schema auto-apply skipped: "+err.Error(), outputtools.Yellow)
 	}
 
@@ -828,8 +837,12 @@ func (i *Implementation) runDeploy(c *cli.Context) (rerr error) {
 	reportIn.UseHTTPS = useHTTPS
 	reportIn.RevisionUUID = deployRev()
 	reportIn.ImageName = imageName // built by now — safe to pin in the history
+	// ACTIVE even when step 10 was partial: the box, the front door and the app are
+	// genuinely serving, so FAILED would mislabel a working deployment, and nem has
+	// no DEGRADED value. The shortfall is recorded in the status message instead, so
+	// the deployment history can tell a schema-less deploy from a clean one.
 	reportIn.Status = nemgen.DeploymentRevisionStatus_DEPLOYMENT_REVISION_STATUS_ACTIVE
-	reportIn.StatusMessage = ""
+	reportIn.StatusMessage = outcome.revisionMessage()
 	if _, err := i.reportDeployment(ctx, reportIn); err != nil {
 		outputtools.PrintlnColoredErr("Deployment recorded locally but not reported to nuzur: "+err.Error(), outputtools.Yellow)
 	}
@@ -911,14 +924,15 @@ func (i *Implementation) runDeploy(c *cli.Context) (rerr error) {
 
 	outputtools.PrintlnColored("\nManage your data:", outputtools.Green)
 	fmt.Printf("  %s\n", dataManagerURL)
-	fmt.Printf("  The connection is listed under \"Via agent\" — nuzur reaches it through the agent on this box,\n")
-	fmt.Printf("  which dials out to nuzur. The database stays private; nothing is exposed to the internet.\n")
-	if !schemaApplied {
-		// Auto-apply is supported for both engines over the agent; if it was
-		// skipped it's because the diff step errored (see the message above).
-		// The DB + agent connection are live either way — retry, or apply the
-		// schema from nuzur (SQL Push / change request).
-		outputtools.PrintlnColoredErr("\nSchema auto-apply was skipped (see the error above). The database + agent connection are live — re-run the deploy to retry, or apply the schema from nuzur (SQL Push / change request).", outputtools.Yellow)
+	if outcome.catalogPublished {
+		fmt.Printf("  The connection is listed under \"Via agent\" — nuzur reaches it through the agent on this box,\n")
+		fmt.Printf("  which dials out to nuzur. The database stays private; nothing is exposed to the internet.\n")
+	}
+	// Say only what actually failed. This block used to assert a cause ("the diff
+	// step errored") that was wrong whenever the publish was what broke, and to
+	// claim the agent connection was live in exactly the case where it wasn't.
+	if s := outcome.summary(); s != "" {
+		outputtools.PrintlnColoredErr("\n"+s, outputtools.Yellow)
 	}
 
 	// Point the user at their editable app source (the workspace) — this is the
@@ -964,9 +978,6 @@ func (i *Implementation) runDeploy(c *cli.Context) (rerr error) {
 	return nil
 }
 
-// publishAndApplySchema publishes the localhost DB as a connection on the paired
-// agent (using the user's token, which the headless box lacks), then runs the
-// SQL-push extension to create the schema on the empty database.
 // goCodeGenDBValue maps a deploy engine to go-code-gen's `db` config option value.
 // NB: go-code-gen uses "postgresql" (its DatabaseType enum), NOT the runtime driver
 // name "postgres" that prod.yaml + the agent connection use.
@@ -987,16 +998,19 @@ func agentConnDbType(engine deploy.DBEngine) nemgen.LocalAgentConnectionDbType {
 }
 
 // SQL-push extensions. Which one applies the schema is derived from the
-// deployment's topology, never configured — see publishAndApplySchema.
+// deployment's topology, never configured — see applySchema.
 var sqlPushPair = mustPairForFront("sql-push")
 
-// publishAndApplySchema publishes the box's DB as a named agent connection (so
-// nuzur can serve it in the data manager) and then applies the project's schema to
-// the freshly-provisioned, empty database.
+// publishConnectionCatalog publishes the box's DB as a named agent connection, so
+// nuzur can serve it in the data manager under "Via agent". The box itself registers
+// the connection locally with --no-publish (it has no user token), so this call is
+// the ONLY thing that puts the connection in nuzur's catalog.
 //
-// teamConnUUID/teamConnStore are set only for a --connection deploy (an existing
-// team connection).
-func (i *Implementation) publishAndApplySchema(targets *runTargets, agentUUID, connUUID, connName string, dbEngine deploy.DBEngine, schema, teamConnUUID, teamConnStore string) error {
+// Deliberately separate from applySchema: the two are independent (the schema push
+// routes through the agent by uuid, not through the published catalog), and folding
+// them together meant a publish failure silently cost you the schema too — and got
+// reported as "Schema auto-apply skipped", which is how the catalog bug stayed hidden.
+func (i *Implementation) publishConnectionCatalog(agentUUID, connUUID, connName string, dbEngine deploy.DBEngine) error {
 	authCtx, err := productclient.ClientContext()
 	if err != nil {
 		return err
@@ -1032,7 +1046,15 @@ func (i *Implementation) publishAndApplySchema(targets *runTargets, agentUUID, c
 	}); err != nil {
 		return fmt.Errorf("publishing connection catalog: %w", err)
 	}
+	return nil
+}
 
+// applySchema applies the project's schema to the freshly-provisioned, empty
+// database via the SQL-push extension.
+//
+// teamConnUUID/teamConnStore are set only for a --connection deploy (an existing
+// team connection).
+func (i *Implementation) applySchema(targets *runTargets, agentUUID, connUUID string, schema, teamConnUUID, teamConnStore string) error {
 	// Pick the push path from the topology, not from a flag. A self-hosted (or raw
 	// --db-dsn) database lives behind the box, so it's only reachable through the
 	// agent → sql-push-local. An existing team connection is reachable from nuzur
