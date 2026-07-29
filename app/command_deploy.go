@@ -43,7 +43,7 @@ func (i *Implementation) DeployCommand() cli.Command {
 			cli.StringFlag{Name: "domain", Usage: "Domain pointing at the server — Caddy provisions a real HTTPS cert for it. Omit for IP-only (a self-signed cert is used)."},
 			cli.StringFlag{Name: "project, p", Usage: "Project name or UUID"},
 			cli.StringFlag{Name: "version", Usage: "Project version identifier or UUID (default: latest)"},
-			cli.StringFlag{Name: "identifier", Usage: "Deployment identifier (names the DB/service/config on the box; default: from the go-code-gen config, or the project name for --db-only)"},
+			cli.StringFlag{Name: "identifier", Usage: "Deployment identifier (names the DB/service/config on the box, and the generated root folder/go module on a first deploy; default: from the go-code-gen config, else the project name)"},
 			cli.BoolFlag{Name: "db-only", Usage: "Database-only: install the DB engine (--db), pair the agent, register the connection, and apply the schema — but do NOT generate/build/run the app or Caddy. Manage the DB entirely through nuzur."},
 			cli.StringFlag{Name: "db-dsn", Usage: "Use an EXISTING database instead of self-hosting one. MySQL DSN (user:pass@tcp(host:port)/db?params) or Postgres URL (postgres://user:pass@host:port/db?sslmode=require). The app + agent connect to it; MySQL install/creation is skipped."},
 			cli.StringFlag{Name: "connection", Usage: "Deploy against an EXISTING nuzur team connection (by UUID) instead of --db-dsn. The DSN is resolved server-side from the connection's stored credentials — no plaintext secret on the command line. Mutually exclusive with --db-dsn."},
@@ -63,7 +63,7 @@ func (i *Implementation) DeployCommand() cli.Command {
 			cli.StringFlag{Name: "source-dir", Usage: "Directory for the app's source (the workspace deploy generates + builds from; you edit custom endpoints here). Default: ./nuzur-<identifier>. Re-deploys reuse it and preserve your edits."},
 			cli.StringFlag{Name: "deploy-config", Usage: "Path to a JSON deploy spec describing the whole deploy (topology + a nested `codegen` block); use '-' to read from stdin. Explicit flags override values in the file. Build or generate one from nuzur web."},
 			cli.BoolFlag{Name: "print-config", Usage: "Print the effective deploy config (as JSON) resolved from flags + --deploy-config, then exit without deploying. Use it to snapshot an invocation into a reusable deploy-config file."},
-			cli.StringFlag{Name: "gen-config", Usage: "Path to a JSON go-code-gen config (overrides the deploy-config's `codegen` block; else the last-used config for this project is reused)"},
+			cli.StringFlag{Name: "gen-config", Usage: "Path to a JSON go-code-gen config (overrides the deploy-config's `codegen` block; else the last-used config for this project is reused). A project that has never run the generator needs none: deploy fills the required fields from these flags (REST API, no auth, identifier/module from --identifier or the project name). Whatever it resolves is saved as the project's go-code-gen config once the code generates"},
 			cli.StringFlag{Name: "cli-install-cmd", Usage: "Command to install the nuzur CLI on the box (must leave `nuzur` on PATH)"},
 			cli.BoolFlag{Name: "sudo", Usage: "Run the bootstrap via sudo (auto-enabled for non-root SSH users; the box needs passwordless sudo)"},
 			cli.StringFlag{Name: "web-url", Value: constants.WEB_PROD_URL, Usage: "nuzur web app base URL (for the data-manager deep link)"},
@@ -322,9 +322,27 @@ func (i *Implementation) runDeploy(c *cli.Context) (rerr error) {
 		if ref := strings.TrimSpace(s.Storage); ref != "" {
 			provided["object_store"] = ref
 		}
+		// Fill the required generator fields nothing else supplies. A project that
+		// has never had go-code-gen run against it (created via the API/MCP, or
+		// straight from the web) has no last-used config, and the deploy flags cover
+		// only part of the generator's required surface — so without this the very
+		// first deploy of a new project failed validation on `identifier`,
+		// `go_module`, `events`, … before anything was provisioned. Missing fields
+		// only: explicit values and the saved config always win.
+		codegenIdentifier := sanitizeDBName(firstNonEmpty(s.Identifier, targets.project.Name))
+		if applied := applyCodegenDefaults(targets.configEntity, provided, targets.lastConfig, codegenIdentifier); len(applied) > 0 {
+			lead := "No saved go-code-gen config for this project (first deploy)"
+			if len(targets.lastConfig) > 0 {
+				lead = "The project's saved go-code-gen config is missing required fields"
+			}
+			outputtools.PrintlnColoredErr(fmt.Sprintf(
+				"%s — deploying with derived defaults: %s.\nOverride with the deploy flags (--identifier/--api/--auth/--db), a `codegen` block in --deploy-config, or --gen-config <file>.\nThe resolved config is saved as this project's go-code-gen config, so later deploys reuse it.",
+				lead, strings.Join(applied, ", ")), outputtools.Yellow)
+		}
+
 		configValues, err = targets.er.BuildConfigFromJSON(targets.project, targets.projectVersion.Uuid, targets.configEntity, provided, targets.lastConfig)
 		if err != nil {
-			return fmt.Errorf("building generator config (pass --config-file, or run `nuzur-cli go-code-gen` once): %w", err)
+			return fmt.Errorf("building generator config — supply the missing fields via --gen-config <file> or a `codegen` block in --deploy-config, or run `nuzur-cli go-code-gen` once to save a config for this project: %w", err)
 		}
 
 		// Catch an unsupportable JWT config here: left alone it generates fine and
@@ -462,6 +480,17 @@ func (i *Implementation) runDeploy(c *cli.Context) (rerr error) {
 			OutputPath:         workspaceDir,
 		}); err != nil {
 			return fmt.Errorf("generating code: %w", err)
+		}
+		// Remember the config that just generated as the project's last-used
+		// go-code-gen config — the same record `nuzur-cli go-code-gen` writes and the
+		// web app reads. Without this a deploy-derived config was invisible and
+		// unreusable: the next deploy re-derived it, a later `go-code-gen` run still
+		// prompted from scratch, and one-off flags (--api/--auth) silently reverted.
+		// Saved AFTER generation succeeded, so a config that cannot even generate
+		// never becomes what the project remembers. Non-fatal: the deploy already has
+		// what it needs.
+		if saveErr := targets.er.SaveLastUsedConfigEntry(targets.projectVersion.Uuid, targets.extension.Identifier, configValues); saveErr != nil {
+			outputtools.PrintlnColoredErr(fmt.Sprintf("warning: could not save this deploy's generator config for reuse: %v", saveErr), outputtools.Yellow)
 		}
 		sourceRoot, err = findSourceRoot(workspaceDir)
 		if err != nil {
