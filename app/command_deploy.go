@@ -609,6 +609,7 @@ func (i *Implementation) runDeploy(c *cli.Context) (rerr error) {
 	}
 	if prior != nil {
 		dep.CreatedAt = prior.CreatedAt
+		carryForwardProvisioning(dep, prior, provider)
 	}
 	if err := deploy.SaveDeployment(dep); err != nil {
 		return err
@@ -621,7 +622,10 @@ func (i *Implementation) runDeploy(c *cli.Context) (rerr error) {
 	// known; step 12b finalizes THIS revision with the rest. Best-effort: progress
 	// reporting must never fail an otherwise-good deploy.
 	reportIn := deploymentReportInput{
-		Provider:       provider,
+		// dep.Provider, not provider: on an SSH re-deploy onto a managed box this is
+		// the carried-forward original, so the cloud record keeps saying digitalocean
+		// instead of flipping to ssh.
+		Provider:       dep.Provider,
 		Identifier:     identifier,
 		ProjectUUID:    targets.project.Uuid,
 		ProjectVersion: targets.projectVersion.Uuid,
@@ -1398,6 +1402,38 @@ func findSourceRoot(root string) (string, error) {
 		return "", fmt.Errorf("no Dockerfile found in generated output — enable the Dockerfile option in the generator config")
 	}
 	return found, nil
+}
+
+// carryForwardProvisioning keeps a re-deploy from erasing the handles destroy
+// needs to delete a managed-provider VM.
+//
+// `--provider ssh --host <ip>` is what nuzur itself suggests for retrying against
+// a box that already exists — but the SSH path creates nothing, so it has no
+// instance id, resource name or region to record, and the re-deploy rewrites the
+// record wholesale. Left alone, a box originally created with
+// `--provider digitalocean` ends up recorded as plain ssh, and destroy's VM-delete
+// gate (a managed provider AND an id or name) silently skips: the box is torn down,
+// the droplet keeps running and billing, and nothing warns you.
+//
+// Only the ssh-over-managed direction is carried forward. A re-deploy naming a
+// managed provider provisioned its own VM, and those values are authoritative.
+// prior is matched on host+identifier, so it is the same box by construction.
+func carryForwardProvisioning(dep, prior *deploy.Deployment, provider deploy.Provider) {
+	if prior == nil || provider != deploy.ProviderSSH {
+		return
+	}
+	if prior.Provider == "" || prior.Provider == deploy.ProviderSSH {
+		return
+	}
+	if prior.ProviderInstanceID == "" && prior.ProviderResourceName == "" {
+		return
+	}
+	dep.Provider = prior.Provider
+	dep.ProviderInstanceID = prior.ProviderInstanceID
+	dep.ProviderResourceName = prior.ProviderResourceName
+	if dep.Region == "" {
+		dep.Region = prior.Region
+	}
 }
 
 // findPriorDeployment returns the most recent recorded deployment for this
