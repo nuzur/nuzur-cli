@@ -196,6 +196,7 @@ func runOnce(ctx context.Context, cm *cmclient.Client, agentUUID, agentToken str
 			LocalAgentToken: agentToken,
 			LocalAgentUuid:  agentUUID,
 			CliVersion:      constants.CLI_VERSION,
+			Capabilities:    agentCapabilities(),
 		},
 	}}); err != nil {
 		return fmt.Errorf("send hello: %w", err)

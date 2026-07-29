@@ -10,10 +10,28 @@ import (
 
 	"github.com/lib/pq"
 	pgschemadiff "github.com/nuzur/pg-schema-diff/pkg/diff"
+	pgschemaschema "github.com/nuzur/pg-schema-diff/pkg/schema"
 	"github.com/nuzur/pg-schema-diff/pkg/tempdb"
 
 	pb "github.com/nuzur/nuzur-cli/protodeps/gen"
 )
+
+// nuzurManagedObjectTypes is the set of schema object classes a project version
+// can express, and therefore the only classes a diff against the local database
+// may consider.
+//
+// Keep in sync with nuzurManagedObjectTypes() in nuzur-go's
+// connection-manager/module/sql-diff-manager and with
+// TestObjectTypeAllowlistAgainstLiveDatabase in pg-schema-diff, which is what
+// catches drift.
+func nuzurManagedObjectTypes() []pgschemaschema.ObjectType {
+	return []pgschemaschema.ObjectType{
+		pgschemaschema.ObjectTypeNamedSchema,
+		pgschemaschema.ObjectTypeTable,
+		pgschemaschema.ObjectTypeIndex,
+		pgschemaschema.ObjectTypeForeignKeyConstraint,
+	}
+}
 
 // handleComputePgSchemaPlan computes a Postgres schema-diff plan ON-BOX. The
 // cloud can't drive pg-schema-diff's tempdb factory over the agent tunnel (it
@@ -50,7 +68,15 @@ func handleComputePgSchemaPlan(ctx context.Context, stream pb.NuzurConnectionMan
 		schema = "public"
 	}
 
-	applySQL, err := computePgPlan(ctx, baseDSN, schema, req.GetExistingCreateSql(), req.GetNewCreateSql())
+	// An empty "existing" side is never a legitimate request: it would diff
+	// against nothing and return a plan that recreates the whole schema. Refuse
+	// loudly rather than hand back something catastrophic.
+	if !req.GetUseLiveSchemaSource() && req.GetExistingCreateSql() == "" {
+		sendQueryError(stream, req.GetRequestId(), "compute pg schema plan: existing_create_sql is empty and use_live_schema_source is not set")
+		return
+	}
+
+	applySQL, err := computePgPlan(ctx, baseDSN, schema, req.GetExistingCreateSql(), req.GetNewCreateSql(), req.GetUseLiveSchemaSource())
 	if err != nil {
 		sendQueryError(stream, req.GetRequestId(), err.Error())
 		return
@@ -66,25 +92,53 @@ func handleComputePgSchemaPlan(ctx context.Context, stream pb.NuzurConnectionMan
 
 // computePgPlan runs pg-schema-diff against temp databases created on the same
 // local instance as baseDSN, returning the ordered apply DDL.
-func computePgPlan(ctx context.Context, baseDSN, schema, existingSQL, newSQL string) (string, error) {
-	existingDir, err := writeCreateSQLDir("nuzur-pgdiff-existing-", existingSQL)
-	if err != nil {
-		return "", fmt.Errorf("staging existing schema: %w", err)
-	}
-	defer os.RemoveAll(existingDir)
+//
+// When useLive is set the "existing" side is read straight out of the local
+// database — this process is the one with real access to it, so there is nothing
+// to reconstruct and nothing to lose in the reconstruction. existingSQL is then
+// ignored, and only the target schema needs staging, so the run creates one temp
+// database instead of two.
+func computePgPlan(ctx context.Context, baseDSN, schema, existingSQL, newSQL string, useLive bool) (string, error) {
 	newDir, err := writeCreateSQLDir("nuzur-pgdiff-new-", newSQL)
 	if err != nil {
 		return "", fmt.Errorf("staging new schema: %w", err)
 	}
 	defer os.RemoveAll(newDir)
 
-	existingSource, err := pgschemadiff.DirSchemaSource([]string{existingDir})
-	if err != nil {
-		return "", fmt.Errorf("reading existing schema: %w", err)
-	}
 	newSource, err := pgschemadiff.DirSchemaSource([]string{newDir})
 	if err != nil {
 		return "", fmt.Errorf("reading new schema: %w", err)
+	}
+
+	var existingSource pgschemadiff.SchemaSource
+	if useLive {
+		// No search_path pinning here: every introspection query pg-schema-diff
+		// runs is pg_catalog-qualified and the diff is scoped by
+		// WithIncludeSchemas below, so setting it on a connection to the user's
+		// real database would be a side effect for no benefit. The temp-db
+		// factory still pins it, because that side applies unqualified DDL.
+		liveDB, err := sql.Open("postgres", baseDSN)
+		if err != nil {
+			return "", fmt.Errorf("opening local database: %w", err)
+		}
+		liveDB.SetMaxOpenConns(10)
+		liveDB.SetMaxIdleConns(2)
+		defer liveDB.Close()
+		if err := liveDB.PingContext(ctx); err != nil {
+			return "", fmt.Errorf("reaching local database: %w", err)
+		}
+		existingSource = pgschemadiff.DBSchemaSource(liveDB)
+	} else {
+		existingDir, err := writeCreateSQLDir("nuzur-pgdiff-existing-", existingSQL)
+		if err != nil {
+			return "", fmt.Errorf("staging existing schema: %w", err)
+		}
+		defer os.RemoveAll(existingDir)
+
+		existingSource, err = pgschemadiff.DirSchemaSource([]string{existingDir})
+		if err != nil {
+			return "", fmt.Errorf("reading existing schema: %w", err)
+		}
 	}
 
 	var tempDBs []*sql.DB
@@ -133,6 +187,12 @@ func computePgPlan(ctx context.Context, baseDSN, schema, existingSQL, newSQL str
 		pgschemadiff.WithTempDbFactory(factory),
 		pgschemadiff.WithIncludeSchemas(schema),
 		pgschemadiff.WithDoNotValidatePlan(),
+		// Restrict both sides to the object classes a project version can
+		// express. Without this, everything else the local database contains —
+		// extensions, enums, sequences, functions, triggers, check constraints,
+		// policies, replica identity, partitioning — looks like something to
+		// drop the moment the existing side becomes a real database.
+		pgschemadiff.WithGetSchemaOpts(pgschemaschema.WithIncludeObjectTypes(nuzurManagedObjectTypes()...)),
 	)
 	if err != nil {
 		return "", fmt.Errorf("generating schema diff: %w", err)

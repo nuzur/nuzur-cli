@@ -53,3 +53,21 @@ func normalizeSemver(s string) string {
 	}
 	return "v" + s
 }
+
+// CapPgLiveSchemaSource tells the server this agent can introspect its own
+// Postgres database for the "existing" side of a schema diff, so the cloud
+// doesn't have to ship a reconstructed create.sql (which loses whatever the
+// project-version model can't express, producing migrations that never
+// converge).
+//
+// Must match the constant in nuzur-go's
+// connection-manager/module/sql-connection-manager.
+const CapPgLiveSchemaSource = "pg_live_schema_source"
+
+// agentCapabilities is what this build advertises in Hello. The server gates new
+// request shapes on these rather than on CLI_VERSION, so an older agent keeps
+// getting the old shape and there is no coordinated cutover — add to this list
+// when a new opt-in behavior ships.
+func agentCapabilities() []string {
+	return []string{CapPgLiveSchemaSource}
+}

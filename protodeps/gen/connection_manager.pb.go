@@ -884,6 +884,7 @@ type GetQueryExecutionResponse struct {
 	Message       string                       `protobuf:"bytes,2,opt,name=message,proto3" json:"message,omitempty"`
 	Result        *gen.UserConnectionExecution `protobuf:"bytes,3,opt,name=result,proto3" json:"result,omitempty"`
 	JsonResults   string                       `protobuf:"bytes,4,opt,name=json_results,json=jsonResults,proto3" json:"json_results,omitempty"` // optional, only included if ExecuteQueryRequest.include_json_results was true
+	Warning       bool                         `protobuf:"varint,5,opt,name=warning,proto3" json:"warning,omitempty"`                           // the execution succeeded but something in it needs the user's attention; message says what
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
@@ -944,6 +945,13 @@ func (x *GetQueryExecutionResponse) GetJsonResults() string {
 		return x.JsonResults
 	}
 	return ""
+}
+
+func (x *GetQueryExecutionResponse) GetWarning() bool {
+	if x != nil {
+		return x.Warning
+	}
+	return false
 }
 
 type CancelQueryExecutionRequest struct {
@@ -2441,8 +2449,14 @@ type Hello struct {
 	LocalAgentToken string                 `protobuf:"bytes,1,opt,name=local_agent_token,json=localAgentToken,proto3" json:"local_agent_token,omitempty"`
 	LocalAgentUuid  string                 `protobuf:"bytes,2,opt,name=local_agent_uuid,json=localAgentUuid,proto3" json:"local_agent_uuid,omitempty"`
 	CliVersion      string                 `protobuf:"bytes,3,opt,name=cli_version,json=cliVersion,proto3" json:"cli_version,omitempty"`
-	unknownFields   protoimpl.UnknownFields
-	sizeCache       protoimpl.SizeCache
+	// capabilities are opt-in behaviors this agent build supports, e.g.
+	// "pg_live_schema_source". The server gates new server→agent behavior on
+	// these rather than on cli_version: capabilities compose as more of them are
+	// added, and an agent that doesn't advertise one keeps getting the old
+	// request shape. cli_version stays what it is — the hard minimum check.
+	Capabilities  []string `protobuf:"bytes,4,rep,name=capabilities,proto3" json:"capabilities,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
 }
 
 func (x *Hello) Reset() {
@@ -2494,6 +2508,13 @@ func (x *Hello) GetCliVersion() string {
 		return x.CliVersion
 	}
 	return ""
+}
+
+func (x *Hello) GetCapabilities() []string {
+	if x != nil {
+		return x.Capabilities
+	}
+	return nil
 }
 
 type Welcome struct {
@@ -3216,10 +3237,22 @@ type ComputePgSchemaPlanRequest struct {
 	Schema string `protobuf:"bytes,3,opt,name=schema,proto3" json:"schema,omitempty"`
 	// existing_create_sql / new_create_sql are the full CREATE-statement sources
 	// for the current live schema and the target project version, respectively.
+	//
+	// existing_create_sql is LEGACY: it is a reconstruction of the live schema
+	// (introspected into a project version, then re-rendered as DDL), so every
+	// gap in that round trip becomes a migration that is proposed forever. It is
+	// empty when use_live_schema_source is set, and is only populated for agents
+	// that did not advertise the "pg_live_schema_source" capability.
 	ExistingCreateSql string `protobuf:"bytes,4,opt,name=existing_create_sql,json=existingCreateSql,proto3" json:"existing_create_sql,omitempty"`
 	NewCreateSql      string `protobuf:"bytes,5,opt,name=new_create_sql,json=newCreateSql,proto3" json:"new_create_sql,omitempty"`
-	unknownFields     protoimpl.UnknownFields
-	sizeCache         protoimpl.SizeCache
+	// use_live_schema_source tells the agent to introspect its own database for
+	// the "existing" side instead of reading existing_create_sql. The cloud only
+	// sets it for agents that advertised "pg_live_schema_source" in Hello, since
+	// an older agent would silently diff against an empty schema and return a
+	// plan that recreates everything.
+	UseLiveSchemaSource bool `protobuf:"varint,6,opt,name=use_live_schema_source,json=useLiveSchemaSource,proto3" json:"use_live_schema_source,omitempty"`
+	unknownFields       protoimpl.UnknownFields
+	sizeCache           protoimpl.SizeCache
 }
 
 func (x *ComputePgSchemaPlanRequest) Reset() {
@@ -3285,6 +3318,13 @@ func (x *ComputePgSchemaPlanRequest) GetNewCreateSql() string {
 		return x.NewCreateSql
 	}
 	return ""
+}
+
+func (x *ComputePgSchemaPlanRequest) GetUseLiveSchemaSource() bool {
+	if x != nil {
+		return x.UseLiveSchemaSource
+	}
+	return false
 }
 
 type ComputePgSchemaPlanResponse struct {
@@ -4145,12 +4185,13 @@ const file_connection_manager_proto_rawDesc = "" +
 	"\x14ExecuteQueryResponse\x12%\n" +
 	"\x0eexecution_uuid\x18\x01 \x01(\tR\rexecutionUuid\"A\n" +
 	"\x18GetQueryExecutionRequest\x12%\n" +
-	"\x0eexecution_uuid\x18\x01 \x01(\tR\rexecutionUuid\"\xbd\x01\n" +
+	"\x0eexecution_uuid\x18\x01 \x01(\tR\rexecutionUuid\"\xd7\x01\n" +
 	"\x19GetQueryExecutionResponse\x12-\n" +
 	"\x06status\x18\x01 \x01(\x0e2\x15.QueryExecutionStatusR\x06status\x12\x18\n" +
 	"\amessage\x18\x02 \x01(\tR\amessage\x124\n" +
 	"\x06result\x18\x03 \x01(\v2\x1c.nem.UserConnectionExecutionR\x06result\x12!\n" +
-	"\fjson_results\x18\x04 \x01(\tR\vjsonResults\"D\n" +
+	"\fjson_results\x18\x04 \x01(\tR\vjsonResults\x12\x18\n" +
+	"\awarning\x18\x05 \x01(\bR\awarning\"D\n" +
 	"\x1bCancelQueryExecutionRequest\x12%\n" +
 	"\x0eexecution_uuid\x18\x01 \x01(\tR\rexecutionUuid\"\x1e\n" +
 	"\x1cCancelQueryExecutionResponse\"\xa1\x02\n" +
@@ -4248,12 +4289,13 @@ const file_connection_manager_proto_rawDesc = "" +
 	"\brollback\x18\a \x01(\v2\x10.RollbackRequestH\x00R\brollback\x12R\n" +
 	"\x16compute_pg_schema_plan\x18\b \x01(\v2\x1b.ComputePgSchemaPlanRequestH\x00R\x13computePgSchemaPlan\x12^\n" +
 	"\x1acollect_deployment_metrics\x18\t \x01(\v2\x1e.DeploymentMetricsProbeRequestH\x00R\x18collectDeploymentMetricsB\t\n" +
-	"\amessage\"~\n" +
+	"\amessage\"\xa2\x01\n" +
 	"\x05Hello\x12*\n" +
 	"\x11local_agent_token\x18\x01 \x01(\tR\x0flocalAgentToken\x12(\n" +
 	"\x10local_agent_uuid\x18\x02 \x01(\tR\x0elocalAgentUuid\x12\x1f\n" +
 	"\vcli_version\x18\x03 \x01(\tR\n" +
-	"cliVersion\"X\n" +
+	"cliVersion\x12\"\n" +
+	"\fcapabilities\x18\x04 \x03(\tR\fcapabilities\"X\n" +
 	"\aWelcome\x12&\n" +
 	"\x0fmin_cli_version\x18\x01 \x01(\tR\rminCliVersion\x12%\n" +
 	"\x0eserver_version\x18\x02 \x01(\tR\rserverVersion\"T\n" +
@@ -4307,14 +4349,15 @@ const file_connection_manager_proto_rawDesc = "" +
 	"\x05tx_id\x18\x02 \x01(\tR\x04txId\"1\n" +
 	"\x10RollbackResponse\x12\x1d\n" +
 	"\n" +
-	"request_id\x18\x01 \x01(\x04R\trequestId\"\xe8\x01\n" +
+	"request_id\x18\x01 \x01(\x04R\trequestId\"\x9d\x02\n" +
 	"\x1aComputePgSchemaPlanRequest\x12\x1d\n" +
 	"\n" +
 	"request_id\x18\x01 \x01(\x04R\trequestId\x12=\n" +
 	"\x1blocal_agent_connection_uuid\x18\x02 \x01(\tR\x18localAgentConnectionUuid\x12\x16\n" +
 	"\x06schema\x18\x03 \x01(\tR\x06schema\x12.\n" +
 	"\x13existing_create_sql\x18\x04 \x01(\tR\x11existingCreateSql\x12$\n" +
-	"\x0enew_create_sql\x18\x05 \x01(\tR\fnewCreateSql\"Y\n" +
+	"\x0enew_create_sql\x18\x05 \x01(\tR\fnewCreateSql\x123\n" +
+	"\x16use_live_schema_source\x18\x06 \x01(\bR\x13useLiveSchemaSource\"Y\n" +
 	"\x1bComputePgSchemaPlanResponse\x12\x1d\n" +
 	"\n" +
 	"request_id\x18\x01 \x01(\x04R\trequestId\x12\x1b\n" +
