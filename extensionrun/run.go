@@ -285,13 +285,23 @@ func (i *Implementation) downloadAndExtract(signedURL string, outputPath string)
 		return nil, nil, fmt.Errorf("failed to read execution file: %w", err)
 	}
 
+	return applyGeneratedArchive(data, outputPath)
+}
+
+// applyGeneratedArchive writes the archive into outputPath and prunes files a
+// previous generation produced that this one no longer does. It is the whole
+// extract+cleanup pipeline, separated from the HTTP download so tests exercise
+// the real wiring (root resolution included) rather than a copy of it.
+func applyGeneratedArchive(data []byte, outputPath string) ([]string, []string, error) {
 	if err := os.MkdirAll(outputPath, 0750); err != nil {
 		return nil, nil, fmt.Errorf("failed to create output directory: %w", err)
 	}
 
 	// Capture the previous generation's manifest before the new output overwrites
-	// it, so we can detect files that are no longer produced.
-	previousManifest, hadPrevious, err := files.ReadGeneratedManifest(outputPath)
+	// it, so we can detect files that are no longer produced. The manifest sits at
+	// the generated project's own root, which is usually a directory BELOW
+	// outputPath, so it has to be located rather than assumed.
+	previousRoot, previousManifest, hadPrevious, err := files.FindGeneratedManifest(outputPath)
 	if err != nil {
 		fmt.Fprintf(os.Stderr, "Warning: could not read previous generation manifest: %v\n", err)
 	}
@@ -301,7 +311,7 @@ func (i *Implementation) downloadAndExtract(signedURL string, outputPath string)
 		return nil, nil, err
 	}
 
-	removed := cleanupOrphanedGeneratedFiles(outputPath, previousManifest, hadPrevious)
+	removed := cleanupOrphanedGeneratedFiles(outputPath, previousRoot, previousManifest, hadPrevious)
 	return written, removed, nil
 }
 
@@ -309,12 +319,12 @@ func (i *Implementation) downloadAndExtract(signedURL string, outputPath string)
 // the current run no longer produces, leaving user-added files untouched. It is
 // driven by the presence of a generation manifest, so any extension that emits
 // one benefits; extensions that don't are unaffected.
-func cleanupOrphanedGeneratedFiles(outputPath string, previousManifest files.GeneratedManifest, hadPrevious bool) []string {
+func cleanupOrphanedGeneratedFiles(outputPath, previousRoot string, previousManifest files.GeneratedManifest, hadPrevious bool) []string {
 	if !hadPrevious {
 		return nil // first run with a manifest (or generator without one): nothing to compare against
 	}
 
-	currentManifest, hasCurrent, err := files.ReadGeneratedManifest(outputPath)
+	currentRoot, currentManifest, hasCurrent, err := files.FindGeneratedManifest(outputPath)
 	if err != nil {
 		fmt.Fprintf(os.Stderr, "Warning: could not read current generation manifest: %v\n", err)
 		return nil
@@ -322,8 +332,18 @@ func cleanupOrphanedGeneratedFiles(outputPath string, previousManifest files.Gen
 	if !hasCurrent {
 		return nil // current run did not emit a manifest; do not delete anything
 	}
+	// Both manifests must describe the SAME project root for a diff between them
+	// to mean anything. They differ when the generated root was renamed (a changed
+	// identifier), which leaves the old tree as a separate project rather than as
+	// stale files — not ours to delete.
+	if currentRoot != previousRoot {
+		fmt.Fprintf(os.Stderr,
+			"Warning: the generated project root moved (%s -> %s); skipping stale-file cleanup. The previous output is still in %s and can be removed by hand.\n",
+			previousRoot, currentRoot, previousRoot)
+		return nil
+	}
 
-	removed, err := files.CleanupOrphanedGeneratedFiles(outputPath, previousManifest, currentManifest)
+	removed, err := files.CleanupOrphanedGeneratedFiles(currentRoot, previousManifest, currentManifest)
 	if err != nil {
 		fmt.Fprintf(os.Stderr, "Warning: failed to clean up stale generated files: %v\n", err)
 	}

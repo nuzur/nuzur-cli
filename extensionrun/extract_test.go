@@ -139,20 +139,130 @@ func TestExtractZip_OrphanGeneratedCleanedUp(t *testing.T) {
 	}
 }
 
-// downloadAndExtractLocal exercises the extract + manifest-cleanup pipeline
-// without HTTP: it mirrors downloadAndExtract's manifest-diff cleanup.
-func downloadAndExtractLocal(t *testing.T, data []byte, outputPath string) ([]string, error) {
+// makeNestedZip builds an archive in the layout go-code-gen actually produces:
+// everything under a single project directory named after the identifier, with
+// the manifest at THAT directory's root and its entries relative to it.
+func makeNestedZip(t *testing.T, project string, entries map[string]string, manifestFiles []string) []byte {
 	t.Helper()
-	prev, had, _ := files.ReadGeneratedManifest(outputPath)
-	written, err := extractZip(data, outputPath)
-	if err != nil {
-		return nil, err
+	nested := make(map[string]string, len(entries))
+	for name, content := range entries {
+		nested[project+"/"+name] = content
 	}
-	if had {
-		cur, hasCur, _ := files.ReadGeneratedManifest(outputPath)
-		if hasCur {
-			files.CleanupOrphanedGeneratedFiles(outputPath, prev, cur)
+	var buf bytes.Buffer
+	zw := zip.NewWriter(&buf)
+	for name, content := range nested {
+		w, err := zw.Create(name)
+		if err != nil {
+			t.Fatal(err)
+		}
+		if _, err := w.Write([]byte(content)); err != nil {
+			t.Fatal(err)
 		}
 	}
-	return written, nil
+	m := files.GeneratedManifest{Version: 1, Generator: "nuzur go-code-gen", Files: manifestFiles}
+	data, _ := json.Marshal(m)
+	w, err := zw.Create(project + "/" + files.GeneratedManifestFileName)
+	if err != nil {
+		t.Fatal(err)
+	}
+	w.Write(data)
+	if err := zw.Close(); err != nil {
+		t.Fatal(err)
+	}
+	return buf.Bytes()
+}
+
+// TestExtractZip_OrphanCleanedUpInNestedProjectLayout is the regression test for
+// the deploy bug: the generator nests its output (and its manifest) under a
+// project directory, so the manifest is NOT at the extraction root. Cleanup used
+// to read it at the root, find nothing, and silently prune nothing — a dropped
+// index left its fetch_*.go behind and the workspace stopped compiling.
+func TestExtractZip_OrphanCleanedUpInNestedProjectLayout(t *testing.T) {
+	dir := t.TempDir() // the workspace / --source-dir
+	const project = "chorus"
+
+	// Deploy 1: the schema still has the index, so its fetch pair is generated.
+	z1 := makeNestedZip(t, project, map[string]string{
+		"core/module/recording/recording.go":                                                  genMarker + "package recording\n",
+		"core/module/recording/fetch_recording_by_station_uuid_and_start_local_time.go":       genMarker + "package recording\n",
+		"core/module/recording/types/fetch_recording_by_station_uuid_and_start_local_time.go": genMarker + "package types\n",
+		"app/rest.go": "package app // user-owned custom endpoint\n",
+	}, []string{
+		"core/module/recording/recording.go",
+		"core/module/recording/fetch_recording_by_station_uuid_and_start_local_time.go",
+		"core/module/recording/types/fetch_recording_by_station_uuid_and_start_local_time.go",
+	})
+	if _, _, err := applyGeneratedArchive(z1, dir); err != nil {
+		t.Fatal(err)
+	}
+	// The user edits their custom file.
+	userCode := "package app // MY CUSTOM ENDPOINT\n"
+	if err := os.WriteFile(filepath.Join(dir, project, "app/rest.go"), []byte(userCode), 0o644); err != nil {
+		t.Fatal(err)
+	}
+
+	// Deploy 2: the index was dropped, so the fetch pair is no longer produced.
+	z2 := makeNestedZip(t, project, map[string]string{
+		"core/module/recording/recording.go": genMarker + "package recording // v2\n",
+		"app/rest.go":                        "package app // empty stub\n",
+	}, []string{
+		"core/module/recording/recording.go",
+	})
+	_, removed, err := applyGeneratedArchive(z2, dir)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	for _, orphan := range []string{
+		"core/module/recording/fetch_recording_by_station_uuid_and_start_local_time.go",
+		"core/module/recording/types/fetch_recording_by_station_uuid_and_start_local_time.go",
+	} {
+		if _, err := os.Stat(filepath.Join(dir, project, filepath.FromSlash(orphan))); !os.IsNotExist(err) {
+			t.Errorf("orphaned generated file %s should have been removed", orphan)
+		}
+	}
+	if len(removed) != 2 {
+		t.Errorf("removed = %v, want the 2 orphaned fetch files", removed)
+	}
+	// The whole point of scoping cleanup to the manifest: user-owned code survives.
+	if got := read(t, dir, filepath.Join(project, "app/rest.go")); got != userCode {
+		t.Errorf("user custom edit was clobbered: %q", got)
+	}
+	if got := read(t, dir, filepath.Join(project, "core/module/recording/recording.go")); got != genMarker+"package recording // v2\n" {
+		t.Errorf("generated file was not refreshed: %q", got)
+	}
+}
+
+// TestApplyGeneratedArchive_SkipsCleanupWhenProjectRootMoves guards the case
+// where the generated root is renamed (a changed identifier): the old tree is a
+// separate project, not stale output, so nothing is deleted.
+func TestApplyGeneratedArchive_SkipsCleanupWhenProjectRootMoves(t *testing.T) {
+	dir := t.TempDir()
+	z1 := makeNestedZip(t, "chorus", map[string]string{
+		"main.go": genMarker + "package main\n",
+	}, []string{"main.go"})
+	if _, _, err := applyGeneratedArchive(z1, dir); err != nil {
+		t.Fatal(err)
+	}
+	z2 := makeNestedZip(t, "chorus2", map[string]string{
+		"main.go": genMarker + "package main\n",
+	}, []string{"main.go"})
+	_, removed, err := applyGeneratedArchive(z2, dir)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(removed) != 0 {
+		t.Errorf("removed = %v, want nothing when the project root moves", removed)
+	}
+	if !regularFileExists(filepath.Join(dir, "chorus", "main.go")) {
+		t.Error("the previous project tree must be left alone, not deleted")
+	}
+}
+
+// downloadAndExtractLocal exercises the extract + manifest-cleanup pipeline
+// without HTTP, through the same function downloadAndExtract calls.
+func downloadAndExtractLocal(t *testing.T, data []byte, outputPath string) ([]string, error) {
+	t.Helper()
+	written, _, err := applyGeneratedArchive(data, outputPath)
+	return written, err
 }

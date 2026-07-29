@@ -44,6 +44,67 @@ func ReadGeneratedManifest(root string) (GeneratedManifest, bool, error) {
 	return m, true, nil
 }
 
+// FindGeneratedManifest locates the manifest at or just below outputPath and
+// returns the directory that CONTAINS it — which is the root the manifest's
+// paths are relative to.
+//
+// This indirection exists because the extraction root and the manifest root are
+// not the same directory. A generator nests its whole output under one folder
+// named after the project identifier, so extracting into `nuzur-chorus/` yields
+// `nuzur-chorus/chorus/...` with the manifest at `nuzur-chorus/chorus/` and its
+// entries relative to THAT ("core/module/...", not "chorus/core/module/...").
+// Reading the manifest at outputPath itself therefore finds nothing, and stale
+// files are never pruned.
+//
+// Only outputPath and its immediate subdirectories are considered: that is the
+// generator's nesting contract, and a deeper walk risks finding the manifest of
+// an unrelated project a user happens to keep inside the workspace. If several
+// subdirectories carry a manifest the layout is ambiguous (more than one
+// generated project under one root), and it reports not-found rather than guess
+// — cleanup is skipped instead of possibly deleting from the wrong tree.
+func FindGeneratedManifest(outputPath string) (string, GeneratedManifest, bool, error) {
+	// The extraction root itself wins: a flat archive (or a generator that does
+	// not nest) puts the manifest here.
+	if m, ok, err := ReadGeneratedManifest(outputPath); err != nil {
+		return "", GeneratedManifest{}, false, err
+	} else if ok {
+		return outputPath, m, true, nil
+	}
+
+	entries, err := os.ReadDir(outputPath)
+	if err != nil {
+		if os.IsNotExist(err) {
+			return "", GeneratedManifest{}, false, nil
+		}
+		return "", GeneratedManifest{}, false, err
+	}
+
+	var foundRoot string
+	var found GeneratedManifest
+	for _, e := range entries {
+		if !e.IsDir() {
+			continue
+		}
+		dir := filepath.Join(outputPath, e.Name())
+		m, ok, err := ReadGeneratedManifest(dir)
+		if err != nil {
+			return "", GeneratedManifest{}, false, err
+		}
+		if !ok {
+			continue
+		}
+		if foundRoot != "" {
+			// Ambiguous: two generated projects under one output root.
+			return "", GeneratedManifest{}, false, nil
+		}
+		foundRoot, found = dir, m
+	}
+	if foundRoot == "" {
+		return "", GeneratedManifest{}, false, nil
+	}
+	return foundRoot, found, true, nil
+}
+
 // IsGeneratedFile reports whether the file at path still carries a generated
 // marker. It recognizes this generator's marker as well as the standard Go
 // "Code generated ... DO NOT EDIT." convention used by tools such as sqlc and
