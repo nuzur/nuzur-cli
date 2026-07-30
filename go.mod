@@ -9,7 +9,7 @@ require (
 	github.com/jmoiron/sqlx v1.3.5
 	github.com/lib/pq v1.10.2
 	github.com/manifoldco/promptui v0.9.0
-	github.com/nuzur/pg-schema-diff v0.9.0
+	github.com/nuzur/pg-schema-diff v0.9.1
 	go.uber.org/config v1.4.1
 	golang.org/x/mod v0.37.0
 	google.golang.org/protobuf v1.36.11
