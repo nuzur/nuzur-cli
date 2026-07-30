@@ -38,16 +38,31 @@ type RunParams struct {
 	// review in sql-push) so step-based extensions can run non-interactively.
 	// Without it, a confirmation step is an error on the non-interactive path.
 	AutoConfirmSteps bool
+	// OnConfirmationStep decides each CONFIRMATION step, seeing its payload first.
+	// When nil the run falls back to AutoConfirmSteps — confirm everything, or
+	// refuse to proceed — which is what `run-extension --confirm-steps` relies on,
+	// so leaving this unset preserves the pre-existing behavior exactly.
+	OnConfirmationStep StepDecider
 }
 
 // RunResult is the structured outcome of an extension run, suitable for
 // machine-readable (--json) output consumed by agents / MCP tooling.
 type RunResult struct {
-	Status        string   `json:"status"` // "succeeded"
+	Status        string   `json:"status"` // "succeeded" | "cancelled"
 	ExecutionUUID string   `json:"execution_uuid,omitempty"`
 	OutputPath    string   `json:"output_path"`
 	FilesWritten  []string `json:"files_written"`
 	FilesRemoved  []string `json:"files_removed"`
+	// StatusMessage is the extension's terminal message. It used to be discarded,
+	// which is why sql-push's "No changes to apply" — the single most useful thing
+	// it says — had never reached a user.
+	StatusMessage string `json:"status_message,omitempty"`
+	// Steps records every confirmation step and how it was answered, so a step's
+	// payload outlives the poll loop.
+	Steps []StepOutcome `json:"steps,omitempty"`
+	// DisplayBlocks are the terminal response's blocks (e.g. sql-gen's rendered
+	// SQL), previously discarded along with everything else non-file.
+	DisplayBlocks []DisplayBlock `json:"display_blocks,omitempty"`
 }
 
 func (i *Implementation) Run(params RunParams) (*RunResult, error) {
@@ -92,7 +107,7 @@ func (i *Implementation) Run(params RunParams) (*RunResult, error) {
 	switch resp.Type {
 	case extensiongen.ExecutionResponseType_EXECUTION_RESPONSE_TYPE_FINAL:
 		// synchronous — result is already available
-		return i.handleFinalResponse(resp.Data.Final, params.OutputPath, resp.ExecutionUuid)
+		return i.handleFinalResponse(resp.Data.Final, params.OutputPath, resp.ExecutionUuid, nil)
 
 	case extensiongen.ExecutionResponseType_EXECUTION_RESPONSE_TYPE_ASYNC,
 		extensiongen.ExecutionResponseType_EXECUTION_RESPONSE_TYPE_STEP:
@@ -105,7 +120,7 @@ func (i *Implementation) Run(params RunParams) (*RunResult, error) {
 				fmt.Fprintf(os.Stderr, "Async execution: %s\n", async.StatusMessage)
 			}
 		}
-		return i.pollExtensionExecution(extClient, tokenBytes, params.Extension.Identifier, resp.ExecutionUuid, params.OutputPath, params.AutoConfirmSteps)
+		return i.pollExtensionExecution(extClient, tokenBytes, params, resp.ExecutionUuid)
 
 	default:
 		return nil, fmt.Errorf("unsupported execution response type: %v", resp.Type)
@@ -115,13 +130,16 @@ func (i *Implementation) Run(params RunParams) (*RunResult, error) {
 func (i *Implementation) pollExtensionExecution(
 	extClient extensiongen.NuzurExtensionClient,
 	tokenBytes []byte,
-	extensionIdentifier string,
+	params RunParams,
 	executionUUID string,
-	outputPath string,
-	autoConfirm bool,
 ) (*RunResult, error) {
+	extensionIdentifier := params.Extension.Identifier
+	outputPath := params.OutputPath
+	decide := params.stepDecider()
+
 	lastStatus := ""
 	submitted := map[string]bool{} // confirmation steps already answered
+	var steps []StepOutcome        // every step and how it was answered
 	for {
 		ctx := metadata.NewOutgoingContext(
 			contextWithTimeout(30),
@@ -142,29 +160,44 @@ func (i *Implementation) pollExtensionExecution(
 		case extensiongen.ExecutionStatus_EXECUTION_STATUS_SUCCEEDED:
 			fmt.Fprintln(os.Stderr, "Extension execution succeeded, fetching output...")
 			if exec.Data != nil && exec.Data.Final != nil {
-				return i.handleFinalResponse(exec.Data.Final, outputPath, executionUUID)
+				return i.handleFinalResponse(exec.Data.Final, outputPath, executionUUID, steps)
 			}
 			return nil, errors.New("execution succeeded but no final data returned")
 		case extensiongen.ExecutionStatus_EXECUTION_STATUS_FAILED:
 			return nil, fmt.Errorf("extension execution failed: %s", exec.StatusMsg)
 		case extensiongen.ExecutionStatus_EXECUTION_STATUS_CANCELLED:
-			return nil, errors.New("execution was cancelled")
+			// Terminal cancelled. A rejected confirmation step lands here, so the
+			// result is returned POPULATED alongside the sentinel error: a caller
+			// that rejected on purpose needs the payload it rejected, and one that
+			// did not still sees an error and fails as it always has.
+			return &RunResult{
+				Status:        "cancelled",
+				ExecutionUUID: executionUUID,
+				OutputPath:    outputPath,
+				StatusMessage: exec.StatusMsg,
+				Steps:         steps,
+			}, ErrExecutionCancelled
 		case extensiongen.ExecutionStatus_EXECUTION_STATUS_INPROGRESS:
-			// A CONFIRMATION step blocks until answered — auto-confirm it (once)
-			// so step-based extensions complete non-interactively.
+			// A CONFIRMATION step blocks until answered. The decider sees the step's
+			// payload — for sql-push, the migration itself — and says yes or no.
 			if exec.Type == extensiongen.ExecutionResponseType_EXECUTION_RESPONSE_TYPE_STEP &&
 				exec.Data != nil && exec.Data.Step != nil &&
 				exec.Data.Step.Type == extensiongen.ExecutionStepType_EXECUTION_STEP_TYPE_CONFIRMATION {
 				stepID := exec.Data.Step.StepIdentifier
 				if !submitted[stepID] {
-					if !autoConfirm {
-						return nil, fmt.Errorf("extension is waiting on confirmation step %q and this run is non-interactive; enable step auto-confirmation to proceed", stepID)
-					}
-					fmt.Fprintf(os.Stderr, "Auto-confirming step: %s\n", stepID)
-					if err := i.submitStep(extClient, tokenBytes, extensionIdentifier, executionUUID, stepID); err != nil {
+					prompt := stepPromptFromStep(exec.Data.Step)
+					decision, err := decide(prompt)
+					if err != nil {
 						return nil, err
 					}
+					if err := i.submitStep(extClient, tokenBytes, extensionIdentifier, executionUUID, stepID, decision.Confirm); err != nil {
+						return nil, err
+					}
+					// Marked for BOTH answers: once the extension has moved to a
+					// terminal status it clears the current step, so submitting
+					// again fails with InvalidArgument.
 					submitted[stepID] = true
+					steps = append(steps, StepOutcome{Prompt: prompt, Confirmed: decision.Confirm, Reason: decision.Reason})
 				}
 			}
 			// While waiting in the admission queue the extension reports an
@@ -197,9 +230,12 @@ func (i *Implementation) pollExtensionExecution(
 	}
 }
 
-// submitStep answers a confirmation step, confirming it so the extension can
-// proceed (used for non-interactive step-based runs like SQL push).
-func (i *Implementation) submitStep(extClient extensiongen.NuzurExtensionClient, tokenBytes []byte, extensionIdentifier, executionUUID, stepID string) error {
+// submitStep answers a confirmation step.
+//
+// confirmed=false is a real answer, not an abort: the extension takes it as a
+// rejection and ends the execution having done nothing. That is what makes a dry
+// run possible for an extension with no dry-run mode of its own.
+func (i *Implementation) submitStep(extClient extensiongen.NuzurExtensionClient, tokenBytes []byte, extensionIdentifier, executionUUID, stepID string, confirmed bool) error {
 	ctx := metadata.NewOutgoingContext(
 		contextWithTimeout(30),
 		metadata.New(map[string]string{
@@ -210,14 +246,14 @@ func (i *Implementation) submitStep(extClient extensiongen.NuzurExtensionClient,
 	if _, err := extClient.SubmitExectuionStep(ctx, &extensiongen.SubmitExectuionStepRequest{
 		ExecutionUuid:  executionUUID,
 		StepIdentifier: stepID,
-		Confirmed:      true,
+		Confirmed:      confirmed,
 	}); err != nil {
 		return fmt.Errorf("submitting confirmation step %q: %w", stepID, err)
 	}
 	return nil
 }
 
-func (i *Implementation) handleFinalResponse(final *extensiongen.ExecutionResponseTypeFinalData, outputPath, executionUUID string) (*RunResult, error) {
+func (i *Implementation) handleFinalResponse(final *extensiongen.ExecutionResponseTypeFinalData, outputPath, executionUUID string, steps []StepOutcome) (*RunResult, error) {
 	if final == nil {
 		return nil, errors.New("no final data in execution response")
 	}
@@ -226,8 +262,15 @@ func (i *Implementation) handleFinalResponse(final *extensiongen.ExecutionRespon
 	}
 	if final.FileDownloadUrl == "" {
 		// Non-generator extensions (e.g. SQL push) produce no downloadable file;
-		// a successful terminal status is the outcome.
-		return &RunResult{Status: "succeeded", ExecutionUUID: executionUUID, OutputPath: outputPath}, nil
+		// the terminal status and its message and blocks are the outcome.
+		return &RunResult{
+			Status:        "succeeded",
+			ExecutionUUID: executionUUID,
+			OutputPath:    outputPath,
+			StatusMessage: final.StatusMessage,
+			Steps:         steps,
+			DisplayBlocks: displayBlocksFrom(final.DisplayBlocks),
+		}, nil
 	}
 
 	ctx, err := productclient.ClientContext()
@@ -251,6 +294,9 @@ func (i *Implementation) handleFinalResponse(final *extensiongen.ExecutionRespon
 		OutputPath:    outputPath,
 		FilesWritten:  written,
 		FilesRemoved:  removed,
+		StatusMessage: final.StatusMessage,
+		Steps:         steps,
+		DisplayBlocks: displayBlocksFrom(final.DisplayBlocks),
 	}, nil
 }
 

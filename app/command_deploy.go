@@ -63,6 +63,12 @@ func (i *Implementation) DeployCommand() cli.Command {
 			cli.StringFlag{Name: "source-dir", Usage: "Directory for the app's source (the workspace deploy generates + builds from; you edit custom endpoints here). Default: ./nuzur-<identifier>. Re-deploys reuse it and preserve your edits."},
 			cli.StringFlag{Name: "deploy-config", Usage: "Path to a JSON deploy spec describing the whole deploy (topology + a nested `codegen` block); use '-' to read from stdin. Explicit flags override values in the file. Build or generate one from nuzur web."},
 			cli.BoolFlag{Name: "print-config", Usage: "Print the effective deploy config (as JSON) resolved from flags + --deploy-config, then exit without deploying. Use it to snapshot an invocation into a reusable deploy-config file."},
+			cli.BoolFlag{Name: "plan", Usage: "Dry run: print the exact SQL this deploy would apply to the target database, then exit. Provisions nothing, generates nothing, issues no token, and writes nothing to the box or to nuzur. Use it to see what a deploy would change — including anything it would DROP — before running one."},
+			cli.BoolFlag{Name: "json", Usage: "With --plan: emit the plan as JSON on stdout (for agents and CI)."},
+			cli.StringFlag{Name: "deployment", Usage: "With --plan: plan against a recorded deployment by id (see 'nuzur-cli deploy list'). The most reliable selector — the record carries the agent, the connection and the engine, so nothing has to be re-derived from flags."},
+			cli.StringFlag{Name: "local-agent", Usage: "With --plan: the local agent uuid to plan through, for when this machine has no record of the deployment (requires --local-agent-connection)."},
+			cli.StringFlag{Name: "local-agent-connection", Usage: "With --plan: the agent connection uuid to plan against (requires --local-agent)."},
+			cli.BoolFlag{Name: "allow-destructive", Usage: "Authorize a schema apply that DELETES DATA (DROP TABLE/SCHEMA, DROP COLUMN, TRUNCATE). Without it, a deploy whose schema plan deletes data applies nothing and exits non-zero. Flag-only — never read from a --deploy-config file. Run --plan first to see what would be dropped."},
 			cli.StringFlag{Name: "gen-config", Usage: "Path to a JSON go-code-gen config (overrides the deploy-config's `codegen` block; else the last-used config for this project is reused). A project that has never run the generator needs none: deploy fills the required fields from these flags (REST API, no auth, identifier/module from --identifier or the project name). Whatever it resolves is saved as the project's go-code-gen config once the code generates"},
 			cli.StringFlag{Name: "cli-install-cmd", Usage: "Command to install the nuzur CLI on the box (must leave `nuzur` on PATH)"},
 			cli.BoolFlag{Name: "sudo", Usage: "Run the bootstrap via sudo (auto-enabled for non-root SSH users; the box needs passwordless sudo)"},
@@ -136,7 +142,10 @@ func (i *Implementation) runDeploy(c *cli.Context) (rerr error) {
 		return pendingVMName
 	}
 	defer func() {
-		if rev := deployRev(); rerr != nil && rev != "" {
+		// revisionShouldFail keeps a blocked destructive schema from being relabelled
+		// a failed deploy: it returns a bare exit error so CI notices, but the box is
+		// provisioned and serving and the revision already says what was skipped.
+		if rev := deployRev(); rev != "" && revisionShouldFail(rerr) {
 			i.updateDeployRevision(context.Background(), rev,
 				nemgen.DeploymentRevisionStatus_DEPLOYMENT_REVISION_STATUS_FAILED, rerr.Error())
 		}
@@ -196,6 +205,21 @@ func (i *Implementation) runDeploy(c *cli.Context) (rerr error) {
 		}
 		fmt.Println(string(out))
 		return nil
+	}
+
+	// --plan: a dry run against the database this deploy WOULD push to.
+	//
+	// It deliberately does not share the body below. Applying the schema is step 10
+	// of 12 — by then the deploy has run the code generator, mutated the project's
+	// saved config, issued a provisioning token, created the VM, opened a deployment
+	// revision in nuzur and run the whole bootstrap on the box. There is no point in
+	// that sequence from which "stop before applying" is a dry run, so --plan exits
+	// early, like --print-config.
+	if c.Bool("plan") {
+		return i.runDeployPlan(c, s)
+	}
+	if c.Bool("json") {
+		return fmt.Errorf("--json only applies to --plan; a deploy has no JSON output")
 	}
 
 	provider := deploy.Provider(strings.TrimSpace(s.Provider))
@@ -383,8 +407,9 @@ func (i *Implementation) runDeploy(c *cli.Context) (rerr error) {
 	}
 
 	// Identifier: --identifier override, else the go-code-gen config's identifier,
-	// else (db-only) the sanitized project name.
-	identifier := firstNonEmpty(s.Identifier, stringValue(configValues, "identifier", ""), sanitizeDBName(targets.project.Name))
+	// else (db-only) the sanitized project name. Shared with --plan so a plan and
+	// the deploy it previews always name the same database — see deploy_targeting.go.
+	identifier := planIdentifier(s.Identifier, configValues, targets.project.Name)
 
 	// Per-revision image tag: each deploy builds + runs a uniquely-tagged image
 	// (not :latest) so the deployment revision history pins the exact artifact
@@ -418,10 +443,9 @@ func (i *Implementation) runDeploy(c *cli.Context) (rerr error) {
 	// database contains schemas (default `public`). `schema` is what the diff
 	// engine, the data-manager link, and the agent connection's default schema
 	// target — the DB name for MySQL, a namespace for Postgres.
-	schema := dbName
+	schema := deploySchemaName(dbEngine, dbName, s.DBSchema)
 	dbSchema := "" // agent-connection default schema; empty for MySQL (chosen per query)
 	if dbEngine == deploy.DBPostgres {
-		schema = firstNonEmpty(s.DBSchema, "public")
 		dbSchema = schema
 	}
 	connName := identifier + "-db"
@@ -805,9 +829,20 @@ func (i *Implementation) runDeploy(c *cli.Context) (rerr error) {
 
 	i.updateDeployRevision(ctx, deployRev(),
 		nemgen.DeploymentRevisionStatus_DEPLOYMENT_REVISION_STATUS_IN_PROGRESS, "applying the schema to the database")
-	if err := i.applySchema(targets, agentUUID, connUUID, schema, connFlag, connStore); err != nil {
+	pushTarget := deployPushTarget(agentUUID, connUUID, schema, connFlag, connStore, dbEngine)
+	var gate schemaGateResult
+	if err := i.applySchema(targets, pushTarget, s.AllowDestructive, &gate); err != nil {
 		outcome.schemaApplied = false
-		outputtools.PrintlnColoredErr("Schema auto-apply skipped: "+err.Error(), outputtools.Yellow)
+		if gate.blocked {
+			outcome.schemaBlocked = true
+			outcome.destructiveCount = len(gate.plan.Destructive())
+			outcome.rerunCommand = rerunCommand(os.Args, true)
+		} else {
+			outputtools.PrintlnColoredErr("Schema auto-apply skipped: "+err.Error(), outputtools.Yellow)
+		}
+	} else if gate.destructiveApplied {
+		outcome.destructiveApplied = true
+		outcome.destructiveCount = len(gate.plan.Destructive())
 	}
 
 	// Read back the resolved front-door URL the bootstrap wrote: a domain project
@@ -965,8 +1000,9 @@ func (i *Implementation) runDeploy(c *cli.Context) (rerr error) {
 	// step errored") that was wrong whenever the publish was what broke, and to
 	// claim the agent connection was live in exactly the case where it wasn't.
 	if s := outcome.summary(); s != "" {
-		outputtools.PrintlnColoredErr("\n"+s, outputtools.Yellow)
+		outputtools.PrintlnColoredErr("\n"+s, outcome.summaryColor())
 	}
+	printGateFollowUp(outcome)
 
 	// Point the user at their editable app source (the workspace) — this is the
 	// code that was deployed. Re-running deploy regenerates it in place, refreshing
@@ -1008,7 +1044,11 @@ func (i *Implementation) runDeploy(c *cli.Context) (rerr error) {
 			Params:      extParams,
 		})
 	}
-	return nil
+
+	// Last: a blocked schema exits non-zero so CI does not go green on a box that is
+	// serving against a schema its generated code no longer matches. Everything
+	// above has already printed, because the deploy itself did happen.
+	return exitCodeForOutcome(outcome)
 }
 
 // goCodeGenDBValue maps a deploy engine to go-code-gen's `db` config option value.
@@ -1082,56 +1122,43 @@ func (i *Implementation) publishConnectionCatalog(agentUUID, connUUID, connName 
 	return nil
 }
 
-// applySchema applies the project's schema to the freshly-provisioned, empty
-// database via the SQL-push extension.
-//
-// teamConnUUID/teamConnStore are set only for a --connection deploy (an existing
-// team connection).
-func (i *Implementation) applySchema(targets *runTargets, agentUUID, connUUID string, schema, teamConnUUID, teamConnStore string) error {
-	// Pick the push path from the topology, not from a flag. A self-hosted (or raw
-	// --db-dsn) database lives behind the box, so it's only reachable through the
-	// agent → sql-push-local. An existing team connection is reachable from nuzur
-	// directly, so push remotely → sql-push, which keeps the shared connection in
-	// sync the same way any other schema change to it would.
-	sqlPushExtID := sqlPushPair.Local
-	configValues := map[string]interface{}{
-		"local_agent":            agentUUID,
-		"local_agent_connection": connUUID,
-		"local_agent_schema":     schema,
-	}
+// deployPushTarget describes the database this deploy pushes its schema to. The
+// topology decides which shape it takes: teamConnUUID is set only for a
+// --connection deploy (an existing team connection), everything else goes through
+// the box's agent.
+func deployPushTarget(agentUUID, connUUID, schema, teamConnUUID, teamConnStore string, engine deploy.DBEngine) planTarget {
 	if teamConnUUID != "" {
-		sqlPushExtID = sqlPushPair.Front
-		configValues = map[string]interface{}{
-			"store":      teamConnStore,
-			"connection": teamConnUUID,
-			"schema":     schema,
+		return planTarget{
+			Mode:         connModeRemote,
+			TeamConnUUID: teamConnUUID,
+			TeamStore:    teamConnStore,
+			Schema:       schema,
+			Engine:       engine,
 		}
 	}
+	return planTarget{
+		Mode:      connModeLocal,
+		AgentUUID: agentUUID,
+		ConnUUID:  connUUID,
+		Schema:    schema,
+		Engine:    engine,
+	}
+}
 
-	ext, err := targets.er.FindExtensionByIdentifier(sqlPushExtID)
-	if err != nil {
-		return fmt.Errorf("resolving %q: %w", sqlPushExtID, err)
+// applySchema applies the project's schema to the deployed database via the
+// SQL-push extension, subject to the destructive-change gate.
+//
+// Note that the database is not necessarily new or empty: a re-deploy, a --db-dsn
+// deploy and a --connection deploy all land here against a database that already has
+// tables and rows in it. That is what the gate is for.
+func (i *Implementation) applySchema(targets *runTargets, t planTarget, allowDestructive bool, gate *schemaGateResult) error {
+	outputtools.PrintlnColoredErr("Applying schema to the database...", outputtools.Blue)
+	_, err := i.sqlPushRun(targets, t, i.schemaApplyDecider(allowDestructive, gate))
+	if gate.blocked {
+		// The extension cancelled because we rejected it, which is the intended
+		// outcome — report it as a decision, not as the cancellation it looks like.
+		return errSchemaBlocked
 	}
-	ver, err := targets.er.GetLatestExtensionVersion(ext.Uuid)
-	if err != nil {
-		return err
-	}
-	outDir, err := os.MkdirTemp("", "nuzur-sqlpush-*")
-	if err != nil {
-		return err
-	}
-	defer os.RemoveAll(outDir)
-
-	outputtools.PrintlnColoredErr("Applying schema to the new database...", outputtools.Blue)
-	_, err = targets.er.Run(extensionrun.RunParams{
-		Extension:          ext,
-		ExtensionVersion:   ver,
-		ProjectUUID:        targets.project.Uuid,
-		ProjectVersionUUID: targets.projectVersion.Uuid,
-		ConfigValues:       configValues,
-		AutoConfirmSteps:   true,
-		OutputPath:         outDir,
-	})
 	return err
 }
 
@@ -1473,17 +1500,7 @@ func findPriorDeployment(host, identifier string) *deploy.Deployment {
 	if err != nil {
 		return nil
 	}
-	var match *deploy.Deployment
-	for idx := range deps {
-		d := deps[idx]
-		if d.Host == host && d.Identifier == identifier && d.LocalAgentUUID != "" {
-			if match == nil || d.CreatedAt.After(match.CreatedAt) {
-				m := d
-				match = &m
-			}
-		}
-	}
-	return match
+	return pickPriorDeployment(deps, host, identifier)
 }
 
 // findBoxAgent returns the local-agent UUID already paired on this host (any
@@ -1494,20 +1511,7 @@ func findBoxAgent(host string) string {
 	if err != nil {
 		return ""
 	}
-	var latest *deploy.Deployment
-	for idx := range deps {
-		d := deps[idx]
-		if d.Host == host && d.LocalAgentUUID != "" {
-			if latest == nil || d.CreatedAt.After(latest.CreatedAt) {
-				m := d
-				latest = &m
-			}
-		}
-	}
-	if latest == nil {
-		return ""
-	}
-	return latest.LocalAgentUUID
+	return pickBoxAgent(deps, host)
 }
 
 // waitForAgentOnline polls until the given agent uuid reaches ONLINE. Returns

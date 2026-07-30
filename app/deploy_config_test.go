@@ -1,9 +1,11 @@
 package app
 
 import (
+	"encoding/json"
 	"flag"
 	"os"
 	"path/filepath"
+	"strings"
 	"testing"
 
 	"github.com/urfave/cli"
@@ -45,6 +47,7 @@ func deployContext(t *testing.T, args []string) *cli.Context {
 	set.String("cli-install-cmd", "", "")
 	set.Bool("sudo", false, "")
 	set.String("web-url", "", "")
+	set.Bool("allow-destructive", false, "")
 	if err := set.Parse(args); err != nil {
 		t.Fatalf("parsing args: %v", err)
 	}
@@ -181,5 +184,44 @@ func TestToDeployConfig_SecretFreeExternal(t *testing.T) {
 	}
 	if out.DBDSN != nil {
 		t.Fatalf("db_dsn must be omitted when empty (secret-free): %v", *out.DBDSN)
+	}
+}
+
+// --allow-destructive is flag-only and never round-tripped.
+//
+// Authorizing data loss has to be an act at the keyboard for one run. If a config
+// file could carry it, a team would share a file that silently pre-authorizes every
+// deploy made with it to drop tables — which is exactly the state the gate exists to
+// prevent, reintroduced as a default.
+func TestAllowDestructiveIsFlagOnly(t *testing.T) {
+	// A config file asking for it is ignored...
+	path := writeTempConfig(t, `{"allow_destructive": true, "project": "sfapi"}`)
+	c := deployContext(t, []string{"--deploy-config", path})
+	s, err := resolveDeploySettings(c)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if s.AllowDestructive {
+		t.Fatal("--allow-destructive was read from a deploy-config file")
+	}
+
+	// ...the flag is honored...
+	c = deployContext(t, []string{"--allow-destructive"})
+	s, err = resolveDeploySettings(c)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !s.AllowDestructive {
+		t.Fatal("--allow-destructive flag was ignored")
+	}
+
+	// ...and --print-config never emits it, so snapshotting an authorized run into a
+	// reusable config cannot smuggle the authorization along with it.
+	out, err := json.Marshal(s.toDeployConfig())
+	if err != nil {
+		t.Fatal(err)
+	}
+	if strings.Contains(string(out), "allow_destructive") {
+		t.Fatalf("toDeployConfig round-tripped the authorization: %s", out)
 	}
 }

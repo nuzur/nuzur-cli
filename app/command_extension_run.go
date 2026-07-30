@@ -1,6 +1,7 @@
 package app
 
 import (
+	"errors"
 	"fmt"
 	"regexp"
 	"strings"
@@ -206,6 +207,13 @@ func (i *Implementation) runExtensionFlow(extensionIdentifier string, flags extR
 		AutoConfirmSteps:   flags.confirmSteps,
 	})
 	if err != nil {
+		// A cancelled execution is the extension's own decision, reported in its own
+		// words (sql-push says "Changes rejected by user"). Surface that instead of
+		// the bare sentinel, which reads like a CLI failure. Still an error: nothing
+		// the caller asked for happened.
+		if errors.Is(err, extensionrun.ErrExecutionCancelled) && result != nil && result.StatusMessage != "" {
+			return i.failRun(flags, fmt.Errorf("%s", result.StatusMessage))
+		}
 		return i.failRun(flags, err)
 	}
 

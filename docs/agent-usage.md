@@ -221,3 +221,95 @@ to the user.
   in `--json`/`describe` mode — safe to pipe into a JSON parser.
 - **stderr** carries all human progress/status/warnings.
 - Exit code is `0` on success, non-zero on any failure.
+
+## Previewing a deploy: `deploy --plan --json`
+
+`nuzur-cli deploy` is declarative — it reconciles the database to the published
+model, so anything the database has and the model does not is surplus and gets
+dropped. `--plan` is how an agent finds out which of those two situations it is in
+before doing anything:
+
+```bash
+nuzur-cli deploy --plan --json --deployment <id> --project <p> --version <v>
+```
+
+It provisions nothing, generates nothing, mints no token, and writes nothing to the
+box or to nuzur. Target it with `--deployment <id>` (most reliable — the recorded
+deployment carries the agent, connection and engine), else `--host` + the derived
+identifier, else `--connection <uuid>`; if this machine has no record of the box,
+pass `--local-agent <uuid> --local-agent-connection <uuid>`.
+
+Unlike `deploy`, `--plan` accepts a DRAFT version — previewing a not-yet-approved
+fix against a drifted database is the point. Every plan reports its version's review
+status, and `deploy` still refuses anything unapproved.
+
+### Plan result (`--json`)
+
+```json
+{
+  "status": "plan",
+  "mode": "diff",
+  "project":         { "uuid": "…", "name": "acme" },
+  "project_version": { "uuid": "…", "identifier": "v_8", "review_status": "DRAFT", "approved": false },
+  "target": {
+    "source": "deployment acme-3f2a1c", "deployment_id": "acme-3f2a1c",
+    "mode": "local", "engine": "postgres", "schema": "public",
+    "local_agent_uuid": "…", "local_agent_connection_uuid": "…"
+  },
+  "changes": true,
+  "destructive": true,
+  "counts": { "total": 12, "additive": 8, "data_loss": 2, "constraint_loss": 1, "narrowing": 1 },
+  "statements": [
+    { "index": 4, "sql": "ALTER TABLE \"public\".\"orders\" DROP COLUMN \"legacy_ref\"",
+      "kind": "drop_column", "severity": "data_loss", "object": "public.orders.legacy_ref",
+      "reason": "drops legacy_ref from public.orders and every value in it" }
+  ],
+  "apply_sql": "…the exact string the extension would execute…",
+  "transactional": false,
+  "caveats": ["mysql_phantom_churn"],
+  "applied": false,
+  "rerun_command": "nuzur-cli deploy --host prod --allow-destructive"
+}
+```
+
+- `apply_sql` is the load-bearing field — reason about the migration from that, not
+  by re-deriving it from `statements`.
+- `destructive` is the decision field. `severity` is one of `data_loss`,
+  `constraint_loss`, `narrowing`, or absent for additive statements. Only
+  `data_loss` blocks a deploy.
+- `mode` is `"diff"` against a live database, or `"create"` when there is no
+  database yet and this is the script a first deploy would run.
+- `applied` is always `false`. `transactional` is always `false` — the statements
+  run one at a time, so a failure partway through leaves the earlier ones applied.
+- `--plan` exits `0` whether or not there are changes; read `changes` and
+  `destructive` rather than the exit code.
+
+### The gate: `--allow-destructive`
+
+A real deploy whose migration deletes data applies **nothing** (the migration goes
+to the database as one unit) and exits **non-zero**. `--allow-destructive`
+authorizes it, and is flag-only — it cannot come from a `--deploy-config` file.
+
+Do not add that flag and retry. It is the one deploy failure where the suggested
+flag is not a missing argument but a question about deleting the user's data. Show
+them the `data_loss` statements and get an explicit yes. A plan that wants to drop
+tables usually means the **model** is behind — the fix is normally to add the
+missing entities/fields to the schema, not to authorize the drop.
+
+### What a plan cannot tell you
+
+- Which statements take an exclusive lock (i.e. take a table offline), or how long
+  an index build will take. The differ computes that metadata; it is discarded
+  before the CLI sees it.
+- How many rows a `DROP TABLE` destroys. Nothing counts them.
+- Whether an `ALTER` will actually succeed. Adding a foreign key against orphan
+  rows, `SET NOT NULL` against nulls, or a unique index against duplicates are
+  flagged `narrowing` ("may fail"), never resolved.
+- On MySQL, which statements are real. nuzur cannot read a MySQL schema directly,
+  so the "existing" side is reconstructed and re-rendered, and normalized column
+  widths/types produce `MODIFY`/`CHANGE COLUMN` statements that change nothing and
+  reappear every deploy. That is what `caveats: ["mysql_phantom_churn"]` marks. The
+  `CREATE`s and `DROP`s are real.
+
+Anything unrecognized is reported as `kind: "other"` with no severity — never read
+"not flagged" as "proven safe".

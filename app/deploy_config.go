@@ -146,6 +146,12 @@ type deploySettings struct {
 	Sudo          bool
 	WebURL        string
 
+	// AllowDestructive authorizes a schema apply that deletes data. Flag-only, and
+	// deliberately absent from DeployConfig: authorizing data loss has to be an act
+	// at the keyboard for this one run, not a property of a JSON file somebody
+	// committed months ago and shares across a team.
+	AllowDestructive bool
+
 	// Codegen is the go-code-gen config map: the deploy-config's `codegen` block
 	// as the base, overlaid by a --gen-config file when given.
 	Codegen map[string]interface{}
@@ -203,6 +209,9 @@ func resolveDeploySettings(c *cli.Context) (*deploySettings, error) {
 		CLIInstallCmd: strSetting(c, "cli-install-cmd", cfg.CLIInstallCmd, ""),
 		Sudo:          boolSetting(c, "sudo", cfg.Sudo),
 		WebURL:        strSetting(c, "web-url", cfg.WebURL, constants.WEB_PROD_URL),
+
+		// Flag-only (fileVal nil), for the reason on the struct field.
+		AllowDestructive: boolSetting(c, "allow-destructive", nil),
 	}
 
 	// Codegen: start from the deploy-config's nested `codegen` block, then overlay
@@ -304,13 +313,13 @@ func (s *deploySettings) toDeployConfig() *DeployConfig {
 		Storage:          sp(s.Storage),
 		// Manual S3 creds are deliberately NOT round-tripped into a config snapshot
 		// (they're flag-only secrets, like db_dsn's password should not be shared).
-		API: sp(s.API),
-		Auth:             sp(s.Auth),
-		Custom:           bp(s.Custom),
-		SourceDir:        sp(s.SourceDir),
-		CLIInstallCmd:    sp(s.CLIInstallCmd),
-		Sudo:             bp(s.Sudo),
-		WebURL:           sp(s.WebURL),
+		API:           sp(s.API),
+		Auth:          sp(s.Auth),
+		Custom:        bp(s.Custom),
+		SourceDir:     sp(s.SourceDir),
+		CLIInstallCmd: sp(s.CLIInstallCmd),
+		Sudo:          bp(s.Sudo),
+		WebURL:        sp(s.WebURL),
 	}
 	if len(s.Codegen) > 0 {
 		cfg.Codegen = s.Codegen
