@@ -44,7 +44,7 @@ func (i *Implementation) DeployCommand() cli.Command {
 			cli.StringFlag{Name: "domain", Usage: "Domain pointing at the server — Caddy provisions a real Let's Encrypt cert and serves HTTPS on 443. Omit for IP-only: plain HTTP (no cert of any kind) on a port assigned per project on the box, starting at 8443. Despite the number, that port is NOT TLS. The deploy prints the exact URL and writes it to /etc/nuzur/<identifier>/url — use that rather than assembling one."},
 			cli.StringFlag{Name: "project, p", Usage: "Project name or UUID"},
 			cli.StringFlag{Name: "version", Usage: "Project version identifier or UUID (default: latest)"},
-			cli.StringFlag{Name: "identifier", Usage: "Deployment identifier (names the DB/service/config on the box, and the generated root folder/go module on a first deploy; default: from the go-code-gen config, else the project name)"},
+			cli.StringFlag{Name: "identifier", Usage: "Deployment identifier (names the DB/service/config on the box, the workspace, and the generated root folder/go module — when passed it overrides the identifier in the project's saved go-code-gen config; default: from that saved config, else the project name)"},
 			cli.BoolFlag{Name: "db-only", Usage: "Database-only: install the DB engine (--db), pair the agent, register the connection, and apply the schema — but do NOT generate/build/run the app or Caddy. Manage the DB entirely through nuzur."},
 			cli.StringFlag{Name: "db-dsn", Usage: "Use an EXISTING database instead of self-hosting one. MySQL DSN (user:pass@tcp(host:port)/db?params) or Postgres URL (postgres://user:pass@host:port/db?sslmode=require). The app + agent connect to it; MySQL install/creation is skipped."},
 			cli.StringFlag{Name: "connection", Usage: "Deploy against an EXISTING nuzur team connection (by UUID) instead of --db-dsn. The DSN is resolved server-side from the connection's stored credentials — no plaintext secret on the command line. Mutually exclusive with --db-dsn."},
@@ -366,6 +366,16 @@ func (i *Implementation) runDeploy(c *cli.Context) (rerr error) {
 		// `go_module`, `events`, … before anything was provisioned. Missing fields
 		// only: explicit values and the saved config always win.
 		codegenIdentifier := sanitizeDBName(firstNonEmpty(s.Identifier, targets.project.Name))
+		// An explicitly passed --identifier names the generated root folder and go
+		// module too, per the flag's own help — which it did not do on a project that
+		// already had a saved go-code-gen config, because the identifier only ever
+		// reached the generator as a default for a MISSING field. Nothing about which
+		// deployment record this run matches changes; see applyCodegenIdentity.
+		if renamed := applyCodegenIdentity(provided, targets.lastConfig, s.Identifier); len(renamed) > 0 {
+			outputtools.PrintlnColoredErr(fmt.Sprintf(
+				"Naming the generated app from --identifier: %s (the project's saved go-code-gen config said identifier=%s).",
+				strings.Join(renamed, ", "), stringValue(targets.lastConfig, "identifier", "")), outputtools.Blue)
+		}
 		if applied := applyCodegenDefaults(targets.configEntity, provided, targets.lastConfig, codegenIdentifier); len(applied) > 0 {
 			lead := "No saved go-code-gen config for this project (first deploy)"
 			if len(targets.lastConfig) > 0 {
@@ -379,6 +389,13 @@ func (i *Implementation) runDeploy(c *cli.Context) (rerr error) {
 		configValues, err = targets.er.BuildConfigFromJSON(targets.project, targets.projectVersion.Uuid, targets.configEntity, provided, targets.lastConfig)
 		if err != nil {
 			return fmt.Errorf("building generator config — supply the missing fields via --gen-config <file> or a `codegen` block in --deploy-config, or run `nuzur-cli go-code-gen` once to save a config for this project: %w", err)
+		}
+
+		// The custom zone is sticky when the flag is omitted (see deploySettings.Custom).
+		// Say so at the point it is resolved: a setting that carries itself forward in
+		// silence is undiscoverable, and the user who wants it off has to be told how.
+		if notice := customStickinessNotice(s.Custom, provided, targets.lastConfig); notice != "" {
+			outputtools.PrintlnColoredErr(notice, outputtools.Blue)
 		}
 
 		// Catch an unsupportable JWT config here: left alone it generates fine and

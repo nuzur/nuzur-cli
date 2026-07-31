@@ -148,6 +148,11 @@ func TestResolveDeploySettings_CustomIsTriState(t *testing.T) {
 	}{
 		{name: "omitted stays unset", want: nil},
 		{name: "flag passed is on", args: []string{"--custom"}, want: boolp(true)},
+		{
+			// The form the stickiness notice tells the user to pass when they want the
+			// zone off — it has to actually resolve to an explicit false.
+			name: "flag=false is a decision", args: []string{"--custom=false"}, want: boolp(false),
+		},
 		{name: "file says true", file: `{"custom": true}`, want: boolp(true)},
 		{
 			// An explicit false in a config file is a decision, not an absence: it has
@@ -186,6 +191,108 @@ func TestResolveDeploySettings_CustomIsTriState(t *testing.T) {
 }
 
 func boolp(v bool) *bool { return &v }
+
+// The fourth state of --custom: what the DEPLOY says when the value came from the
+// project's saved config rather than from this run. The stickiness is the fix for
+// "omitting --custom deleted every custom endpoint", but a setting that carries
+// itself forward in silence is undiscoverable — the round-4 validation could only
+// establish it by testing the deployed app.
+func TestCustomStickinessNotice(t *testing.T) {
+	const (
+		keptOn  = "Custom endpoints: enabled (kept from the previous deploy — pass --custom=false to disable)"
+		keptOff = "Custom endpoints: disabled (kept from the previous deploy — pass --custom to enable)"
+	)
+	for _, tc := range []struct {
+		name       string
+		flag       *bool
+		provided   map[string]interface{}
+		lastConfig map[string]interface{}
+		want       string
+	}{
+		{
+			// The re-deploy that silently preserved the zone.
+			name:       "inherited on",
+			lastConfig: map[string]interface{}{"custom_enabled": true},
+			want:       keptOn,
+		},
+		{
+			// An explicit --custom=false on an earlier deploy is inherited just the
+			// same, and is just as worth saying out loud.
+			name:       "inherited off",
+			lastConfig: map[string]interface{}{"custom_enabled": false},
+			want:       keptOff,
+		},
+		{
+			name: "stated this run by the flag",
+			flag: boolp(true), lastConfig: map[string]interface{}{"custom_enabled": false},
+		},
+		{
+			name: "turned off this run by the flag",
+			flag: boolp(false), lastConfig: map[string]interface{}{"custom_enabled": true},
+		},
+		{
+			name:     "stated this run by a codegen block",
+			provided: map[string]interface{}{"custom_enabled": true},
+			// even though the saved config says otherwise
+			lastConfig: map[string]interface{}{"custom_enabled": false},
+		},
+		{
+			// A first deploy inherits nothing: there is no previous deploy to name.
+			name: "no saved config",
+		},
+		{
+			name:       "saved config that never mentioned the zone",
+			lastConfig: map[string]interface{}{"identifier": "terroir"},
+		},
+		{
+			// Saved configs round-trip through JSON, but a hand-written --gen-config
+			// can carry the string form and the generator coerces it.
+			name:       "string form is understood",
+			lastConfig: map[string]interface{}{"custom_enabled": "true"},
+			want:       keptOn,
+		},
+		{
+			// A value of an unrecognized shape: say nothing rather than announce a
+			// state that may not be the one the generator resolves.
+			name:       "unrecognized shape says nothing",
+			lastConfig: map[string]interface{}{"custom_enabled": 1},
+		},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			provided := tc.provided
+			if provided == nil {
+				provided = map[string]interface{}{}
+			}
+			if got := customStickinessNotice(tc.flag, provided, tc.lastConfig); got != tc.want {
+				t.Errorf("customStickinessNotice() = %q, want %q", got, tc.want)
+			}
+		})
+	}
+}
+
+// The notice is driven by the same resolved value runDeploy writes into the
+// generator config, so the tri-state and the messaging cannot drift apart.
+func TestCustomStickinessNoticeFollowsResolvedSettings(t *testing.T) {
+	lastConfig := map[string]interface{}{"custom_enabled": true}
+
+	// Omitted → sticky, and said so.
+	s, err := resolveDeploySettings(deployContext(t, nil))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if notice := customStickinessNotice(s.Custom, map[string]interface{}{}, lastConfig); !strings.Contains(notice, "kept from the previous deploy") {
+		t.Fatalf("an omitted --custom should disclose the inherited value, got %q", notice)
+	}
+
+	// Passed → the user knows what they asked for; no notice.
+	s, err = resolveDeploySettings(deployContext(t, []string{"--custom"}))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if notice := customStickinessNotice(s.Custom, map[string]interface{}{}, lastConfig); notice != "" {
+		t.Fatalf("an explicit --custom needs no notice, got %q", notice)
+	}
+}
 
 // --db used to be unvalidated: only the exact string "postgres" selected Postgres and
 // everything else — "postgresql" included, which is what go-code-gen's own config

@@ -157,6 +157,148 @@ func TestApplyCodegenDefaults_UnknownRequiredFieldLeftAlone(t *testing.T) {
 	}
 }
 
+// resolveCodegenIdentity runs the identifier half of runDeploy's config assembly and
+// returns the config the GENERATOR ends up seeing — provided merged over the saved
+// config, which is what BuildConfigFromJSON does — plus the overrides deploy reports.
+func resolveCodegenIdentity(t *testing.T, flag, projectName string, provided, lastConfig map[string]interface{}) (map[string]interface{}, []string) {
+	t.Helper()
+	if provided == nil {
+		provided = map[string]interface{}{}
+	}
+	renamed := applyCodegenIdentity(provided, lastConfig, flag)
+	applyCodegenDefaults(goCodeGenEntity(), provided, lastConfig, sanitizeDBName(firstNonEmpty(flag, projectName)))
+	effective := map[string]interface{}{}
+	for k, v := range lastConfig {
+		effective[k] = v
+	}
+	for k, v := range provided {
+		if v != nil {
+			effective[k] = v
+		}
+	}
+	return effective, renamed
+}
+
+// --identifier's help says it names "the generated root folder/go module", and on any
+// project that had run the generator once it did not: the identifier reached the
+// generator only as a default for a MISSING field, so the saved config won. Deploying
+// one project twice on one box (`--identifier terroirvpg` after a `terroirmy` deploy)
+// produced a workspace named for the flag holding an app named for the saved config —
+// two apps building the same go module and exporting the same gRPC service.
+func TestApplyCodegenIdentity(t *testing.T) {
+	saved := func() map[string]interface{} {
+		return map[string]interface{}{"identifier": "terroirmy", "go_module": "github.com/nuzur/terroirmy"}
+	}
+	for _, tc := range []struct {
+		name        string
+		flag        string
+		project     string
+		provided    map[string]interface{}
+		lastConfig  map[string]interface{}
+		wantID      string
+		wantModule  string
+		wantRenamed []string
+	}{
+		{
+			// No saved config: unchanged — the flag already reached the generator
+			// through the defaults, and it still does.
+			name: "no saved config, flag names the app",
+			flag: "terroirvpg", project: "Terroir Coffee",
+			wantID: "terroirvpg", wantModule: "terroirvpg",
+		},
+		{
+			name:    "no saved config, no flag falls back to the project name",
+			project: "Terroir Coffee",
+			wantID:  "terroir_coffee", wantModule: "terroir_coffee",
+		},
+		{
+			// A bare re-deploy states nothing, so the saved config keeps deciding —
+			// that is what makes re-running the same deploy reproducible.
+			name:    "saved config, no flag: saved wins",
+			project: "Terroir Coffee", lastConfig: saved(),
+			wantID: "terroirmy", wantModule: "github.com/nuzur/terroirmy",
+		},
+		{
+			// The reported case.
+			name: "saved config + explicit flag: the flag wins",
+			flag: "terroirvpg", project: "Terroir Coffee", lastConfig: saved(),
+			wantID: "terroirvpg", wantModule: "github.com/nuzur/terroirvpg",
+			wantRenamed: []string{"identifier=terroirvpg", "go_module=github.com/nuzur/terroirvpg"},
+		},
+		{
+			name: "a bare saved module is rebased too",
+			flag: "terroirvpg", lastConfig: map[string]interface{}{"identifier": "terroirmy", "go_module": "terroirmy"},
+			wantID: "terroirvpg", wantModule: "terroirvpg",
+			wantRenamed: []string{"identifier=terroirvpg", "go_module=terroirvpg"},
+		},
+		{
+			// A module path that was never derived from the identifier is somebody's
+			// deliberate choice; renaming this deployment is not a reason to rewrite it.
+			name: "a deliberately-named module is left alone",
+			flag: "terroirvpg", lastConfig: map[string]interface{}{"identifier": "terroirmy", "go_module": "github.com/acme/coffee-api"},
+			wantID: "terroirvpg", wantModule: "github.com/acme/coffee-api",
+			wantRenamed: []string{"identifier=terroirvpg"},
+		},
+		{
+			// The generator's own field, stated at the generator's level of detail,
+			// still wins over the coarser deploy flag.
+			name: "a codegen block naming identifier stays authoritative",
+			flag: "terroirvpg",
+			provided: map[string]interface{}{
+				"identifier": "fromcodegen", "go_module": "github.com/acme/fromcodegen",
+			},
+			lastConfig: saved(),
+			wantID:     "fromcodegen", wantModule: "github.com/acme/fromcodegen",
+		},
+		{
+			// Same identifier as the saved one: nothing changes and nothing is announced.
+			name: "flag matching the saved identifier is silent",
+			flag: "terroirmy", lastConfig: saved(),
+			wantID: "terroirmy", wantModule: "github.com/nuzur/terroirmy",
+		},
+		{
+			// The generator's identifier is sanitized the same way the derived default
+			// is, so the module path stays a legal one.
+			name: "the flag is sanitized",
+			flag: "Terroir-VPG", lastConfig: saved(),
+			wantID: "terroir_vpg", wantModule: "github.com/nuzur/terroir_vpg",
+			wantRenamed: []string{"identifier=terroir_vpg", "go_module=github.com/nuzur/terroir_vpg"},
+		},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			effective, renamed := resolveCodegenIdentity(t, tc.flag, tc.project, tc.provided, tc.lastConfig)
+			if got := effective["identifier"]; got != tc.wantID {
+				t.Errorf("identifier = %v, want %v", got, tc.wantID)
+			}
+			if got := effective["go_module"]; got != tc.wantModule {
+				t.Errorf("go_module = %v, want %v", got, tc.wantModule)
+			}
+			if !reflect.DeepEqual(renamed, tc.wantRenamed) {
+				t.Errorf("reported overrides = %v, want %v", renamed, tc.wantRenamed)
+			}
+		})
+	}
+}
+
+// Only what the generator is told changes. The deployment identifier — which names
+// the database, the service and the config on the box, and which multi-project
+// co-tenancy dedupes deployment records on — is derived separately and already
+// preferred the flag; a fix that moved it would make a re-deploy miss its own record.
+func TestApplyCodegenIdentityLeavesTheDeploymentIdentifierAlone(t *testing.T) {
+	lastConfig := map[string]interface{}{"identifier": "terroirmy", "go_module": "github.com/nuzur/terroirmy"}
+	effective, _ := resolveCodegenIdentity(t, "terroirvpg", "Terroir Coffee", nil, lastConfig)
+
+	// The record/database/service name, resolved from the config this deploy built.
+	if got := planIdentifier("terroirvpg", effective, "Terroir Coffee"); got != "terroirvpg" {
+		t.Errorf("deployment identifier = %q, want terroirvpg", got)
+	}
+	// And a re-deploy that omits the flag still lands on the same record, because the
+	// saved config now carries the name the flagged deploy generated under.
+	if got := planIdentifier("", effective, "Terroir Coffee"); got != "terroirvpg" {
+		t.Errorf("bare re-deploy identifier = %q, want terroirvpg", got)
+	}
+}
+
 // An explicit JSON null in a `codegen` block fails the required check, so it
 // counts as missing here too.
 func TestApplyCodegenDefaults_ExplicitNullIsMissing(t *testing.T) {

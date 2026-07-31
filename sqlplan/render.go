@@ -178,18 +178,24 @@ func (p Plan) ChurnNote() string {
 	if churn == 0 {
 		return ""
 	}
-	var parts []string
-	if redefines > 0 {
-		parts = append(parts, fmt.Sprintf("%d redefine a column", redefines))
-	}
-	if indexes > 0 {
-		parts = append(parts, fmt.Sprintf("%d drop or add an index", indexes))
+	// The lead already says how many statements are churn ("3 of 3 statements"), so a
+	// breakdown that repeats the count reads as a typo — "3 of 3 statements 3 redefine
+	// a column" is what shipped. Name the shape when there is only one; break the count
+	// down only when both shapes are present, where the split is the information.
+	var shapes string
+	switch {
+	case indexes == 0:
+		shapes = "redefine a column"
+	case redefines == 0:
+		shapes = "drop or add an index"
+	default:
+		shapes = fmt.Sprintf("redefine a column (%d) or drop or add an index (%d)", redefines, indexes)
 	}
 	return fmt.Sprintf(
 		"%d of %d statements %s — on MySQL those are the two shapes no-op churn takes, and\n"+
 			"a statement that reappears on every deploy is almost certainly one of them.\n"+
 			"Compare them against the schema you actually have before reading them as changes.",
-		churn, c.Total, strings.Join(parts, " and "))
+		churn, c.Total, shapes)
 }
 
 // DropOnlyWhatItCouldCreate is the bound on a reconciling deploy's blast radius,

@@ -349,10 +349,65 @@ func TestChurnNoteCountsIndexChurn(t *testing.T) {
 	if !strings.Contains(got, "3 of 4") {
 		t.Errorf("ChurnNote() = %q, want 3 of 4", got)
 	}
-	for _, want := range []string{"1 redefine a column", "2 drop or add an index"} {
+	for _, want := range []string{"redefine a column (1)", "drop or add an index (2)"} {
 		if !strings.Contains(got, want) {
 			t.Errorf("ChurnNote() = %q, missing %q", got, want)
 		}
+	}
+}
+
+// The count belongs either to the lead ("3 of 3 statements") or to the breakdown,
+// never to both: printing it in both places produced "3 of 3 statements 3 redefine a
+// column" on every MySQL plan. Pinned as whole sentences — this is a defect only a
+// reader notices, so only a test that reads the sentence can catch it.
+func TestChurnNoteSentenceDoesNotRepeatTheCount(t *testing.T) {
+	tail := " — on MySQL those are the two shapes no-op churn takes, and\n" +
+		"a statement that reappears on every deploy is almost certainly one of them.\n" +
+		"Compare them against the schema you actually have before reading them as changes."
+
+	for _, tc := range []struct {
+		name string
+		sql  string
+		want string
+	}{
+		{
+			// The reported case: every statement in the plan is a column redefinition.
+			name: "all column redefinitions",
+			sql: "ALTER TABLE `a` MODIFY COLUMN `x` VARCHAR(512);\n" +
+				"ALTER TABLE `b` MODIFY COLUMN `y` VARCHAR(512);\n" +
+				"ALTER TABLE `c` MODIFY COLUMN `z` VARCHAR(512);",
+			want: "3 of 3 statements redefine a column" + tail,
+		},
+		{
+			name: "index churn only",
+			sql: "ALTER TABLE `doc` DROP KEY `idx_body`;\n" +
+				"ALTER TABLE `doc` ADD FULLTEXT KEY `idx_body` (`body`);\n" +
+				"CREATE TABLE c (id INT);",
+			want: "2 of 3 statements drop or add an index" + tail,
+		},
+		{
+			// Both shapes: here the split IS the information, so each count appears
+			// exactly once, beside the shape it belongs to.
+			name: "both shapes",
+			sql: "ALTER TABLE `a` MODIFY COLUMN `x` VARCHAR(512);\n" +
+				"DROP INDEX idx_a;\n" +
+				"CREATE INDEX idx_a ON a (x);\n" +
+				"CREATE TABLE c (id INT);",
+			want: "3 of 4 statements redefine a column (1) or drop or add an index (2)" + tail,
+		},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			got := Analyze(tc.sql).ChurnNote()
+			if got != tc.want {
+				t.Errorf("ChurnNote() =\n%s\nwant\n%s", got, tc.want)
+			}
+			// No count ever follows the word "statements" — that is the doubling.
+			for _, bad := range []string{"statements 1 ", "statements 2 ", "statements 3 "} {
+				if strings.Contains(got, bad) {
+					t.Errorf("ChurnNote() repeats its count (%q): %q", bad, got)
+				}
+			}
+		})
 	}
 }
 
