@@ -35,8 +35,11 @@ type deployPlanReport struct {
 	Counts         sqlplan.Counts      `json:"counts"`
 	Statements     []sqlplan.Statement `json:"statements"`
 	ApplySQL       string              `json:"apply_sql"`
-	// Transactional records that these statements do NOT run in a transaction, so a
-	// failure partway through leaves the database partly migrated.
+	// Transactional records whether the whole migration is applied as one unit. True
+	// only on Postgres, and only when nothing in the plan forces the executor off the
+	// transactional path (CONCURRENTLY index operations and friends). False means a
+	// failure partway through can leave the database partly migrated — on MySQL that
+	// is always the case, because DDL commits implicitly.
 	Transactional bool     `json:"transactional"`
 	Caveats       []string `json:"caveats,omitempty"`
 	Applied       bool     `json:"applied"`
@@ -139,7 +142,7 @@ func printDeployPlan(r deployPlanReport, plan sqlplan.Plan) {
 		outputtools.PrintlnColoredErr(sqlplan.MySQLCaveat(), outputtools.Yellow)
 	}
 
-	if w := plan.TransactionalWarning(); w != "" {
+	if w := plan.TransactionalWarning(sqlplan.Engine(r.Target.Engine)); w != "" {
 		fmt.Fprintln(os.Stderr)
 		outputtools.PrintlnColoredErr(w, outputtools.Yellow)
 	}

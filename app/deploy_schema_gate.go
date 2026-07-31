@@ -91,6 +91,59 @@ func (i *Implementation) schemaApplyDecider(allowDestructive bool, out *schemaGa
 // waiting on a human, the other is a fault to retry.
 var errSchemaBlocked = fmt.Errorf("schema apply blocked: the plan deletes data and --allow-destructive was not passed")
 
+// preflightSchemaGate runs the destructive gate BEFORE the deploy ships anything.
+//
+// The apply itself stays where it has always been — step 10, after the box is
+// bootstrapped and the agent is online — because that is the only point at which the
+// database is guaranteed to exist. But on a RE-deploy the box, its agent and its
+// database already exist, so the migration is computable up front, and the gate's
+// decision does not have to wait for the apply.
+//
+// It has to be made up front, because refusing at step 10 is refusing too late: the
+// image has been rebuilt and the container restarted by then, so a gate that blocks
+// leaves new code serving an old schema. The safety feature caused the outage it
+// exists to prevent. Checking here means a blocked deploy ships nothing at all and
+// the box keeps serving the code that matches its database.
+//
+// Deliberately best-effort in one direction only: a plan that WAS computed and IS
+// destructive-without-authorization stops the deploy; anything else (the box is down,
+// the agent is offline, the diff errored) proceeds, because a deploy that would
+// repair an unreachable box must not be blocked by its being unreachable — and the
+// step-10 gate still stands behind it.
+//
+// First deploys are not covered and do not need to be: the agent does not exist until
+// the bootstrap pairs it, and an empty database holds nothing to drop.
+func (i *Implementation) preflightSchemaGate(targets *runTargets, t planTarget) error {
+	applySQL, _, err := i.computeSchemaPlan(targets, t)
+	if err != nil {
+		outputtools.PrintlnColoredErr(
+			"Could not check the schema migration before shipping (continuing; it is checked again "+
+				"before it is applied): "+err.Error(), outputtools.Yellow)
+		return nil
+	}
+	plan := sqlplan.Analyze(applySQL)
+	if confirm, _ := decideSchemaApply(plan, false); confirm {
+		return nil
+	}
+
+	dest := plan.Destructive()
+	outputtools.PrintlnColoredErr("\nSchema NOT applied — this migration deletes data.", outputtools.Red)
+	outputtools.PrintlnColoredErr(plan.RenderDestructive(), outputtools.Red)
+	outputtools.PrintlnColoredErr(fmt.Sprintf(
+		"\nThe deploy stopped here, before anything was shipped: %s would DELETE DATA and "+
+			"--allow-destructive was not passed. The database is untouched and the app on this box is "+
+			"untouched — it is still running the code that matches its schema.",
+		plural(len(dest), "statement")), outputtools.Red)
+	fmt.Fprintln(os.Stderr)
+	outputtools.PrintlnColoredErr("To see the full plan without applying anything:", outputtools.Yellow)
+	outputtools.PrintlnColoredErr("  "+rerunCommand(os.Args, false)+" --plan", outputtools.Yellow)
+	outputtools.PrintlnColoredErr("To apply it, including the destructive statements:", outputtools.Yellow)
+	outputtools.PrintlnColoredErr("  "+rerunCommand(os.Args, true), outputtools.Yellow)
+	// A bare exit error: everything worth saying has been printed, and the deployment
+	// revision must not be relabelled FAILED — no deploy was attempted.
+	return cli.NewExitError("", 1)
+}
+
 // revisionShouldFail reports whether a deploy error means the deployment revision in
 // nuzur should be marked FAILED.
 //
@@ -110,11 +163,17 @@ func revisionShouldFail(err error) bool {
 
 // exitCodeForOutcome turns a finished deploy into a process exit code.
 //
-// A blocked schema exits non-zero. The app is up and serving, but it is serving
-// against a database its generated code does not match, and a green CI light on that
-// state is precisely the failure this whole feature exists to prevent.
+// A schema that did not reach the database exits non-zero, whether the gate refused
+// it or applying it errored. The app is up and serving, but it is serving against a
+// database its generated code does not match, and a green CI light on that state is
+// precisely the failure this whole feature exists to prevent.
+//
+// The failed-apply case used to exit 0, which made it the quieter of the two — and it
+// is the more dangerous one: a block is a decision nuzur made having sent nothing,
+// whereas a failure means a statement reached the database and errored, which is also
+// the only path on which a migration can land half-applied.
 func exitCodeForOutcome(o deployOutcome) error {
-	if o.schemaBlocked {
+	if o.schemaBlocked || !o.schemaApplied {
 		return cli.NewExitError("", 1)
 	}
 	return nil

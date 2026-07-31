@@ -103,6 +103,53 @@ func TestExtractZip_PreservesUserEditsRefreshesGenerated(t *testing.T) {
 	}
 }
 
+// go.mod and go.sum carry no generated marker, so the marker rule treated them as
+// user-owned and preserved them forever. They are the generator's: it runs `go mod
+// tidy` server-side, so its copies are the authoritative answer for the code it just
+// generated. Preserving them meant a new third-party import in generated code never
+// reached the local workspace — it built inside the docker image (which tidies again)
+// and failed on the developer's machine with "no required module provides package".
+func TestExtractZip_RefreshesGoModAndGoSum(t *testing.T) {
+	dir := t.TempDir()
+	z1 := makeZip(t, map[string]string{
+		"core/gen.go": genMarker + "package core\n",
+		"go.mod":      "module app\n\ngo 1.22\n",
+		"go.sum":      "old sum\n",
+		"app/rest.go": "package app // stub\n",
+	}, []string{"core/gen.go"})
+	if _, err := extractZip(z1, dir); err != nil {
+		t.Fatal(err)
+	}
+	userCode := "package app // MY CUSTOM ENDPOINT\n"
+	if err := os.WriteFile(filepath.Join(dir, "app/rest.go"), []byte(userCode), 0o644); err != nil {
+		t.Fatal(err)
+	}
+
+	// The next generation needs a dependency the previous one did not.
+	newMod := "module app\n\ngo 1.22\n\nrequire github.com/lib/pq v1.10.9\n"
+	z2 := makeZip(t, map[string]string{
+		"core/gen.go": genMarker + "package core // now imports lib/pq\n",
+		"go.mod":      newMod,
+		"go.sum":      "new sum\n",
+		"app/rest.go": "package app // stub\n",
+	}, []string{"core/gen.go"})
+	if _, err := extractZip(z2, dir); err != nil {
+		t.Fatal(err)
+	}
+
+	if got := read(t, dir, "go.mod"); got != newMod {
+		t.Errorf("go.mod was not refreshed from the archive: %q", got)
+	}
+	if got := read(t, dir, "go.sum"); got != "new sum\n" {
+		t.Errorf("go.sum was not refreshed from the archive: %q", got)
+	}
+	// The user's own code is still preserved: this widens the generator-managed set by
+	// exactly two files, it does not relax the rule.
+	if got := read(t, dir, "app/rest.go"); got != userCode {
+		t.Errorf("user custom edit was clobbered: %q", got)
+	}
+}
+
 func TestExtractZip_NoManifestOverwritesEverything(t *testing.T) {
 	dir := t.TempDir()
 	if err := os.WriteFile(filepath.Join(dir, "app.go"), []byte("user code\n"), 0o644); err != nil {

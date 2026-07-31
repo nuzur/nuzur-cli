@@ -226,7 +226,6 @@ func (i *Implementation) runDeployPlan(c *cli.Context, s *deploySettings) error 
 		Project:        planProject{UUID: targets.project.Uuid, Name: targets.project.Name},
 		ProjectVersion: planProjectVersion(targets.projectVersion),
 		Applied:        false,
-		Transactional:  false,
 		RerunCommand:   rerunCommand(os.Args, false),
 	}
 
@@ -264,6 +263,10 @@ func (i *Implementation) runDeployPlan(c *cli.Context, s *deploySettings) error 
 	report.Destructive = plan.HasDestructive()
 	report.Counts = plan.Counts()
 	report.Statements = plan.Statements
+	// Reported, not assumed: sql-push asks for a transaction, which Postgres honors
+	// unless the batch contains something it cannot run inside one, and which MySQL
+	// cannot honor for DDL at all.
+	report.Transactional = plan.Transactional(sqlplan.Engine(report.Target.Engine))
 	if report.Destructive {
 		report.RerunCommand = rerunCommand(os.Args, true)
 	}

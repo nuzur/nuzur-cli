@@ -6,9 +6,9 @@ import (
 	"strconv"
 	"strings"
 
+	nemgen "github.com/nuzur/nem/idl/gen"
 	"github.com/nuzur/nuzur-cli/constants"
 	"github.com/nuzur/nuzur-cli/deploy"
-	nemgen "github.com/nuzur/nem/idl/gen"
 	"github.com/nuzur/nuzur-cli/productclient"
 	pb "github.com/nuzur/nuzur-cli/protodeps/gen"
 )

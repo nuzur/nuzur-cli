@@ -13,10 +13,9 @@ import (
 // these statements for Postgres and somebody who has read one of its plans should
 // recognize ours. The hazard names are its names.
 const (
-	hazardDeletesData    = "DELETES_DATA"
-	hazardIndexDropped   = "INDEX_DROPPED"
-	hazardCorrectness    = "CORRECTNESS"
-	transactionalWarning = "These statements run ONE AT A TIME, not in a transaction: if one fails partway\nthrough, the statements before it stay applied."
+	hazardDeletesData  = "DELETES_DATA"
+	hazardIndexDropped = "INDEX_DROPPED"
+	hazardCorrectness  = "CORRECTNESS"
 )
 
 // hazardName maps a severity onto the vocabulary pg-schema-diff uses.
@@ -81,14 +80,62 @@ func (p Plan) RenderStatements() string {
 	return strings.TrimRight(b.String(), "\n")
 }
 
-// TransactionalWarning is the note that a partial failure leaves a partly-migrated
-// database. It is unconditional for a non-empty plan: sql-push never asks for a
-// transaction, so this is always true and has never been said out loud.
-func (p Plan) TransactionalWarning() string {
+// TransactionalWarning says what a partial failure costs on this engine, for this
+// plan. Empty for a plan of fewer than two statements, where "the ones before it
+// stayed applied" describes nothing.
+//
+// It used to be one unconditional sentence — "these run ONE AT A TIME, not in a
+// transaction" — which was true when sql-push did not request a transaction. It now
+// does, and the answer became engine- and content-dependent, so a single sentence can
+// no longer be honest for every plan. Getting this wrong in the reassuring direction
+// is the expensive one: a reader who believes a failed migration rolled back will not
+// go and check what actually landed.
+func (p Plan) TransactionalWarning(engine Engine) string {
 	if len(p.Statements) < 2 {
 		return ""
 	}
-	return transactionalWarning
+	switch engine {
+	case EnginePostgres:
+		if forced := p.nonTransactionalStatements(); len(forced) > 0 {
+			return fmt.Sprintf(
+				"These statements do NOT run in a transaction. %s cannot run inside one, and\n"+
+					"Postgres allows no partial exception, so the WHOLE migration is applied one\n"+
+					"statement at a time: if one fails partway through, the statements before it stay\n"+
+					"applied.", describeStatements(forced))
+		}
+		return "These statements are applied in a TRANSACTION: if one fails, the whole migration\n" +
+			"rolls back and the database is left exactly as it was. That is not a promise the\n" +
+			"migration will succeed — only that a failure will not leave it half-applied."
+	case EngineMySQL:
+		return "These statements effectively commit ONE AT A TIME. A transaction is opened, but\n" +
+			"MySQL commits DDL implicitly, so it cannot be rolled back: if one statement fails\n" +
+			"partway through, the statements before it stay applied."
+	default:
+		// Engine unknown: say the thing that is true on every engine rather than the
+		// one that would be reassuring on some of them.
+		return "Do not assume this migration is atomic: depending on the engine and on what it\n" +
+			"contains, a statement that fails partway through can leave the statements before\n" +
+			"it applied. Check the database's state before retrying."
+	}
+}
+
+// Transactional reports whether the whole plan is applied as one unit — true only on
+// Postgres, and only when nothing in it forces the executor off the transactional
+// path.
+func (p Plan) Transactional(engine Engine) bool {
+	return engine == EnginePostgres && len(p.nonTransactionalStatements()) == 0
+}
+
+// describeStatements names the offending statements by execution index.
+func describeStatements(idx []int) string {
+	strs := make([]string, 0, len(idx))
+	for _, i := range idx {
+		strs = append(strs, fmt.Sprintf("%d", i))
+	}
+	if len(strs) == 1 {
+		return "Statement " + strs[0]
+	}
+	return "Statements " + strings.Join(strs[:len(strs)-1], ", ") + " and " + strs[len(strs)-1]
 }
 
 // MySQLCaveat explains why a MySQL plan can contain statements that change
@@ -109,18 +156,40 @@ func MySQLCaveat() string {
 
 // ChurnNote reports how much of a MySQL plan is likely to be that no-op churn, or
 // "" when none of it is.
+//
+// It used to count column redefinitions only, which missed the other shape entirely
+// and the largest single source of a plan that never converges: when the
+// reconstruction loses an index's TYPE, the differ sees a type change and proposes to
+// drop the index and add it back — every run, forever. Those land as an index drop
+// plus an index create, neither of which is a column redefinition, so a plan that was
+// pure churn from top to bottom got no note at all.
 func (p Plan) ChurnNote() string {
 	c := p.Counts()
-	churn := 0
+	redefines, indexes := 0, 0
 	for _, s := range p.Statements {
-		if s.Kind == KindAlterColumn && s.Severity == SeverityNarrowing {
-			churn++
+		switch {
+		case s.Kind == KindAlterColumn && s.Severity == SeverityNarrowing:
+			redefines++
+		case s.Kind == KindDropIndex || s.Kind == KindCreateIndex:
+			indexes++
 		}
 	}
+	churn := redefines + indexes
 	if churn == 0 {
 		return ""
 	}
-	return fmt.Sprintf("%d of %d statements redefine a column — on MySQL that is usually no-op churn, not a real change.", churn, c.Total)
+	var parts []string
+	if redefines > 0 {
+		parts = append(parts, fmt.Sprintf("%d redefine a column", redefines))
+	}
+	if indexes > 0 {
+		parts = append(parts, fmt.Sprintf("%d drop or add an index", indexes))
+	}
+	return fmt.Sprintf(
+		"%d of %d statements %s — on MySQL those are the two shapes no-op churn takes, and\n"+
+			"a statement that reappears on every deploy is almost certainly one of them.\n"+
+			"Compare them against the schema you actually have before reading them as changes.",
+		churn, c.Total, strings.Join(parts, " and "))
 }
 
 // DropOnlyWhatItCouldCreate is the bound on a reconciling deploy's blast radius,
@@ -134,8 +203,10 @@ func (p Plan) ChurnNote() string {
 func DropOnlyWhatItCouldCreate() string {
 	return "Only tables, columns, indexes, foreign keys and schemas are reconciled. Anything\n" +
 		"the nuzur model cannot express — triggers, functions, views, sequences, row-level\n" +
-		"security, check constraints, column defaults — is invisible to this diff and is\n" +
-		"never dropped by it."
+		"security, check constraints — is invisible to this diff and is never dropped by it.\n" +
+		"Column defaults and foreign key referential actions ARE part of the model and are\n" +
+		"reconciled: a default or an ON DELETE/ON UPDATE the model does not state is dropped\n" +
+		"from the database like any other column change."
 }
 
 // writeStatement renders one numbered statement plus its hazard annotation.

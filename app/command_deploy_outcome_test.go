@@ -3,6 +3,8 @@ package app
 import (
 	"strings"
 	"testing"
+
+	"github.com/nuzur/nuzur-cli/outputtools"
 )
 
 // The two steps of deploy's step 10 used to share one boolean, so a failed catalog
@@ -31,8 +33,22 @@ func TestDeployOutcomeSummary(t *testing.T) {
 		{
 			name:         "schema failed blames the schema, not the connection",
 			o:            deployOutcome{catalogPublished: true, schemaApplied: false},
-			wantMentions: []string{"schema was NOT applied", "SQL Push"},
+			wantMentions: []string{"schema was NOT applied", "--plan"},
 			wantAbsent:   []string{"connection was NOT published"},
+		},
+		{
+			name: "a failed apply on a box that was already rebuilt says the app is mismatched",
+			o:    deployOutcome{catalogPublished: true, schemaApplied: false, appShipped: true},
+			wantMentions: []string{
+				"does NOT match the database",
+				"re-deploy the version that was running before this one",
+			},
+		},
+		{
+			// --db-only ships no app, so there is nothing to be mismatched.
+			name:       "a db-only deploy is not told its app is mismatched",
+			o:          deployOutcome{catalogPublished: true, schemaApplied: false},
+			wantAbsent: []string{"rebuilt and restarted"},
 		},
 		{
 			name:         "both failed reports both",
@@ -76,6 +92,74 @@ func TestDeployOutcomeSummaryDoesNotGuessACause(t *testing.T) {
 		if !o.catalogPublished && strings.Contains(got, "agent connection are live") {
 			t.Errorf("summary claims the connection is live when publishing failed: %s", got)
 		}
+	}
+}
+
+// The failed-apply branch used to end with "so the database is still empty" — text
+// that only makes sense on a first deploy, emitted unconditionally. On a re-deploy it
+// asserted something false about the user's data at exactly the moment a statement had
+// errored against a database full of rows, and it read as reassurance.
+func TestDeployOutcomeSummaryNeverClaimsTheDatabaseIsEmpty(t *testing.T) {
+	for _, o := range []deployOutcome{
+		{catalogPublished: true, schemaApplied: false},
+		{catalogPublished: true, schemaApplied: false, appShipped: true},
+		{catalogPublished: true, schemaApplied: false, schemaBlocked: true, destructiveCount: 1},
+		{catalogPublished: false, schemaApplied: false},
+	} {
+		got := strings.ToLower(o.summary())
+		for _, forbidden := range []string{"still empty", "database is empty", "no data"} {
+			if strings.Contains(got, forbidden) {
+				t.Errorf("summary asserts %q about a database it never read: %s", forbidden, got)
+			}
+		}
+	}
+}
+
+// sql-push now requests a transaction, so a failed apply may or may not have rolled
+// back. The summary may only claim a rollback it actually knows about — telling
+// somebody their migration rolled back when it did not is how a half-applied schema
+// goes unnoticed.
+func TestDeployOutcomeSummaryOnlyClaimsAKnownRollback(t *testing.T) {
+	rolled := deployOutcome{catalogPublished: true, schemaApplied: false, schemaRolledBack: true}.summary()
+	if !strings.Contains(rolled, "rolled back") {
+		t.Errorf("a known rollback should be reported: %s", rolled)
+	}
+	if strings.Contains(rolled, "Check the database before retrying") {
+		t.Errorf("a known rollback should not send the user checking: %s", rolled)
+	}
+
+	unknown := deployOutcome{catalogPublished: true, schemaApplied: false}.summary()
+	if strings.Contains(unknown, "rolled back and the database is as it was") {
+		t.Errorf("an unknown outcome must not claim a rollback: %s", unknown)
+	}
+	if !strings.Contains(unknown, "Check the database before retrying") {
+		t.Errorf("an unknown outcome should send the user checking: %s", unknown)
+	}
+	// Either way, retrying a deterministic failure is not the advice.
+	for _, s := range []string{rolled, unknown} {
+		if !strings.Contains(s, "--plan") {
+			t.Errorf("summary should point at --plan: %s", s)
+		}
+	}
+}
+
+// An unapplied schema — blocked or failed — leaves the running app out of step with
+// its database. Neither case is a yellow heads-up.
+func TestDeployOutcomeSummaryColor(t *testing.T) {
+	for _, tc := range []struct {
+		name string
+		o    deployOutcome
+		want outputtools.OutputColor
+	}{
+		{name: "blocked", o: deployOutcome{schemaBlocked: true, schemaApplied: false}, want: outputtools.Red},
+		{name: "failed", o: deployOutcome{schemaApplied: false}, want: outputtools.Red},
+		{name: "publish failed only", o: deployOutcome{schemaApplied: true}, want: outputtools.Yellow},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			if got := tc.o.summaryColor(); got != tc.want {
+				t.Fatalf("summaryColor() = %v, want %v", got, tc.want)
+			}
+		})
 	}
 }
 

@@ -8,6 +8,7 @@ import (
 	"strings"
 
 	"github.com/nuzur/nuzur-cli/constants"
+	"github.com/nuzur/nuzur-cli/deploy"
 	"github.com/urfave/cli"
 )
 
@@ -137,9 +138,17 @@ type deploySettings struct {
 	S3AccessKey string
 	S3Secret    string
 
-	API    string
-	Auth   string
-	Custom bool
+	API  string
+	Auth string
+	// Custom is tri-state: nil means "the user said nothing about the custom zone
+	// this run", which is different from "the user turned it off". A plain bool made
+	// those the same thing, so a re-deploy that simply omitted --custom regenerated
+	// the app WITHOUT the custom-routes hook — dropping every hand-written endpoint
+	// from a deploy that reported success. Only a value the user actually supplied
+	// (the flag, or `custom` in a deploy-config file) is written into the generator
+	// config; nil leaves the project's saved config to decide, which is what makes
+	// the setting sticky.
+	Custom *bool
 
 	SourceDir     string
 	CLIInstallCmd string
@@ -203,7 +212,7 @@ func resolveDeploySettings(c *cli.Context) (*deploySettings, error) {
 
 		API:    strSetting(c, "api", cfg.API, ""),
 		Auth:   strSetting(c, "auth", cfg.Auth, ""),
-		Custom: boolSetting(c, "custom", cfg.Custom),
+		Custom: boolPtrSetting(c, "custom", cfg.Custom),
 
 		SourceDir:     strSetting(c, "source-dir", cfg.SourceDir, ""),
 		CLIInstallCmd: strSetting(c, "cli-install-cmd", cfg.CLIInstallCmd, ""),
@@ -231,7 +240,65 @@ func resolveDeploySettings(c *cli.Context) (*deploySettings, error) {
 	}
 	s.Codegen = codegen
 
+	// Validate the enumerated flags HERE rather than at their use sites, so a typo
+	// fails identically for `deploy`, `deploy --plan` and `--print-config`, and always
+	// before anything is generated or provisioned.
+	if s.DB, err = normalizeDBEngine(s.DB); err != nil {
+		return nil, err
+	}
+	if err := validateAuthValue(s.Auth); err != nil {
+		return nil, err
+	}
+
 	return s, nil
+}
+
+// deployDBEngines maps every accepted --db value onto the engine name the rest of the
+// CLI uses.
+//
+// `postgresql` is accepted and folded to `postgres` because go-code-gen's own config
+// calls this same engine `postgresql` — one concept, two vocabularies, and users read
+// both. Until this existed --db was not validated at all: only the exact string
+// `postgres` selected Postgres and every other value, `postgresql` included, fell
+// silently through to MySQL, so a plausible spelling produced the wrong database with
+// no diagnostic anywhere.
+var deployDBEngines = map[string]string{
+	"mysql":      string(deploy.DBMySQL),
+	"postgres":   string(deploy.DBPostgres),
+	"postgresql": string(deploy.DBPostgres),
+}
+
+// normalizeDBEngine validates --db and returns the canonical engine name.
+func normalizeDBEngine(v string) (string, error) {
+	name := strings.ToLower(strings.TrimSpace(v))
+	if name == "" {
+		return string(deploy.DBMySQL), nil
+	}
+	if engine, ok := deployDBEngines[name]; ok {
+		return engine, nil
+	}
+	return "", fmt.Errorf("--db must be one of: mysql, postgres (postgresql is accepted as an alias for postgres); got %q", v)
+}
+
+// deployAuthValues is the `auth` generator option's enum. --api has always had a
+// default arm rejecting anything unrecognized; --auth was copied straight into the
+// codegen config, so a typo produced an app with no auth middleware at all and said
+// nothing about it.
+var deployAuthValues = []string{"disabled", "jwt", "keycloak"}
+
+// validateAuthValue checks --auth. Empty is valid and means "leave the project's
+// last/provided config alone", which is what the flag help promises.
+func validateAuthValue(v string) error {
+	value := strings.TrimSpace(v)
+	if value == "" {
+		return nil
+	}
+	for _, allowed := range deployAuthValues {
+		if value == allowed {
+			return nil
+		}
+	}
+	return fmt.Errorf("--auth must be one of: %s; got %q", strings.Join(deployAuthValues, ", "), v)
 }
 
 // strSetting returns the flag value when the user set it, else the file value,
@@ -254,6 +321,21 @@ func boolSetting(c *cli.Context, flag string, fileVal *bool) bool {
 		return *fileVal
 	}
 	return false
+}
+
+// boolPtrSetting is boolSetting for a setting that has to keep its unset state:
+// nil when neither the flag nor the config file mentioned it.
+//
+// Separate from boolSetting rather than a change to it, because the other six bool
+// settings are per-run switches with no memory (--db-only, --sudo,
+// --allow-destructive, …) and "absent means false" is right for all of them. It is
+// wrong only where the value is remembered across deploys — see deploySettings.Custom.
+func boolPtrSetting(c *cli.Context, flag string, fileVal *bool) *bool {
+	if c.IsSet(flag) {
+		v := c.Bool(flag)
+		return &v
+	}
+	return fileVal
 }
 
 func intSetting(c *cli.Context, flag string, fileVal *int, def int) int {
@@ -313,9 +395,13 @@ func (s *deploySettings) toDeployConfig() *DeployConfig {
 		Storage:          sp(s.Storage),
 		// Manual S3 creds are deliberately NOT round-tripped into a config snapshot
 		// (they're flag-only secrets, like db_dsn's password should not be shared).
-		API:           sp(s.API),
-		Auth:          sp(s.Auth),
-		Custom:        bp(s.Custom),
+		API:  sp(s.API),
+		Auth: sp(s.Auth),
+		// Passed through as-is, not through bp(): the tri-state is the point. Unset
+		// stays absent from the snapshot; an explicit `--custom=false` round-trips as
+		// `"custom": false` rather than silently becoming "unset" — which would make a
+		// snapshot mean something different from the invocation it snapshotted.
+		Custom:        s.Custom,
 		SourceDir:     sp(s.SourceDir),
 		CLIInstallCmd: sp(s.CLIInstallCmd),
 		Sudo:          bp(s.Sudo),

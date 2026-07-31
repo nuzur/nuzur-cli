@@ -108,21 +108,30 @@ func TestExitCodeForOutcome(t *testing.T) {
 	if err := exitCodeForOutcome(deployOutcome{catalogPublished: true, schemaApplied: true}); err != nil {
 		t.Fatalf("a clean deploy returned %v", err)
 	}
-	// A schema that failed for an ordinary reason keeps the historical behavior:
-	// warn, exit zero. Only a deliberate block changes the exit code.
-	if err := exitCodeForOutcome(deployOutcome{schemaApplied: false}); err != nil {
-		t.Fatalf("a failed-but-not-blocked schema returned %v", err)
-	}
-	err := exitCodeForOutcome(deployOutcome{schemaBlocked: true})
-	if err == nil {
-		t.Fatal("a blocked schema exited zero")
-	}
-	exit, ok := err.(*cli.ExitError)
-	if !ok {
-		t.Fatalf("got %T, want *cli.ExitError", err)
-	}
-	if exit.ExitCode() != 1 {
-		t.Fatalf("exit code = %d, want 1", exit.ExitCode())
+	// A schema that failed for an ordinary reason exits non-zero too. It used to exit
+	// zero, so `nuzur-cli deploy && promote` walked straight past a migration that had
+	// errored against the database — the quieter of the two paths, and the only one on
+	// which a migration can land half-applied.
+	for _, tc := range []struct {
+		name string
+		o    deployOutcome
+	}{
+		{name: "blocked by the gate", o: deployOutcome{schemaBlocked: true, schemaApplied: false}},
+		{name: "apply errored", o: deployOutcome{schemaApplied: false}},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			err := exitCodeForOutcome(tc.o)
+			if err == nil {
+				t.Fatal("an unapplied schema exited zero")
+			}
+			exit, ok := err.(*cli.ExitError)
+			if !ok {
+				t.Fatalf("got %T, want *cli.ExitError", err)
+			}
+			if exit.ExitCode() != 1 {
+				t.Fatalf("exit code = %d, want 1", exit.ExitCode())
+			}
+		})
 	}
 }
 
@@ -134,6 +143,9 @@ func TestDeployOutcomeBlockedSummary(t *testing.T) {
 		destructiveCount:   2,
 		rerunCommand:       "nuzur-cli deploy --host prod --allow-destructive",
 		destructiveApplied: false,
+		// The bootstrap ran, so the box is now serving code the database does not
+		// match. That cost has to be in the message.
+		appShipped: true,
 	}
 	s := o.summary()
 	for _, want := range []string{
@@ -142,7 +154,8 @@ func TestDeployOutcomeBlockedSummary(t *testing.T) {
 		"--allow-destructive",
 		"nuzur-cli deploy --host prod --allow-destructive",
 		"--plan",
-		"OLD schema",
+		"does NOT match the database",
+		"re-deploy the version that was running before this one",
 	} {
 		if !strings.Contains(s, want) {
 			t.Errorf("summary() missing %q:\n%s", want, s)

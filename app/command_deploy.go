@@ -23,6 +23,7 @@ import (
 	"github.com/nuzur/nuzur-cli/outputtools"
 	"github.com/nuzur/nuzur-cli/productclient"
 	pb "github.com/nuzur/nuzur-cli/protodeps/gen"
+	"github.com/nuzur/nuzur-cli/sqlplan"
 	"github.com/urfave/cli"
 )
 
@@ -40,7 +41,7 @@ func (i *Implementation) DeployCommand() cli.Command {
 			cli.StringFlag{Name: "user", Value: "root", Usage: "SSH user"},
 			cli.StringFlag{Name: "ssh-key", Usage: "Path to an SSH private key (default: ssh-agent / ~/.ssh/config)"},
 			cli.IntFlag{Name: "port", Value: 22, Usage: "SSH port"},
-			cli.StringFlag{Name: "domain", Usage: "Domain pointing at the server — Caddy provisions a real HTTPS cert for it. Omit for IP-only (a self-signed cert is used)."},
+			cli.StringFlag{Name: "domain", Usage: "Domain pointing at the server — Caddy provisions a real Let's Encrypt cert and serves HTTPS on 443. Omit for IP-only: plain HTTP (no cert of any kind) on a port assigned per project on the box, starting at 8443. Despite the number, that port is NOT TLS. The deploy prints the exact URL and writes it to /etc/nuzur/<identifier>/url — use that rather than assembling one."},
 			cli.StringFlag{Name: "project, p", Usage: "Project name or UUID"},
 			cli.StringFlag{Name: "version", Usage: "Project version identifier or UUID (default: latest)"},
 			cli.StringFlag{Name: "identifier", Usage: "Deployment identifier (names the DB/service/config on the box, and the generated root folder/go module on a first deploy; default: from the go-code-gen config, else the project name)"},
@@ -50,7 +51,7 @@ func (i *Implementation) DeployCommand() cli.Command {
 			cli.BoolFlag{Name: "save-connection", Usage: "After an external (--db-dsn) deploy, register the database as a team connection so your team can use the data manager on it. Requires a team admin. (Non-interactive opt-in; a TTY otherwise prompts.)"},
 			cli.BoolFlag{Name: "no-save-connection", Usage: "Never prompt to save the deployed external database as a team connection."},
 			cli.StringFlag{Name: "db-schema", Usage: "Postgres schema/namespace to target (default: public). Ignored for MySQL, where the database IS the schema."},
-			cli.StringFlag{Name: "db", Value: "mysql", Usage: "Self-hosted database engine: mysql | postgres"},
+			cli.StringFlag{Name: "db", Value: "mysql", Usage: "Self-hosted database engine: mysql | postgres (postgresql is accepted as an alias). Anything else is rejected."},
 			cli.BoolFlag{Name: "storage-enabled", Usage: "Generate the S3 file-upload endpoints (/upload, /sign) even without a team object store — provide credentials via the --s3-* flags below or by editing prod.yaml. Implied by --storage or any --s3-* flag."},
 			cli.StringFlag{Name: "storage", Usage: "Enable S3 file uploads using a nuzur team ObjectStore (by UUID): its S3 credentials are resolved server-side and written into the app's config, so /upload and /sign can reach the bucket. Defaults to the object store saved in the project's go-code-gen config. For credentials NOT stored in nuzur, use --s3-* instead."},
 			cli.StringFlag{Name: "s3-bucket", Usage: "Manual S3 credentials (not stored in nuzur): bucket name. Enables storage and is written into prod.yaml. Alternative to --storage."},
@@ -58,8 +59,8 @@ func (i *Implementation) DeployCommand() cli.Command {
 			cli.StringFlag{Name: "s3-access-key", Usage: "Manual S3 credentials: access key id (used with --s3-bucket)."},
 			cli.StringFlag{Name: "s3-secret", Usage: "Manual S3 credentials: secret access key (used with --s3-bucket). CLI-only — never read from a deploy-config file."},
 			cli.StringFlag{Name: "api", Usage: "API surface to generate: rest | grpc | both. Pick by the consumer — REST for JS/web/browser clients, gRPC for Go/backend clients (leave unset to use the project's last/provided config)"},
-			cli.StringFlag{Name: "auth", Usage: "Auth middleware: disabled | jwt | keycloak (leave unset to use the project's last/provided config)"},
-			cli.BoolFlag{Name: "custom", Usage: "Generate the custom application layer (app package for custom endpoints)"},
+			cli.StringFlag{Name: "auth", Usage: "Auth middleware: disabled | jwt | keycloak. Anything else is rejected (leave unset to use the project's last/provided config)"},
+			cli.BoolFlag{Name: "custom", Usage: "Generate the custom application layer (app package for custom endpoints). Sticky: once a deploy sets it, later deploys of the same project keep it without re-passing the flag — pass --custom=false to turn it back off."},
 			cli.StringFlag{Name: "source-dir", Usage: "Directory for the app's source (the workspace deploy generates + builds from; you edit custom endpoints here). Default: ./nuzur-<identifier>. Re-deploys reuse it and preserve your edits."},
 			cli.StringFlag{Name: "deploy-config", Usage: "Path to a JSON deploy spec describing the whole deploy (topology + a nested `codegen` block); use '-' to read from stdin. Explicit flags override values in the file. Build or generate one from nuzur web."},
 			cli.BoolFlag{Name: "print-config", Usage: "Print the effective deploy config (as JSON) resolved from flags + --deploy-config, then exit without deploying. Use it to snapshot an invocation into a reusable deploy-config file."},
@@ -311,7 +312,18 @@ func (i *Implementation) runDeploy(c *cli.Context) (rerr error) {
 		// `db` config option uses "postgresql" (its DatabaseType enum) — distinct from the
 		// runtime driver name "postgres" used in prod.yaml + the agent connection.
 		provided["db"] = goCodeGenDBValue(dbEngine)
-		provided["custom_enabled"] = s.Custom
+		// Written ONLY when the user said something about it this run. `provided`
+		// always beats the project's saved config, so writing it unconditionally made
+		// --custom a flag you had to re-pass on every single deploy: omitting it
+		// regenerated the app with the custom zone off, which drops the custom-routes
+		// hook from the generated server and `app.ProvideCustomRoutes` from main.go.
+		// The user's own app/ package survives on disk but is no longer imported, so
+		// `go build .` never compiles it — the deploy succeeds and every custom
+		// endpoint is simply gone. Leaving the key out lets the saved config carry the
+		// setting forward, which is what "re-run the same deploy" has to mean.
+		if s.Custom != nil {
+			provided["custom_enabled"] = *s.Custom
+		}
 		provided["dockerfile"] = true
 		// Transport selection: pick REST for JS/web clients, gRPC for Go/backend
 		// clients. Unset leaves the project's last/provided config untouched.
@@ -484,6 +496,27 @@ func (i *Implementation) runDeploy(c *cli.Context) (rerr error) {
 		depID = prior.ID
 	}
 	setDeployUserID(depID)
+
+	// 1b. RE-DEPLOY ONLY: run the destructive gate before anything is shipped.
+	//
+	// The apply is step 10, after the bootstrap has rebuilt the image and restarted
+	// the container — so a gate that refuses there refuses too late, leaving new code
+	// serving the old schema. Here the box, its agent and its database already exist
+	// (that is what `prior` means), so the migration is computable while nothing has
+	// changed yet, and a blocked deploy ships nothing.
+	//
+	// Skipped when --allow-destructive is set: the gate would let it through anyway,
+	// and the pre-flight costs a round trip to the box's agent. Skipped on a first
+	// deploy, which has no agent yet and no old schema to mismatch. Non-blocking on
+	// any error — see preflightSchemaGate.
+	if !s.AllowDestructive && prior != nil && prior.ConnUUID != "" {
+		if preflightAgent := firstNonEmpty(prior.LocalAgentUUID, reuseAgentUUID); preflightAgent != "" {
+			preflightTarget := deployPushTarget(preflightAgent, prior.ConnUUID, schema, connFlag, connStore, dbEngine)
+			if err := i.preflightSchemaGate(targets, preflightTarget); err != nil {
+				return err
+			}
+		}
+	}
 
 	// 2. Generate the app into the PERSISTENT workspace (full-app deploys only) —
 	// the editable source of truth deploy builds from. Re-deploys regenerate in
@@ -700,10 +733,13 @@ func (i *Implementation) runDeploy(c *cli.Context) (rerr error) {
 		SSHUser:        target.User,
 		SSHPort:        target.Port,
 		DBSchema:       schema,
-		Custom:         s.Custom,
-		SourceDir:      workspaceDir,
-		Status:         nemgen.DeploymentRevisionStatus_DEPLOYMENT_REVISION_STATUS_IN_PROGRESS,
-		StatusMessage:  "server ready — bootstrapping",
+		// The RESOLVED value, not the flag: with --custom sticky the flag may well be
+		// absent on a deploy that does generate the custom zone, and the deployment
+		// history should record what shipped rather than what was typed.
+		Custom:        boolValue(configValues, "custom_enabled"),
+		SourceDir:     workspaceDir,
+		Status:        nemgen.DeploymentRevisionStatus_DEPLOYMENT_REVISION_STATUS_IN_PROGRESS,
+		StatusMessage: "server ready — bootstrapping",
 	}
 	if rev, err := i.reportDeployment(ctx, reportIn); err != nil {
 		outputtools.PrintlnColoredErr("Deploy not reported to nuzur (continuing): "+err.Error(), outputtools.Yellow)
@@ -819,7 +855,10 @@ func (i *Implementation) runDeploy(c *cli.Context) (rerr error) {
 	// auto-apply the schema to the empty DB. Two independent steps, tracked and
 	// reported separately: a failure in one must neither skip nor be mistaken for
 	// the other.
-	outcome := deployOutcome{catalogPublished: true, schemaApplied: true}
+	// appShipped: the bootstrap above has already rebuilt the image and restarted the
+	// container, so from here on an unapplied schema means the running app no longer
+	// matches its database. --db-only has no app, so it has nothing to mismatch.
+	outcome := deployOutcome{catalogPublished: true, schemaApplied: true, appShipped: !dbOnly}
 	i.updateDeployRevision(ctx, deployRev(),
 		nemgen.DeploymentRevisionStatus_DEPLOYMENT_REVISION_STATUS_IN_PROGRESS, "publishing the connection to nuzur")
 	if err := i.publishConnectionCatalog(agentUUID, connUUID, connName, dbEngine); err != nil {
@@ -838,7 +877,16 @@ func (i *Implementation) runDeploy(c *cli.Context) (rerr error) {
 			outcome.destructiveCount = len(gate.plan.Destructive())
 			outcome.rerunCommand = rerunCommand(os.Args, true)
 		} else {
-			outputtools.PrintlnColoredErr("Schema auto-apply skipped: "+err.Error(), outputtools.Yellow)
+			// Not "skipped": a statement reached the database and errored. Skipping is
+			// what the gate does, and calling both the same thing is how the louder
+			// problem ended up sounding like the quieter one.
+			outputtools.PrintlnColoredErr("Schema apply FAILED: "+err.Error(), outputtools.Red)
+			// Whether that failure took the rest of the migration back with it. Only
+			// claimed when the plan that was attempted is in hand — an error before the
+			// confirmation step leaves gate.plan empty, and an empty plan must not be
+			// read as "nothing could have landed".
+			outcome.schemaRolledBack = !gate.plan.Empty() &&
+				gate.plan.Transactional(sqlplan.Engine(dbEngine))
 		}
 	} else if gate.destructiveApplied {
 		outcome.destructiveApplied = true
@@ -916,7 +964,17 @@ func (i *Implementation) runDeploy(c *cli.Context) (rerr error) {
 	}
 
 	// 13. Report.
-	outputtools.PrintlnColored("\nDeployment complete.", outputtools.Green)
+	//
+	// The banner is qualified rather than unconditional. It used to print "Deployment
+	// complete." in green after a schema apply that had errored — so the last loud
+	// thing on screen contradicted the one yellow line above it, and a failed
+	// migration read as a clean deploy. Both halves are worth saying; saying only the
+	// good half is what misleads.
+	if outcome.schemaApplied {
+		outputtools.PrintlnColored("\nDeployment complete.", outputtools.Green)
+	} else {
+		outputtools.PrintlnColoredErr("\nDeployment finished, but the schema was NOT applied — see the summary below.", outputtools.Red)
+	}
 	fmt.Printf("  deployment id: %s\n", dep.ID)
 	fmt.Printf("  agent uuid:    %s\n", agentUUID)
 	fmt.Printf("  connection:    %s (%s)\n", connName, connUUID)
@@ -1015,7 +1073,8 @@ func (i *Implementation) runDeploy(c *cli.Context) (rerr error) {
 		outputtools.PrintlnColored("\nYour app source:", outputtools.Green)
 		fmt.Printf("  %s\n", appDir)
 		fmt.Printf("  Re-run the same deploy to ship changes from here.\n")
-		if s.Custom {
+		// Resolved, not the flag: the tip is about the code that was just generated.
+		if boolValue(configValues, "custom_enabled") {
 			fmt.Printf("  Add custom endpoints: edit app/grpc.go (override/extend gRPC) or app/rest.go\n")
 			fmt.Printf("  (custom REST routes); add RPCs in app/idl/proto/custom.proto then run app/idl/proto/gen.sh.\n")
 		}
@@ -1045,9 +1104,10 @@ func (i *Implementation) runDeploy(c *cli.Context) (rerr error) {
 		})
 	}
 
-	// Last: a blocked schema exits non-zero so CI does not go green on a box that is
-	// serving against a schema its generated code no longer matches. Everything
-	// above has already printed, because the deploy itself did happen.
+	// Last: a schema that did not reach the database exits non-zero — blocked or
+	// failed — so CI does not go green on a box that is serving against a schema its
+	// generated code no longer matches. Everything above has already printed, because
+	// the deploy itself did happen.
 	return exitCodeForOutcome(outcome)
 }
 
@@ -1212,19 +1272,36 @@ func (i *Implementation) DestroyCommand() cli.Command {
 			}
 			ctx := context.Background()
 
+			// Read once and share: isLast, the agent resolution below and the
+			// connection re-publish all ask questions of the same list, and they must
+			// not disagree about what is on this box.
+			deps, _ := deploy.ListDeployments()
+
 			// A box can host multiple projects on one shared agent. This is the
 			// LAST project on the box iff no other deployment record shares its
 			// host. Only then do we tear down the shared agent + revoke it — while
 			// other projects are live, the agent must survive.
 			isLast := true
-			if deps, e := deploy.ListDeployments(); e == nil {
-				for _, d := range deps {
-					if d.ID != id && d.Host == dep.Host {
-						isLast = false
-						break
-					}
+			for _, d := range deps {
+				if d.ID != id && d.Host == dep.Host {
+					isLast = false
+					break
 				}
 			}
+
+			// The agent to act on is the BOX's agent, not necessarily this record's.
+			// A deploy that died before pairing leaves a record with no agent uuid
+			// (pickPriorDeployment skips exactly those), so the retry creates a second
+			// record for the same host — and destroying the empty one last used to
+			// revoke nothing while still printing "shared agent revoked". Fall back to
+			// whatever agent the host is known to be running.
+			//
+			// Deliberately NOT written back onto the sibling records: an empty
+			// LocalAgentUUID is load-bearing elsewhere — pickPriorDeployment reads it as
+			// "this deploy died in flight, do not reuse it" — so filling it in would make
+			// a half-built record look like a working prior deployment. The fallback is
+			// a read, not a repair.
+			agentUUID := firstNonEmpty(dep.LocalAgentUUID, pickBoxAgent(deps, dep.Host))
 
 			// 1. Server teardown: remove THIS project's artifacts (its service,
 			// container, image, /etc/nuzur/{id}, Caddy snippet, cron, connection);
@@ -1273,8 +1350,12 @@ func (i *Implementation) DestroyCommand() cli.Command {
 				}
 			}
 
-			// 2. Cloud-side agent cleanup.
-			if dep.LocalAgentUUID != "" {
+			// 2. Cloud-side agent cleanup. `revoked` records that a revoke was actually
+			// attempted AND succeeded, so the closing message can only claim it when it
+			// happened — the "shared agent revoked" line used to print unconditionally,
+			// including in the one case where the revoke call was skipped entirely.
+			revoked := false
+			if agentUUID != "" {
 				authCtx, err := productclient.ClientContext()
 				if err != nil {
 					return err
@@ -1282,32 +1363,41 @@ func (i *Implementation) DestroyCommand() cli.Command {
 				if isLast {
 					// Last project on the box → revoke the shared agent.
 					if _, err := i.productClient.ProductClient.RevokeLocalAgent(authCtx, &pb.RevokeLocalAgentRequest{
-						LocalAgentUuid: dep.LocalAgentUUID,
+						LocalAgentUuid: agentUUID,
 					}); err != nil {
-						outputtools.PrintlnColoredErr(fmt.Sprintf("warning: could not revoke agent %s: %v", dep.LocalAgentUUID, err), outputtools.Yellow)
+						outputtools.PrintlnColoredErr(fmt.Sprintf("warning: could not revoke agent %s: %v", agentUUID, err), outputtools.Yellow)
+					} else {
+						revoked = true
 					}
 				} else {
 					// Other projects survive → keep the agent, but re-publish the
 					// remaining connections so this project's drops out of the catalog.
 					conns := []*nemgen.LocalAgentConnection{}
-					if deps, e := deploy.ListDeployments(); e == nil {
-						for _, d := range deps {
-							if d.ID != id && d.LocalAgentUUID == dep.LocalAgentUUID && d.ConnUUID != "" {
-								conns = append(conns, &nemgen.LocalAgentConnection{
-									Uuid:   d.ConnUUID,
-									Name:   d.Identifier + "-db",
-									DbType: agentConnDbType(d.DBEngine),
-								})
-							}
+					for _, d := range deps {
+						if d.ID != id && d.LocalAgentUUID == agentUUID && d.ConnUUID != "" {
+							conns = append(conns, &nemgen.LocalAgentConnection{
+								Uuid:   d.ConnUUID,
+								Name:   d.Identifier + "-db",
+								DbType: agentConnDbType(d.DBEngine),
+							})
 						}
 					}
 					if _, err := i.productClient.ProductClient.UpdateLocalAgentConnections(authCtx, &pb.UpdateLocalAgentConnectionsRequest{
-						LocalAgentUuid: dep.LocalAgentUUID,
+						LocalAgentUuid: agentUUID,
 						Connections:    conns,
 					}); err != nil {
 						outputtools.PrintlnColoredErr(fmt.Sprintf("warning: could not refresh agent connections: %v", err), outputtools.Yellow)
 					}
 				}
+			} else if isLast && !dep.Provisioning {
+				// Nothing left on this machine knows which agent the box paired, so no
+				// revoke is possible. Say so: an agent left ACTIVE in nuzur pointing at a
+				// box that is about to disappear is exactly the state the user needs to
+				// hear about, and it is one command away from being cleaned up.
+				outputtools.PrintlnColoredErr(
+					"warning: no local agent uuid is recorded for this box, so nothing was revoked in nuzur. "+
+						"If it paired an agent, find it with `nuzur-cli agent list` and remove it with "+
+						"`nuzur-cli agent revoke <uuid>`.", outputtools.Yellow)
 			}
 
 			// 2b. Mark the cloud-side deployment record DESTROYED (kept as
@@ -1392,12 +1482,12 @@ func (i *Implementation) DestroyCommand() cli.Command {
 						fmt.Printf("Destroyed deployment %s (this deploy was interrupted before the server was created; nothing to clean up).\n", id)
 					}
 				case vmDeleted:
-					fmt.Printf("Destroyed deployment %s (VM deleted, shared agent revoked — last project on the box).\n", id)
+					fmt.Printf("Destroyed deployment %s (VM deleted%s — last project on the box).\n", id, revokedSuffix(revoked))
 				case c.Bool("skip-server"):
 					// Don't claim a cleanup we deliberately skipped.
-					fmt.Printf("Destroyed deployment %s (agent revoked, local state removed — the server was left untouched).\n", id)
+					fmt.Printf("Destroyed deployment %s (local state removed%s — the server was left untouched).\n", id, revokedSuffix(revoked))
 				default:
-					fmt.Printf("Destroyed deployment %s (server cleaned up, shared agent revoked — last project on the box).\n", id)
+					fmt.Printf("Destroyed deployment %s (server cleaned up%s — last project on the box).\n", id, revokedSuffix(revoked))
 				}
 			} else {
 				fmt.Printf("Destroyed deployment %s (this project removed; the box's shared agent stays for its other projects).\n", id)
@@ -1411,6 +1501,20 @@ func (i *Implementation) DestroyCommand() cli.Command {
 			return nil
 		},
 	}
+}
+
+// revokedSuffix reports the shared agent's fate in the destroy summary, and only
+// when there is a fate to report.
+//
+// The phrase used to be baked into the message, so a teardown that never made the
+// revoke call — the last-destroyed record being one whose deploy died before pairing,
+// which is precisely when its uuid is missing — still told the user the agent was
+// gone. It stayed ACTIVE in nuzur forever, pointing at a deleted VM.
+func revokedSuffix(revoked bool) string {
+	if revoked {
+		return ", shared agent revoked"
+	}
+	return ""
 }
 
 func purgeSuffix(purge bool) string {
@@ -1633,10 +1737,11 @@ func parseDeployDSN(dsn string) (engine deploy.DBEngine, host, port, user, pass,
 		user = u.User.Username()
 		pass, _ = u.User.Password()
 		name = strings.TrimPrefix(u.Path, "/")
-		params = u.RawQuery
-		if params == "" {
-			params = "sslmode=require"
-		}
+		// Merged onto the default, not conditional on there being no parameters at
+		// all: `?connect_timeout=10` used to silently drop sslmode=require, which a
+		// managed Postgres refuses the connection without. An explicit sslmode in the
+		// DSN still wins.
+		params = mergeDSNParams([]string{"sslmode=require"}, u.RawQuery)
 		return deploy.DBPostgres, host, port, user, pass, name, params, nil
 	}
 	cfg, e := mysqldriver.ParseDSN(dsn)
@@ -1647,10 +1752,15 @@ func parseDeployDSN(dsn string) (engine deploy.DBEngine, host, port, user, pass,
 	if e != nil { // Addr without a port
 		host, port = cfg.Addr, "3306"
 	}
-	params = "parseTime=true"
+	// The DSN's own query string, MERGED onto parseTime=true rather than replacing
+	// it. Overwriting it meant that any parameter at all — and reaching a managed
+	// MySQL requires one, since TLS is a query parameter — left the generated app
+	// unable to scan a single DATE/DATETIME column.
+	userParams := ""
 	if q := strings.LastIndex(dsn, "?"); q >= 0 {
-		params = dsn[q+1:]
+		userParams = dsn[q+1:]
 	}
+	params = mergeDSNParams([]string{"parseTime=true"}, userParams)
 	return deploy.DBMySQL, host, port, cfg.User, cfg.Passwd, cfg.DBName, params, nil
 }
 

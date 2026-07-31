@@ -468,11 +468,12 @@ func extractZip(data []byte, outputPath string) ([]string, error) {
 			return nil, fmt.Errorf("failed to create parent directory: %w", err)
 		}
 
-		// Preserve an existing user-owned file: the manifest and generated
-		// (marked) files are always refreshed; anything else that already exists
-		// locally is left as the user edited it.
+		// Preserve an existing user-owned file: the manifest, generated (marked)
+		// files and the generator-managed module files are always refreshed;
+		// anything else that already exists locally is left as the user edited it.
 		if preserveUserFiles &&
 			filepath.Base(f.Name) != files.GeneratedManifestFileName &&
+			!isGeneratorManagedFile(f.Name) &&
 			!zipEntryHasGeneratedMarker(f) &&
 			regularFileExists(destPath) {
 			continue
@@ -485,6 +486,32 @@ func extractZip(data []byte, outputPath string) ([]string, error) {
 	}
 
 	return written, nil
+}
+
+// generatorManagedFiles are refreshed from the archive even though they carry no
+// generated marker.
+//
+// go.mod and go.sum cannot carry one — a Go module file has no comment convention
+// the toolchain would tolerate at the top — so the marker rule classified them as
+// user-owned and preserved them forever. They are not user-owned: the generator runs
+// `go mod tidy` server-side, so the archive's copies are the authoritative answer for
+// the code it just generated. Keeping the local ones meant that when generated code
+// picked up a new third-party import, the workspace stopped building locally (`no
+// required module provides package …`) and was rescued only by the `go mod tidy` in
+// the on-box docker build — so it deployed fine and failed on the developer's machine,
+// which is the worst possible split.
+//
+// A hand-added dependency in the local go.mod is not lost by this: it is recovered by
+// the same `go mod tidy` the workspace runs, because the import that needs it is still
+// in the user-owned source the generator preserved.
+var generatorManagedFiles = map[string]bool{
+	"go.mod": true,
+	"go.sum": true,
+}
+
+// isGeneratorManagedFile reports whether a zip entry names one of the files above.
+func isGeneratorManagedFile(name string) bool {
+	return generatorManagedFiles[filepath.Base(name)]
 }
 
 // zipHasManifest reports whether the archive contains a generation manifest,

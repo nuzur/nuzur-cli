@@ -86,8 +86,11 @@ func TestResolveDeploySettings_FileOnly(t *testing.T) {
 	if s.Provider != "digitalocean" || s.Region != "nyc3" || s.Project != "sfapi" || s.Version != "v_21" {
 		t.Fatalf("topology not from file: %+v", s)
 	}
-	if s.DB != "postgres" || s.DBSchema != "public" || s.API != "both" || s.Auth != "jwt" || !s.Custom {
-		t.Fatalf("db/api/auth/custom not from file: %+v", s)
+	if s.DB != "postgres" || s.DBSchema != "public" || s.API != "both" || s.Auth != "jwt" {
+		t.Fatalf("db/api/auth not from file: %+v", s)
+	}
+	if s.Custom == nil || !*s.Custom {
+		t.Fatalf("custom not from file: %+v", s.Custom)
 	}
 	if s.Port != 2222 {
 		t.Fatalf("port not from file: %d", s.Port)
@@ -124,8 +127,126 @@ func TestResolveDeploySettings_Defaults(t *testing.T) {
 	if s.Provider != "ssh" || s.User != "root" || s.Port != 22 || s.DB != "mysql" {
 		t.Fatalf("unexpected defaults: %+v", s)
 	}
-	if s.Custom || s.DBOnly {
+	if s.DBOnly {
 		t.Fatalf("bools should default false: %+v", s)
+	}
+	// --custom is tri-state: unset stays unset, so the project's saved generator
+	// config keeps deciding. It must NOT resolve to false, which is what silently
+	// deleted every custom endpoint on a re-deploy that just omitted the flag.
+	if s.Custom != nil {
+		t.Fatalf("--custom should be unset when neither flag nor file mentions it: %v", *s.Custom)
+	}
+}
+
+// The three states of --custom, and what each means downstream.
+func TestResolveDeploySettings_CustomIsTriState(t *testing.T) {
+	for _, tc := range []struct {
+		name string
+		args []string
+		file string
+		want *bool
+	}{
+		{name: "omitted stays unset", want: nil},
+		{name: "flag passed is on", args: []string{"--custom"}, want: boolp(true)},
+		{name: "file says true", file: `{"custom": true}`, want: boolp(true)},
+		{
+			// An explicit false in a config file is a decision, not an absence: it has
+			// to reach the generator so the zone can be turned back OFF.
+			name: "file says false", file: `{"custom": false}`, want: boolp(false),
+		},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			args := tc.args
+			if tc.file != "" {
+				args = append([]string{"--deploy-config", writeTempConfig(t, tc.file)}, args...)
+			}
+			s, err := resolveDeploySettings(deployContext(t, args))
+			if err != nil {
+				t.Fatal(err)
+			}
+			switch {
+			case tc.want == nil && s.Custom != nil:
+				t.Fatalf("Custom = %v, want unset", *s.Custom)
+			case tc.want != nil && s.Custom == nil:
+				t.Fatalf("Custom is unset, want %v", *tc.want)
+			case tc.want != nil && *s.Custom != *tc.want:
+				t.Fatalf("Custom = %v, want %v", *s.Custom, *tc.want)
+			}
+			// --print-config has to round-trip the same three states, or a snapshot
+			// means something different from the invocation it snapshotted.
+			got := s.toDeployConfig().Custom
+			switch {
+			case tc.want == nil && got != nil:
+				t.Fatalf("round-tripped Custom = %v, want absent", *got)
+			case tc.want != nil && (got == nil || *got != *tc.want):
+				t.Fatalf("round-tripped Custom = %v, want %v", got, *tc.want)
+			}
+		})
+	}
+}
+
+func boolp(v bool) *bool { return &v }
+
+// --db used to be unvalidated: only the exact string "postgres" selected Postgres and
+// everything else — "postgresql" included, which is what go-code-gen's own config
+// calls the same engine — fell through to MySQL with no diagnostic at all.
+func TestResolveDeploySettings_ValidatesDB(t *testing.T) {
+	for _, tc := range []struct {
+		name    string
+		value   string
+		want    string
+		wantErr bool
+	}{
+		{name: "mysql", value: "mysql", want: "mysql"},
+		{name: "postgres", value: "postgres", want: "postgres"},
+		{name: "postgresql is folded, not silently mysql", value: "postgresql", want: "postgres"},
+		{name: "case insensitive", value: "Postgres", want: "postgres"},
+		{name: "a typo is rejected", value: "postgress", wantErr: true},
+		{name: "an unsupported engine is rejected", value: "sqlite", wantErr: true},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			s, err := resolveDeploySettings(deployContext(t, []string{"--db", tc.value}))
+			if tc.wantErr {
+				if err == nil {
+					t.Fatalf("--db %q was accepted, resolved to %q", tc.value, s.DB)
+				}
+				if !strings.Contains(err.Error(), "--db") {
+					t.Errorf("error does not name the flag: %v", err)
+				}
+				return
+			}
+			if err != nil {
+				t.Fatalf("--db %q rejected: %v", tc.value, err)
+			}
+			if s.DB != tc.want {
+				t.Fatalf("DB = %q, want %q", s.DB, tc.want)
+			}
+		})
+	}
+	// The default when nothing says otherwise.
+	s, err := resolveDeploySettings(deployContext(t, nil))
+	if err != nil || s.DB != "mysql" {
+		t.Fatalf("default DB = %q (err %v), want mysql", s.DB, err)
+	}
+}
+
+// --api has always had a default arm rejecting unknown values; --auth was copied
+// straight into the codegen config, so a typo produced an app with no auth at all.
+func TestResolveDeploySettings_ValidatesAuth(t *testing.T) {
+	for _, ok := range []string{"disabled", "jwt", "keycloak"} {
+		if _, err := resolveDeploySettings(deployContext(t, []string{"--auth", ok})); err != nil {
+			t.Errorf("--auth %q rejected: %v", ok, err)
+		}
+	}
+	for _, bad := range []string{"jwtt", "none", "oauth"} {
+		if _, err := resolveDeploySettings(deployContext(t, []string{"--auth", bad})); err == nil {
+			t.Errorf("--auth %q was accepted", bad)
+		}
+	}
+	// Unset stays unset: the project's saved config decides.
+	s, err := resolveDeploySettings(deployContext(t, nil))
+	if err != nil || s.Auth != "" {
+		t.Fatalf("Auth = %q (err %v), want empty", s.Auth, err)
 	}
 }
 

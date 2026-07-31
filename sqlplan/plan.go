@@ -27,16 +27,25 @@
 //     rows, SET NOT NULL against nulls, a unique index against duplicates: all of
 //     those are flagged "may fail", never resolved. pg-schema-diff could resolve
 //     them by validating against a temporary database, but nuzur asks it not to.
-//  4. No atomicity to report. sql-push does not ask for a transaction and the
-//     query manager splits on ";" and runs the fragments one at a time, so a
-//     failure at statement 7 of 12 leaves 1 through 6 applied. This package says
-//     so; it cannot fix it.
+//  4. Atomicity is engine- and content-dependent, and this package reports it
+//     rather than guarantees it. sql-push now asks for a transaction, so on
+//     Postgres a migration is applied as one unit and a failure rolls the whole
+//     thing back — EXCEPT when the batch contains something Postgres cannot run
+//     inside a transaction block (CREATE/DROP INDEX CONCURRENTLY, VACUUM,
+//     CREATE/DROP DATABASE, ALTER SYSTEM, TABLESPACE operations), which downgrades
+//     the whole batch to the old statement-at-a-time path. On MySQL the
+//     transaction is opened but DDL commits implicitly, so it is best-effort only
+//     and a failure at statement 7 of 12 still leaves 1 through 6 applied.
+//     TransactionalWarning says which of those a given plan gets; it cannot change
+//     any of them.
 //  5. MySQL diffs contain churn this package cannot identify. nuzur cannot read a
 //     MySQL schema directly, so the "existing" side is reconstructed by
 //     introspecting the database into a project version and re-rendering it as
 //     DDL. Anything the model cannot express comes back normalized, producing
-//     ALTERs that change nothing and reappear on every deploy. Those land in the
-//     narrowing class; a caller with a MySQL target should say so out loud.
+//     statements that change nothing and reappear on every deploy. They take two
+//     shapes — column redefinitions (the narrowing class) and index drop/re-add
+//     pairs, when the reconstruction loses an index's type — and ChurnNote counts
+//     both. A caller with a MySQL target should say so out loud.
 //
 // The one thing it is careful to get right is the data-loss class, because that is
 // what a caller gates on. Everything unrecognized is KindOther at SeverityNone:
@@ -46,6 +55,53 @@ package sqlplan
 import (
 	"strings"
 )
+
+// Engine names the database a plan will be applied to. The atomicity a migration
+// gets depends on it, so anything reporting on that has to be told.
+//
+// Spelled here rather than imported: sqlplan is a leaf package with no dependency on
+// the deploy package, and the values deliberately match deploy.DBEngine's so a caller
+// can convert directly.
+type Engine string
+
+const (
+	// EngineUnknown is the zero value, and makes callers that never resolved an
+	// engine get the conservative answer rather than the reassuring one.
+	EngineUnknown  Engine = ""
+	EngineMySQL    Engine = "mysql"
+	EnginePostgres Engine = "postgres"
+)
+
+// nonTransactionalKeywords are the constructs Postgres refuses to run inside a
+// transaction block. The connection manager scans a batch for them and, finding any,
+// downgrades the WHOLE batch to the statement-at-a-time path — so one of these costs
+// the migration its atomicity, not just itself.
+//
+// Matched against the normalized (uppercased, comment-free, single-spaced) statement.
+var nonTransactionalKeywords = []string{
+	"CONCURRENTLY",
+	"VACUUM",
+	"CREATE DATABASE",
+	"DROP DATABASE",
+	"ALTER SYSTEM",
+	"TABLESPACE",
+}
+
+// nonTransactionalStatements returns the execution indexes of the statements that
+// force the batch off the transactional path, in order.
+func (p Plan) nonTransactionalStatements() []int {
+	var out []int
+	for _, s := range p.Statements {
+		norm := normalize(s.SQL)
+		for _, kw := range nonTransactionalKeywords {
+			if containsWord(norm, kw) {
+				out = append(out, s.Index)
+				break
+			}
+		}
+	}
+	return out
+}
 
 // Severity is what a statement can cost you.
 type Severity string
@@ -325,7 +381,12 @@ func classifyAlterAction(a string) (Kind, Severity, string, string) {
 		// violate it. Which rows those are is exactly what this package cannot
 		// know, so it says "may fail" and stops.
 		return KindAddConstraint, SeverityNarrowing, "", "adds a constraint to {table}; fails if the existing rows do not already satisfy it"
-	case hasPrefixWord(a, "ADD INDEX"), hasPrefixWord(a, "ADD KEY"):
+	case hasPrefixWord(a, "ADD INDEX"), hasPrefixWord(a, "ADD KEY"),
+		// MySQL's typed index forms. They were falling through to KindOther, which
+		// hid them from the churn count — and an index whose type the MySQL
+		// reconstruction cannot see is exactly where a non-converging plan comes
+		// from, so they are the ones that most needed counting.
+		hasPrefixWord(a, "ADD FULLTEXT"), hasPrefixWord(a, "ADD SPATIAL"):
 		return KindCreateIndex, SeverityNone, "", ""
 
 	// Column redefinitions. On MySQL these are also where the reconstructed

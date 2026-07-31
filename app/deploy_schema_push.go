@@ -4,7 +4,6 @@ import (
 	"fmt"
 	"os"
 
-	nemgen "github.com/nuzur/nem/idl/gen"
 	"github.com/nuzur/nuzur-cli/deploy"
 	"github.com/nuzur/nuzur-cli/extensionrun"
 	"github.com/nuzur/nuzur-cli/outputtools"
@@ -114,7 +113,23 @@ const sqlGenExtensionIdentifier = "sql-gen"
 // product than answering "here is everything it would create", and the second answer
 // is one read-only generator run away.
 func (i *Implementation) computeCreatePlan(targets *runTargets, engine deploy.DBEngine) (string, error) {
-	entities := standaloneEntityUUIDs(targets)
+	// The resolved project version does not carry entities (it is fetched with
+	// ExcludeJsonFields), so pull the full schema here rather than reading it off
+	// the object we already have — counting entities on the stripped object made
+	// this path report "no standalone entities" for every project that has some.
+	// Dependent entities are part of their parent's table, so the DDL generator
+	// ignores them; GetStandaloneEntities already filters to the ones that become
+	// tables.
+	standalone, err := targets.er.GetStandaloneEntities(targets.projectVersion.GetUuid())
+	if err != nil {
+		return "", fmt.Errorf("loading the schema of project version %s: %w", targets.projectVersion.GetIdentifier(), err)
+	}
+	var entities []string
+	for _, e := range standalone {
+		if e.GetIdentifier() != "" {
+			entities = append(entities, e.GetUuid())
+		}
+	}
 	if len(entities) == 0 {
 		// sql-gen renders only the entities it is handed, so an empty list would
 		// come back as an empty script — indistinguishable from "no changes". Say
@@ -160,16 +175,4 @@ func (i *Implementation) computeCreatePlan(targets *runTargets, engine deploy.DB
 		return block.Content, nil
 	}
 	return res.SQLPreview(), nil
-}
-
-// standaloneEntityUUIDs lists the entities that become tables. Dependent entities
-// are part of their parent's table, so the DDL generator ignores them.
-func standaloneEntityUUIDs(targets *runTargets) []string {
-	var out []string
-	for _, e := range targets.projectVersion.GetEntities() {
-		if e.GetType() == nemgen.EntityType_ENTITY_TYPE_STANDALONE && e.GetIdentifier() != "" {
-			out = append(out, e.GetUuid())
-		}
-	}
-	return out
 }

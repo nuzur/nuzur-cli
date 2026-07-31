@@ -141,14 +141,28 @@ func computePgPlan(ctx context.Context, baseDSN, schema, existingSQL, newSQL str
 		}
 	}
 
+	// pg-schema-diff opens a "root" database purely to issue CREATE/DROP DATABASE
+	// for the temp databases, and defaults it to one named "postgres". Not every
+	// server has one — DigitalOcean Managed Postgres calls its maintenance
+	// database "defaultdb" — so the default fails with `database "postgres" does
+	// not exist` before the diff starts, and no schema can ever be applied. The
+	// factory only needs *a* database it can connect to, and this connection
+	// already names one: use it, as pg-schema-diff's own CLI does.
+	rootDatabase := pgDatabaseName(baseDSN)
+	if rootDatabase == "" {
+		// Nothing better to fall back on than the library's default.
+		rootDatabase = "postgres"
+	}
+
 	var tempDBs []*sql.DB
 	factory, err := tempdb.NewOnInstanceFactory(ctx, func(ctx context.Context, dbName string) (*sql.DB, error) {
 		dsn := swapPGDatabase(baseDSN, dbName)
 		// For temp databases, pin search_path to the target schema so the applied
 		// (unqualified) DDL lands there and the diff scope (WithIncludeSchemas)
 		// matches — the same thing the remote tempdb path does via its DSN. The
-		// root "postgres" db is only used to CREATE/DROP databases, so leave it.
-		isTemp := dbName != "postgres"
+		// root db is only used to CREATE/DROP databases, so leave it alone (it is
+		// the user's own database now, not a scratch one).
+		isTemp := dbName != rootDatabase
 		if isTemp && schema != "" {
 			dsn += " search_path=" + schema
 		}
@@ -170,7 +184,7 @@ func computePgPlan(ctx context.Context, baseDSN, schema, existingSQL, newSQL str
 		}
 		tempDBs = append(tempDBs, db)
 		return db, nil
-	})
+	}, tempdb.WithRootDatabase(rootDatabase))
 	if err != nil {
 		return "", fmt.Errorf("creating temp-db factory: %w", err)
 	}
@@ -230,10 +244,22 @@ func pgKeywordDSN(dsn string) (string, error) {
 	return dsn, nil
 }
 
+// pgDatabaseName reads the dbname out of a lib/pq keyword DSN. Empty when the
+// DSN names no database. Same assumption as swapPGDatabase: no spaces inside
+// values.
+func pgDatabaseName(keywordDSN string) string {
+	for _, f := range strings.Fields(keywordDSN) {
+		if name, ok := strings.CutPrefix(f, "dbname="); ok {
+			return name
+		}
+	}
+	return ""
+}
+
 // swapPGDatabase rewrites the dbname of a lib/pq keyword DSN to target, so the
-// tempdb factory can connect to the root "postgres" database and to each newly
-// created temp database. Assumes no spaces inside values (true for our generated
-// DSNs and for pq.ParseURL output).
+// tempdb factory can connect to the root database and to each newly created
+// temp database. Assumes no spaces inside values (true for our generated DSNs
+// and for pq.ParseURL output).
 func swapPGDatabase(keywordDSN, target string) string {
 	fields := strings.Fields(keywordDSN)
 	out := make([]string, 0, len(fields)+1)

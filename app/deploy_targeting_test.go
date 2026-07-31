@@ -112,6 +112,62 @@ func TestPickBoxAgent(t *testing.T) {
 	}
 }
 
+// destroy resolves the agent to revoke the same way: the record's own uuid if it has
+// one, else the box's, because a box has exactly one shared agent. The revoke used to
+// read only the record's field, so destroying a died-in-flight record (no uuid, which
+// is what pickPriorDeployment skips them for) last revoked nothing at all — while the
+// closing message said "shared agent revoked" regardless.
+func TestDestroyResolvesTheBoxAgent(t *testing.T) {
+	// The pair of records the situation always produces: a failed first deploy that
+	// never paired, plus the retry that did.
+	died := at("h1", "app", "", "conn-dead", 0)
+	paired := at("h1", "app", "agent-1", "conn-1", 60)
+
+	for _, tc := range []struct {
+		name       string
+		destroying deploy.Deployment
+		deps       []deploy.Deployment
+		want       string
+	}{
+		{
+			name:       "the record carries its own agent",
+			destroying: paired, deps: []deploy.Deployment{died, paired}, want: "agent-1",
+		},
+		{
+			// The reported bug: this record has no uuid, but the box does.
+			name:       "an empty record falls back to the box's agent",
+			destroying: died, deps: []deploy.Deployment{died, paired}, want: "agent-1",
+		},
+		{
+			// Nothing left on this machine knows the agent — the caller warns rather
+			// than claiming a revoke.
+			name:       "nothing to resolve stays empty",
+			destroying: died, deps: []deploy.Deployment{died}, want: "",
+		},
+		{
+			name:       "another host's agent is not borrowed",
+			destroying: died, deps: []deploy.Deployment{died, at("h2", "other", "agent-2", "c", 0)}, want: "",
+		},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			got := firstNonEmpty(tc.destroying.LocalAgentUUID, pickBoxAgent(tc.deps, tc.destroying.Host))
+			if got != tc.want {
+				t.Fatalf("resolved agent = %q, want %q", got, tc.want)
+			}
+		})
+	}
+}
+
+// The summary may only claim the revoke that actually happened.
+func TestRevokedSuffix(t *testing.T) {
+	if got := revokedSuffix(true); got != ", shared agent revoked" {
+		t.Fatalf("revokedSuffix(true) = %q", got)
+	}
+	if got := revokedSuffix(false); got != "" {
+		t.Fatalf("revokedSuffix(false) = %q, want no claim", got)
+	}
+}
+
 func TestDeploySchemaName(t *testing.T) {
 	for _, tc := range []struct {
 		name       string

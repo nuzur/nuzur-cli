@@ -29,6 +29,22 @@ type deployOutcome struct {
 	// destructiveApplied records that this deploy deleted data with authorization, so
 	// the deployment history in nuzur says so rather than reading as a clean deploy.
 	destructiveApplied bool
+	// appShipped records that this deploy rebuilt and restarted the application on the
+	// box before the schema step ran. It gates the mismatch warning: "the app is now
+	// serving code the database does not match" is only true when there is an app, and
+	// a --db-only deploy has none.
+	appShipped bool
+	// schemaRolledBack records that the attempted migration was applied as ONE
+	// transaction, so a failure took the whole thing back with it.
+	//
+	// Only true when both halves are known: the engine gives real atomicity
+	// (Postgres, and only when the batch contains nothing it must run outside a
+	// transaction) AND the plan that was attempted is in hand. It defaults false so
+	// that not knowing produces the conservative message — "go and check the
+	// database" is cheap when it turns out to be intact, and telling somebody their
+	// migration rolled back when it did not is how a half-applied schema goes
+	// unnoticed.
+	schemaRolledBack bool
 }
 
 // summary is the closing warning printed after the deployment report, or "" when
@@ -51,28 +67,65 @@ func (o deployOutcome) summary() string {
 		msg := fmt.Sprintf(
 			"The schema was NOT applied: %s would DELETE DATA, and --allow-destructive was not passed. "+
 				"Nothing was changed in the database — not the destructive statements and not the rest of "+
-				"the migration, because they are applied as one unit.",
+				"the migration, because when the gate fires the deploy sends the database nothing at all.",
 			plural(o.destructiveCount, "statement"))
 		if o.rerunCommand != "" {
 			msg += "\n\nTo apply it, re-run with authorization:\n  " + o.rerunCommand
 		}
-		msg += "\n\nUntil then the app on this box is serving against the OLD schema, which its " +
-			"generated code no longer matches. Run the same command with --plan to read the full " +
-			"migration first — a plan applies nothing."
+		msg += "\n\nRun the same command with --plan to read the full migration first — a plan " +
+			"applies nothing."
+		msg += o.mismatchWarning()
 		parts = append(parts, msg)
 	case !o.schemaApplied:
-		parts = append(parts,
-			"The schema was NOT applied (see the error above), so the database is still empty. "+
-				"Re-run the deploy to retry, or apply the schema from nuzur (SQL Push / change request).")
+		// Deliberately says NOTHING about what the database contains. This used to
+		// claim "so the database is still empty", which is first-deploy wording that
+		// was emitted unconditionally: on a re-deploy it was simply false, and it read
+		// as "nothing to worry about, there was no data anyway" at exactly the moment a
+		// statement had errored against a database full of rows.
+		msg := "The schema was NOT applied (see the error above). "
+		if o.schemaRolledBack {
+			msg += "It was sent as one transaction, so the whole migration rolled back and the " +
+				"database is as it was. "
+		} else {
+			msg += "The deploy cannot tell you what state the database is in: this migration was " +
+				"not applied as one unit, so a statement that failed partway through leaves the " +
+				"ones before it applied. Check the database before retrying. "
+		}
+		msg += "Read the migration with --plan first — a plan applies nothing. If the failure is " +
+			"deterministic (a cast the engine rejects, a constraint the existing rows violate), " +
+			"re-running the deploy reproduces it: fix the data or the model instead."
+		msg += o.mismatchWarning()
+		parts = append(parts, msg)
 	}
 	return strings.Join(parts, "\n\n")
 }
 
-// summaryColor is how loudly the closing summary should be printed. A blocked schema
-// is the one deploy shortfall where the running app's generated code does not match
-// the database it is talking to, so it is not a yellow "heads up".
+// mismatchWarning is what not applying the schema costs, when the app was shipped
+// first: the image is rebuilt and the container restarted before the schema step
+// runs, so an unapplied migration leaves generated code talking to a database it was
+// not generated from. The gate path used to be the only one that said so, which made
+// the quieter and more dangerous path — an apply that actually errored — the one that
+// warned about nothing.
+//
+// Empty when no app shipped (--db-only, or a re-deploy stopped by the pre-flight gate
+// before the bootstrap ran), because then there is nothing mismatched to warn about.
+func (o deployOutcome) mismatchWarning() string {
+	if !o.appShipped {
+		return ""
+	}
+	return "\n\nThe app on this box was already rebuilt and restarted, so it is now serving generated " +
+		"code that does NOT match the database — every endpoint whose entity changed will fail. To " +
+		"restore service without applying the migration, re-deploy the version that was running " +
+		"before this one (`nuzur-cli deploy list` names the deployment; its revision history in nuzur " +
+		"names the version)."
+}
+
+// summaryColor is how loudly the closing summary should be printed. Any deploy that
+// did not get its schema applied leaves the running app's generated code out of step
+// with the database it is talking to, so neither the blocked case nor the failed one
+// is a yellow "heads up".
 func (o deployOutcome) summaryColor() outputtools.OutputColor {
-	if o.schemaBlocked {
+	if o.schemaBlocked || !o.schemaApplied {
 		return outputtools.Red
 	}
 	return outputtools.Yellow

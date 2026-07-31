@@ -101,10 +101,14 @@ func connectionToDSNParts(conn *nemgen.Connection) (engine deploy.DBEngine, host
 		params = "sslmode=" + pgSSLModeToString(conn.DbTypeConfig.Postgres.Sslmode)
 	case nemgen.ConnectionDbType_CONNECTION_DB_TYPE_MYSQL:
 		engine = deploy.DBMySQL
-		params = "parseTime=true"
-		if conn.DbTypeConfig != nil && conn.DbTypeConfig.Mysql != nil && conn.DbTypeConfig.Mysql.Params != "" {
-			params = conn.DbTypeConfig.Mysql.Params
+		// Merged, not replaced: a stored connection's params are typically just the
+		// TLS setting a managed MySQL requires, and taking them wholesale dropped the
+		// parseTime the generated app cannot read datetimes without.
+		stored := ""
+		if conn.DbTypeConfig != nil && conn.DbTypeConfig.Mysql != nil {
+			stored = conn.DbTypeConfig.Mysql.Params
 		}
+		params = mergeDSNParams([]string{"parseTime=true"}, stored)
 	default:
 		return "", "", "", "", "", "", "", fmt.Errorf("unsupported connection database type")
 	}
@@ -169,6 +173,48 @@ func applyMySQLParams(cfg *mysqldriver.Config, params string) {
 		}
 		cfg.Params[key] = val
 	}
+}
+
+// mergeDSNParams folds a user-supplied `k=v&k=v` query string ONTO a set of
+// defaults instead of replacing them, and returns the merged string.
+//
+// Replacing was the bug: any `?` on a MySQL DSN overwrote `parseTime=true`, without
+// which go-sql-driver hands back a raw []byte for every DATE/DATETIME column, so
+// every read of every generated entity fails (`created_at`/`updated_at` are on every
+// entity). And a managed MySQL can only be reached WITH a query parameter, because
+// TLS is configured as one — so the single thing you must write to connect was also
+// the thing that broke the connection. Postgres had the same shape: the
+// `sslmode=require` default applied only when the DSN carried no parameters at all,
+// so appending any unrelated one silently dropped it.
+//
+// Defaults keep their order and come first, so an ordinary DSN renders exactly as it
+// always did. A user key that names a default REPLACES it in place — passing
+// `parseTime=false` or `sslmode=disable` is a deliberate choice and must win —
+// and any other key is appended in the order given.
+func mergeDSNParams(defaults []string, params string) string {
+	// Pairs are carried as written rather than as key/value, so a valueless param
+	// (`foo`) survives the round-trip as `foo` and not as `foo=`.
+	var order []string
+	at := map[string]int{}
+	add := func(pair string) {
+		if strings.TrimSpace(pair) == "" {
+			return
+		}
+		key, _, _ := strings.Cut(pair, "=")
+		if idx, ok := at[key]; ok {
+			order[idx] = pair
+			return
+		}
+		at[key] = len(order)
+		order = append(order, pair)
+	}
+	for _, d := range defaults {
+		add(d)
+	}
+	for _, p := range strings.Split(params, "&") {
+		add(p)
+	}
+	return strings.Join(order, "&")
 }
 
 // pgSSLModeToString mirrors the connection-manager mapping so a resolved
