@@ -15,5 +15,6 @@ func (i *Implementation) Commands() []cli.Command {
 		i.ConnectCommand(),
 		i.DeployCommand(),
 		i.DestroyCommand(),
+		i.VersionCommand(),
 	}
 }
