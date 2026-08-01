@@ -34,6 +34,20 @@ type deployOutcome struct {
 	// serving code the database does not match" is only true when there is an app, and
 	// a --db-only deploy has none.
 	appShipped bool
+	// schemaNeverStarted records that the apply failed BEFORE any SQL was sent —
+	// resolving the sql-push extension, reaching the database, or computing the diff.
+	//
+	// It separates two states that were reported identically. A DeadlineExceeded while
+	// RESOLVING "sql-push-local" produced "a statement that failed partway through
+	// leaves the ones before it applied. Check the database before retrying" and "the
+	// app is now serving generated code that does NOT match the database" — of a run
+	// in which nothing had been sent. Both were false: the plan 30 seconds later was
+	// empty and every endpoint answered 200, while the user was sent to audit a
+	// database that had never been touched.
+	//
+	// Defaults false, which is the conservative half: not knowing keeps the "go and
+	// check" message.
+	schemaNeverStarted bool
 	// schemaRolledBack records that the attempted migration was applied as ONE
 	// transaction, so a failure took the whole thing back with it.
 	//
@@ -76,6 +90,18 @@ func (o deployOutcome) summary() string {
 			"applies nothing."
 		msg += o.mismatchWarning()
 		parts = append(parts, msg)
+	case !o.schemaApplied && o.schemaNeverStarted:
+		// The apply never reached the database: the failure was in resolving the
+		// sql-push extension, reaching the box's agent, or computing the diff. Nothing
+		// was sent, so there is nothing to audit and nothing to be mismatched — and
+		// saying otherwise is not a harmless over-warning. It sends the user to inspect
+		// a database that is fine, and it puts "your app is serving code that does not
+		// match its schema" on screen at the end of a deploy that changed neither.
+		parts = append(parts,
+			"The schema was NOT applied (see the error above). The failure happened before the "+
+				"migration was sent — while resolving the SQL-push extension, reaching the database, "+
+				"or computing the diff. No SQL was sent to the database. The app and database are "+
+				"unchanged and consistent; re-run the deploy or apply via SQL Push.")
 	case !o.schemaApplied:
 		// Deliberately says NOTHING about what the database contains. This used to
 		// claim "so the database is still empty", which is first-deploy wording that
@@ -120,10 +146,11 @@ func (o deployOutcome) mismatchWarning() string {
 		"names the version)."
 }
 
-// summaryColor is how loudly the closing summary should be printed. Any deploy that
-// did not get its schema applied leaves the running app's generated code out of step
-// with the database it is talking to, so neither the blocked case nor the failed one
-// is a yellow "heads up".
+// summaryColor is how loudly the closing summary should be printed. A deploy that
+// did not get its schema applied exits non-zero and needs a decision from someone,
+// so neither the blocked case nor the failed one is a yellow "heads up" — including
+// the never-started one, where the database is intact but the migration still has
+// not happened.
 func (o deployOutcome) summaryColor() outputtools.OutputColor {
 	if o.schemaBlocked || !o.schemaApplied {
 		return outputtools.Red
@@ -150,6 +177,10 @@ func (o deployOutcome) revisionMessage() string {
 	switch {
 	case o.schemaBlocked:
 		parts = append(parts, fmt.Sprintf("schema not applied: %d destructive statement(s) need --allow-destructive", o.destructiveCount))
+	case !o.schemaApplied && o.schemaNeverStarted:
+		// The revision history has to be able to tell these apart too: one says the
+		// database may need inspecting, this one says it was never touched.
+		parts = append(parts, "schema not applied: the apply failed before any SQL was sent")
 	case !o.schemaApplied:
 		parts = append(parts, "schema not applied to the database")
 	case o.destructiveApplied:

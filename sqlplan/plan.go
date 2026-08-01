@@ -53,6 +53,7 @@
 package sqlplan
 
 import (
+	"sort"
 	"strings"
 )
 
@@ -156,6 +157,19 @@ const (
 	KindOther          Kind = "other"
 )
 
+// Hazard is one thing a statement costs. A statement can carry several: the
+// generators bundle a whole action list into a single ALTER, and each action is
+// answerable on its own terms.
+type Hazard struct {
+	Severity Severity `json:"severity"`
+	Kind     Kind     `json:"kind"`
+	// Object is a best-effort "table" or "table.column" — the thing this hazard
+	// applies to, for pointing at, not for programmatic use.
+	Object string `json:"object,omitempty"`
+	// Reason says what this one costs, in a sentence a person can act on.
+	Reason string `json:"reason,omitempty"`
+}
+
 // Statement is one fragment of the migration, as it will be executed.
 type Statement struct {
 	// Index is 1-based and is execution order.
@@ -169,6 +183,16 @@ type Statement struct {
 	Object string `json:"object,omitempty"`
 	// Reason says what this costs, in a sentence a person can act on.
 	Reason string `json:"reason,omitempty"`
+	// Hazards is every hazard this statement carries, worst first; Kind, Severity,
+	// Object and Reason above are the first of them.
+	//
+	// One bundled ALTER can lose several different things at once — `ALTER TABLE lot
+	// DROP KEY …, DROP COLUMN moisture_pct, MODIFY COLUMN warehouse_bin int` drops an
+	// index, deletes a column, AND coerces every value of a char column to an int —
+	// and the single worst-action reason answered only a third of "what exactly do I
+	// lose". The severity a caller GATES on is still the worst one; this is what the
+	// reader is owed.
+	Hazards []Hazard `json:"hazards,omitempty"`
 }
 
 // Destructive reports whether this statement deletes data.
@@ -229,14 +253,15 @@ func Analyze(applySQL string) Plan {
 	frags := Split(applySQL)
 	p := Plan{Statements: make([]Statement, 0, len(frags))}
 	for idx, frag := range frags {
-		kind, sev, object, reason := classify(frag)
+		c := classify(frag)
 		p.Statements = append(p.Statements, Statement{
 			Index:    idx + 1,
 			SQL:      frag,
-			Kind:     kind,
-			Severity: sev,
-			Object:   object,
-			Reason:   reason,
+			Kind:     c.Kind,
+			Severity: c.Severity,
+			Object:   c.Object,
+			Reason:   c.Reason,
+			Hazards:  c.Hazards,
 		})
 	}
 	return p
@@ -263,6 +288,28 @@ func Split(applySQL string) []string {
 	return out
 }
 
+// classified is everything the classifier can say about one statement: the summary
+// a caller gates and sorts on, plus every individual hazard behind it.
+type classified struct {
+	Kind     Kind
+	Severity Severity
+	Object   string
+	Reason   string
+	// Hazards is worst-first, and empty for a statement that costs nothing. When it
+	// is not empty, Kind/Severity/Object/Reason are its first element.
+	Hazards []Hazard
+}
+
+// single is a classification with exactly one hazard (or none, when sev is
+// SeverityNone) — every statement except a bundled ALTER.
+func single(kind Kind, sev Severity, object, reason string) classified {
+	c := classified{Kind: kind, Severity: sev, Object: object, Reason: reason}
+	if sev != SeverityNone {
+		c.Hazards = []Hazard{{Severity: sev, Kind: kind, Object: object, Reason: reason}}
+	}
+	return c
+}
+
 // classify labels one statement lexically — there is no SQL parser here.
 //
 // The input is machine-generated DDL from two known generators (pg-schema-diff and
@@ -270,42 +317,42 @@ func Split(applySQL string) []string {
 // leading keywords gets the same answers a parser would for none of the
 // dependency. Dispatching on the LEADING verb rather than searching the whole
 // string is what keeps `CREATE TABLE "drop_log"` additive.
-func classify(sql string) (Kind, Severity, string, string) {
+func classify(sql string) classified {
 	norm := normalize(sql)
 	switch {
 	case hasPrefixWord(norm, "CREATE TABLE"):
-		return KindCreateTable, SeverityNone, objectAfter(norm, "CREATE TABLE"), ""
+		return single(KindCreateTable, SeverityNone, objectAfter(norm, "CREATE TABLE"), "")
 	case hasPrefixWord(norm, "CREATE UNIQUE INDEX"):
 		obj := objectAfter(norm, "CREATE UNIQUE INDEX")
-		return KindCreateIndex, SeverityNarrowing, obj, "adds a uniqueness rule; fails if the existing rows already contain duplicates"
+		return single(KindCreateIndex, SeverityNarrowing, obj, "adds a uniqueness rule; fails if the existing rows already contain duplicates")
 	case hasPrefixWord(norm, "CREATE INDEX"):
-		return KindCreateIndex, SeverityNone, objectAfter(norm, "CREATE INDEX"), ""
+		return single(KindCreateIndex, SeverityNone, objectAfter(norm, "CREATE INDEX"), "")
 	case hasPrefixWord(norm, "CREATE SCHEMA"):
-		return KindCreateSchema, SeverityNone, objectAfter(norm, "CREATE SCHEMA"), ""
+		return single(KindCreateSchema, SeverityNone, objectAfter(norm, "CREATE SCHEMA"), "")
 	case hasPrefixWord(norm, "DROP TABLE"):
 		obj := objectAfter(norm, "DROP TABLE")
-		return KindDropTable, SeverityDataLoss, obj, "drops " + describe(obj, "the table") + " and every row in it"
+		return single(KindDropTable, SeverityDataLoss, obj, "drops "+describe(obj, "the table")+" and every row in it")
 	case hasPrefixWord(norm, "DROP DATABASE"):
 		obj := objectAfter(norm, "DROP DATABASE")
-		return KindDropDatabase, SeverityDataLoss, obj, "drops " + describe(obj, "the database") + " and everything in it"
+		return single(KindDropDatabase, SeverityDataLoss, obj, "drops "+describe(obj, "the database")+" and everything in it")
 	case hasPrefixWord(norm, "DROP SCHEMA"):
 		obj := objectAfter(norm, "DROP SCHEMA")
 		// The differ attaches no hazard to this one, which is why the classifier
 		// cannot be replaced by hazards alone even after they reach the CLI.
-		return KindDropSchema, SeverityDataLoss, obj, "drops " + describe(obj, "the schema") + " and every table in it"
+		return single(KindDropSchema, SeverityDataLoss, obj, "drops "+describe(obj, "the schema")+" and every table in it")
 	case hasPrefixWord(norm, "TRUNCATE"):
 		obj := objectAfter(norm, "TRUNCATE TABLE")
 		if obj == "" {
 			obj = objectAfter(norm, "TRUNCATE")
 		}
-		return KindTruncate, SeverityDataLoss, obj, "deletes every row in " + describe(obj, "the table")
+		return single(KindTruncate, SeverityDataLoss, obj, "deletes every row in "+describe(obj, "the table"))
 	case hasPrefixWord(norm, "DROP INDEX"):
 		obj := objectAfter(norm, "DROP INDEX")
-		return KindDropIndex, SeverityConstraintLoss, obj, "drops " + describe(obj, "the index") + "; no data is deleted, but queries relying on it get slower and any uniqueness it enforced is gone"
+		return single(KindDropIndex, SeverityConstraintLoss, obj, "drops "+describe(obj, "the index")+"; no data is deleted, but queries relying on it get slower and any uniqueness it enforced is gone")
 	case hasPrefixWord(norm, "ALTER TABLE"):
 		return classifyAlterTable(norm)
 	default:
-		return KindOther, SeverityNone, "", ""
+		return single(KindOther, SeverityNone, "", "")
 	}
 }
 
@@ -315,7 +362,15 @@ func classify(sql string) (Kind, Severity, string, string) {
 // COLUMN b`), so the statement takes the WORST severity among its actions and the
 // kind of whichever action that was. Anything else would let a data-loss action
 // hide behind an additive one in the same statement.
-func classifyAlterTable(norm string) (Kind, Severity, string, string) {
+//
+// EVERY costly action is kept, not just the worst one. A single ALTER routinely
+// carries more than one — the round-6 plan's
+// `ALTER TABLE lot DROP KEY …, DROP COLUMN moisture_pct, MODIFY COLUMN warehouse_bin int`
+// drops an index, deletes a column and coerces a char column to int, destroying
+// every value in it — and reporting only the DROP COLUMN told a reader asking "what
+// exactly do I lose" a third of the answer. The gate still keys on the worst
+// severity; the annotation now names all of them.
+func classifyAlterTable(norm string) classified {
 	table := objectAfter(norm, "ALTER TABLE")
 	rest := strings.TrimSpace(strings.TrimPrefix(norm, "ALTER TABLE"))
 	// Step past the table name to the action list.
@@ -325,21 +380,39 @@ func classifyAlterTable(norm string) (Kind, Severity, string, string) {
 		rest = ""
 	}
 
-	worstKind, worstSev, worstObj, worstReason := KindOther, SeverityNone, table, ""
+	out := classified{Kind: KindOther, Severity: SeverityNone, Object: table}
 	for _, action := range splitTopLevel(rest, ',') {
 		kind, sev, col, reason := classifyAlterAction(strings.TrimSpace(action))
-		if rank(sev) > rank(worstSev) || (worstKind == KindOther && kind != KindOther) {
-			worstKind, worstSev, worstReason = kind, sev, reason
-			worstObj = table
-			if col != "" {
-				worstObj = joinObject(table, col)
-			}
+		obj := table
+		if col != "" {
+			obj = joinObject(table, col)
+		}
+		if sev != SeverityNone {
+			out.Hazards = append(out.Hazards, Hazard{
+				Severity: sev,
+				Kind:     kind,
+				Object:   obj,
+				Reason:   strings.ReplaceAll(reason, "{table}", describe(table, "the table")),
+			})
+			continue
+		}
+		// An additive action only names the statement while nothing costly has been
+		// seen — and is overridden the moment something is.
+		if out.Kind == KindOther && kind != KindOther && len(out.Hazards) == 0 {
+			out.Kind, out.Object = kind, obj
 		}
 	}
-	if worstReason != "" {
-		worstReason = strings.ReplaceAll(worstReason, "{table}", describe(table, "the table"))
+	if len(out.Hazards) == 0 {
+		return out
 	}
-	return worstKind, worstSev, worstObj, worstReason
+	// Worst first, stable, so equally-severe hazards stay in the order the statement
+	// executes them.
+	sort.SliceStable(out.Hazards, func(i, j int) bool {
+		return rank(out.Hazards[i].Severity) > rank(out.Hazards[j].Severity)
+	})
+	worst := out.Hazards[0]
+	out.Kind, out.Severity, out.Object, out.Reason = worst.Kind, worst.Severity, worst.Object, worst.Reason
+	return out
 }
 
 // classifyAlterAction labels a single ALTER TABLE action. The returned object is
@@ -391,9 +464,18 @@ func classifyAlterAction(a string) (Kind, Severity, string, string) {
 
 	// Column redefinitions. On MySQL these are also where the reconstructed
 	// "existing" side produces churn that changes nothing.
+	//
+	// The column is named rather than left as "a column": a MODIFY is the one action
+	// whose cost depends entirely on WHICH column it is (a char→int retype destroys
+	// every value; a widened varchar changes nothing), and when it rides along in a
+	// bundled ALTER, "a column" does not even say which of the statement's columns.
 	case hasPrefixWord(a, "MODIFY COLUMN"), hasPrefixWord(a, "MODIFY"),
 		hasPrefixWord(a, "CHANGE COLUMN"), hasPrefixWord(a, "CHANGE"):
-		return KindAlterColumn, SeverityNarrowing, "", "redefines a column on {table}; can truncate or fail depending on the values already stored"
+		col := firstNonEmptyIdent(
+			objectAfter(a, "MODIFY COLUMN"), objectAfter(a, "CHANGE COLUMN"),
+			objectAfter(a, "MODIFY"), objectAfter(a, "CHANGE"))
+		return KindAlterColumn, SeverityNarrowing, col,
+			"redefines " + describe(col, "a column") + " on {table}; can truncate or fail depending on the values already stored"
 	case hasPrefixWord(a, "ALTER COLUMN"):
 		switch {
 		case containsWord(a, "SET NOT NULL"):
@@ -528,6 +610,18 @@ func joinObject(table, col string) string {
 	default:
 		return table + "." + col
 	}
+}
+
+// firstNonEmptyIdent returns the first identifier that was actually extracted.
+// objectAfter returns "" when its keyword is absent, so the callers that try a
+// keyword's long and short spellings in turn need this rather than a chain of ifs.
+func firstNonEmptyIdent(ids ...string) string {
+	for _, id := range ids {
+		if id != "" {
+			return id
+		}
+	}
+	return ""
 }
 
 // describe renders an object for a sentence, falling back to a generic noun when

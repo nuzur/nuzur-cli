@@ -64,6 +64,9 @@ func (i *Implementation) AgentPairCommand() cli.Command {
 			},
 		},
 		Action: func(c *cli.Context) error {
+			if err := requireNoArgs(c, "agent pair"); err != nil {
+				return err
+			}
 			// Refuse to silently overwrite an existing pairing — that creates
 			// orphan OFFLINE rows on the server with no way to clean them up
 			// from this machine. The user can opt in with --force.
@@ -194,6 +197,9 @@ func (i *Implementation) AgentListCommand() cli.Command {
 		Name:  "list",
 		Usage: i.localize.Localize("agent_list_desc", "List local agents paired to your account"),
 		Action: func(c *cli.Context) error {
+			if err := requireNoArgs(c, "agent list"); err != nil {
+				return err
+			}
 			if err := i.Login(); err != nil {
 				return err
 			}
@@ -232,6 +238,9 @@ func (i *Implementation) AgentRevokeCommand() cli.Command {
 		Usage:     i.localize.Localize("agent_revoke_desc", "Revoke a local agent by uuid"),
 		ArgsUsage: "<local_agent_uuid>",
 		Action: func(c *cli.Context) error {
+			if err := requireOneArg(c, "agent revoke", "the agent uuid"); err != nil {
+				return err
+			}
 			if !c.Args().Present() {
 				return fmt.Errorf("missing local_agent_uuid argument")
 			}

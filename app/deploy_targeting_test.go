@@ -114,6 +114,146 @@ func TestPickBoxAgent(t *testing.T) {
 	}
 }
 
+// The deployment record is rewritten wholesale as soon as the box exists (step 6b),
+// ~20 minutes before step 12 learns the agent from the pairing wait. It used to write
+// an EMPTY agent uuid there, so every re-deploy blanked a perfectly well-known agent
+// for the middle of its run: `--plan --deployment <id>` failed in that window with a
+// false diagnosis ("the deploy that created it did not finish pairing" — it had), and
+// an interrupt made the loss permanent, which is how a second record for one box gets
+// created and how destroy's isLast then refuses to delete the VM.
+func TestKnownAgentUUIDSurvivesTheMidDeployWrite(t *testing.T) {
+	prior := at("h1", "app", "agent-prior", "conn-1", 0)
+	adopted := at("h1", "app", "agent-adopted", "conn-2", 0)
+	agentless := at("h1", "app", "", "conn-3", 0)
+
+	for _, tc := range []struct {
+		name     string
+		prior    *deploy.Deployment
+		boxAgent string
+		adopted  *deploy.Deployment
+		want     string
+	}{
+		{
+			// The headline case: a managed re-deploy, where both the prior record and
+			// the box agree on the agent. It must reach the 6b write.
+			name:  "a re-deploy keeps the agent it is reusing",
+			prior: &prior, boxAgent: "agent-prior", want: "agent-prior",
+		},
+		{
+			// A second project landing on a box that already has one: no prior record
+			// for this identifier, but the box's shared agent is the one this deploy
+			// will pair to, so it is known before pairing confirms it.
+			name:     "a co-tenant project takes the box's shared agent",
+			boxAgent: "agent-box", want: "agent-box",
+		},
+		{
+			// Adopting a box whose own deploy died after pairing but before finishing.
+			name:    "an adopted box's agent is used when nothing else knows one",
+			adopted: &adopted, want: "agent-adopted",
+		},
+		{
+			name:  "the prior record wins over the box lookup",
+			prior: &prior, boxAgent: "agent-box", adopted: &adopted, want: "agent-prior",
+		},
+		{
+			// A genuine first deploy. Empty is correct and load-bearing: the record
+			// reads as "died before pairing" until step 12 fills it in, which is what
+			// stops a half-built record being reused as a working prior deployment.
+			name: "a first deploy still records no agent",
+			want: "",
+		},
+		{
+			name:  "an agentless prior record does not mask the box's agent",
+			prior: &agentless, boxAgent: "agent-box", want: "agent-box",
+		},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			if got := knownAgentUUID(tc.prior, tc.boxAgent, tc.adopted); got != tc.want {
+				t.Fatalf("knownAgentUUID = %q, want %q", got, tc.want)
+			}
+		})
+	}
+}
+
+// `--plan --deployment <id>` suggested a rerun command that dropped the selector,
+// because a real deploy had no use for it. It does now: the record carries the
+// project, provider, box and identifier the user never typed, and a suggestion
+// missing all four is unrunnable at best and aimed at the wrong database at worst.
+func TestApplyDeploymentSelector(t *testing.T) {
+	rec := deploy.Deployment{
+		ID: "r6box-c3d31228", Provider: deploy.ProviderDigitalOcean,
+		Host: "64.225.62.77", User: "root", Port: 22,
+		Identifier: "r6box", ProjectUUID: "0ecca0c4", DBEngine: deploy.DBMySQL,
+		WorkspaceDir: "/src/nuzur-r6box", Domain: "app.example.com",
+	}
+	none := func(string) bool { return false }
+
+	t.Run("an unstated field comes from the record", func(t *testing.T) {
+		s := &deploySettings{Provider: "ssh", User: "root", Port: 22, DB: "mysql"}
+		adopted, err := applyDeploymentSelector(s, &rec, none)
+		if err != nil {
+			t.Fatalf("unexpected error: %v", err)
+		}
+		if s.Project != "0ecca0c4" || s.Identifier != "r6box" || s.Provider != "digitalocean" || s.Host != "64.225.62.77" {
+			t.Fatalf("targeting = %+v", s)
+		}
+		if s.Domain != "app.example.com" || s.SourceDir != "/src/nuzur-r6box" {
+			t.Errorf("domain/source-dir not adopted: %+v", s)
+		}
+		// What was taken has to be said: targeting resolved in silence is how a deploy
+		// lands somewhere its operator did not expect.
+		for _, want := range []string{"project=0ecca0c4", "identifier=r6box", "provider=digitalocean", "host=64.225.62.77"} {
+			if !strings.Contains(strings.Join(adopted, " "), want) {
+				t.Errorf("adopted = %v, missing %q", adopted, want)
+			}
+		}
+	})
+
+	t.Run("an explicit flag always wins", func(t *testing.T) {
+		s := &deploySettings{Provider: "ssh", Host: "10.0.0.1", Identifier: "mine", User: "root", Port: 2222, DB: "postgres"}
+		set := map[string]bool{"host": true, "identifier": true, "port": true, "db": true, "provider": true}
+		if _, err := applyDeploymentSelector(s, &rec, func(f string) bool { return set[f] }); err != nil {
+			t.Fatalf("unexpected error: %v", err)
+		}
+		if s.Host != "10.0.0.1" || s.Identifier != "mine" || s.Port != 2222 || s.DB != "postgres" || s.Provider != "ssh" {
+			t.Fatalf("the record overrode explicit flags: %+v", s)
+		}
+		// Everything the user did NOT state still comes from the record.
+		if s.Project != "0ecca0c4" {
+			t.Errorf("project = %q, want it taken from the record", s.Project)
+		}
+	})
+
+	t.Run("an external database is refused rather than re-hosted", func(t *testing.T) {
+		// The record stores THAT the database is external, never its DSN. Adopting the
+		// rest and self-hosting a new empty database on the box is the one outcome here
+		// that would silently destroy something.
+		ext := rec
+		ext.ExternalDB = true
+		_, err := applyDeploymentSelector(&deploySettings{}, &ext, none)
+		if err == nil {
+			t.Fatal("expected an error for an external-database record")
+		}
+		for _, want := range []string{"EXTERNAL database", "--db-dsn", "--connection", "self-host a new, empty database"} {
+			if !strings.Contains(err.Error(), want) {
+				t.Errorf("error %q missing %q", err, want)
+			}
+		}
+		// Supplying one is what makes it legal again.
+		if _, err := applyDeploymentSelector(&deploySettings{DBDSN: "user:pass@tcp(h:3306)/db"}, &ext, none); err != nil {
+			t.Errorf("a re-supplied DSN should be accepted: %v", err)
+		}
+	})
+
+	t.Run("no record is a no-op", func(t *testing.T) {
+		s := &deploySettings{Provider: "ssh"}
+		adopted, err := applyDeploymentSelector(s, nil, none)
+		if err != nil || len(adopted) != 0 || s.Provider != "ssh" {
+			t.Fatalf("adopted = %v, err = %v, settings = %+v", adopted, err, s)
+		}
+	})
+}
+
 // destroy resolves the agent to revoke the same way: the record's own uuid if it has
 // one, else the box's, because a box has exactly one shared agent. The revoke used to
 // read only the record's field, so destroying a died-in-flight record (no uuid, which
@@ -157,16 +297,6 @@ func TestDestroyResolvesTheBoxAgent(t *testing.T) {
 				t.Fatalf("resolved agent = %q, want %q", got, tc.want)
 			}
 		})
-	}
-}
-
-// The summary may only claim the revoke that actually happened.
-func TestRevokedSuffix(t *testing.T) {
-	if got := revokedSuffix(true); got != ", shared agent revoked" {
-		t.Fatalf("revokedSuffix(true) = %q", got)
-	}
-	if got := revokedSuffix(false); got != "" {
-		t.Fatalf("revokedSuffix(false) = %q, want no claim", got)
 	}
 }
 
@@ -255,13 +385,14 @@ func TestDecideDeployBox(t *testing.T) {
 	byoSSH := managedRec("terroirconv-ssh", deploy.ProviderSSH, "10.0.0.9", proj, "terroirconv", "agent-9", 5)
 
 	for _, tc := range []struct {
-		name       string
-		in         boxDecisionInput
-		wantAction boxAction
-		wantHost   string
-		wantRecord string // record id the decision was taken from; "" == none
-		wantErr    bool
-		wantInMsg  []string
+		name         string
+		in           boxDecisionInput
+		wantAction   boxAction
+		wantHost     string
+		wantRecord   string // record id the decision was taken from; "" == none
+		wantErr      bool
+		wantInMsg    []string
+		wantNotInMsg []string
 	}{
 		{
 			// --provider ssh is untouched: the user named the box.
@@ -315,11 +446,23 @@ func TestDecideDeployBox(t *testing.T) {
 			wantAction: boxFail, wantRecord: inFlight.ID, wantErr: true,
 		},
 		{
-			name: "--new-vm forces a fresh box and prices it",
+			// The billing warning is CONDITIONAL, and has to stay that way. The flag's
+			// main use is recovering from a box that no longer answers — the CLI itself
+			// suggests --new-vm there — and in that case "already runs it" and "both
+			// servers bill" are both false, as is the destroy the message recommends
+			// (the provider 404s). This decision never touches the network, so it
+			// cannot know which side of the condition it is on; it states the condition.
+			name: "--new-vm forces a fresh box and prices it conditionally",
 			in: boxDecisionInput{Provider: deploy.ProviderDigitalOcean, NewVM: true, Identifier: "terroirconv",
 				ProjectUUID: proj, Deployments: []deploy.Deployment{live}},
 			wantAction: boxProvision, wantRecord: live.ID,
-			wantInMsg: []string{"--new-vm", "Both servers bill", "nuzur-cli destroy terroirconv-3fc793ce"},
+			wantInMsg: []string{
+				"--new-vm",
+				"is already recorded for it",
+				"If that server still exists it keeps billing alongside this one",
+				"nuzur-cli destroy terroirconv-3fc793ce",
+			},
+			wantNotInMsg: []string{"already runs it", "Both servers bill"},
 		},
 		{
 			// --new-vm is also the escape from a wedged mid-provision record.
@@ -400,6 +543,11 @@ func TestDecideDeployBox(t *testing.T) {
 			for _, want := range tc.wantInMsg {
 				if !strings.Contains(got.Message, want) {
 					t.Errorf("message %q missing %q", got.Message, want)
+				}
+			}
+			for _, absent := range tc.wantNotInMsg {
+				if strings.Contains(got.Message, absent) {
+					t.Errorf("message %q asserts %q, which this decision cannot know", got.Message, absent)
 				}
 			}
 		})

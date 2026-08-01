@@ -35,6 +35,9 @@ func (i *Implementation) AgentSelfTestCommand() cli.Command {
 			},
 		},
 		Action: func(c *cli.Context) error {
+			if err := requireNoArgs(c, "agent selftest"); err != nil {
+				return err
+			}
 			if err := i.Login(); err != nil {
 				return err
 			}

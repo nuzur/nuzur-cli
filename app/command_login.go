@@ -10,6 +10,9 @@ func (i *Implementation) LoginCommand() cli.Command {
 		Name:  "login",
 		Usage: i.localize.Localize("login_desc", "Will redirect to the browser if needed to login into nuzur"),
 		Action: func(c *cli.Context) error {
+			if err := requireNoArgs(c, "login"); err != nil {
+				return err
+			}
 			return i.Login()
 		},
 	}

@@ -69,11 +69,49 @@ func (t planTarget) extensionIdentifier() string {
 	return sqlPushPair.Local
 }
 
+// sqlPushProgress records how far a sql-push run got before it returned.
+//
+// The one boundary worth recording is the confirmation step. Everything up to it —
+// resolving the extension, reaching the agent, opening the connection, computing the
+// diff — happens without a single statement being sent, so a failure there leaves the
+// database untouched. Everything after it is sql-push issuing ExecuteQuery, where a
+// failure CAN leave a migration half-applied.
+//
+// Without this distinction the deploy assumed the worse of the two and told a user
+// whose extension lookup had timed out that "a statement that failed partway through
+// leaves the ones before it applied" — of a database that had received nothing.
+type sqlPushProgress struct {
+	// SQLIssued is true once the confirmation step has been answered YES, which is
+	// the point past which the extension starts executing statements. A REJECTED
+	// confirmation (a plan, or the destructive gate) leaves it false: that is the
+	// path on which nothing runs by design.
+	SQLIssued bool
+}
+
+// track wraps a decider so the confirmation step's answer is recorded as it is
+// given. A nil progress returns the decider untouched, so a caller that does not
+// care (a plan) passes nil rather than a discarded struct.
+func (p *sqlPushProgress) track(decide extensionrun.StepDecider) extensionrun.StepDecider {
+	if p == nil {
+		return decide
+	}
+	return func(prompt extensionrun.StepPrompt) (extensionrun.StepDecision, error) {
+		d, err := decide(prompt)
+		if err == nil && d.Confirm {
+			p.SQLIssued = true
+		}
+		return d, err
+	}
+}
+
 // sqlPushRun runs the SQL-push extension against a target, letting the caller
 // decide the confirmation step.
 //
 // The decider is the entire difference between applying a schema and planning one.
-func (i *Implementation) sqlPushRun(targets *runTargets, t planTarget, decide extensionrun.StepDecider) (*extensionrun.RunResult, error) {
+//
+// progress may be nil for callers that do not care how far the run got (a plan
+// executes nothing by construction).
+func (i *Implementation) sqlPushRun(targets *runTargets, t planTarget, decide extensionrun.StepDecider, progress *sqlPushProgress) (*extensionrun.RunResult, error) {
 	extID := t.extensionIdentifier()
 	ext, err := targets.er.FindExtensionByIdentifier(extID)
 	if err != nil {
@@ -83,6 +121,9 @@ func (i *Implementation) sqlPushRun(targets *runTargets, t planTarget, decide ex
 	if err != nil {
 		return nil, err
 	}
+	// Wrapped HERE, in the one function that knows how deploy talks to sql-push, so
+	// the boundary is recorded on every path through it rather than at each caller.
+	decide = progress.track(decide)
 	// sql-push returns no downloadable file, so this directory stays empty. It
 	// exists because Run requires an output path.
 	outDir, err := os.MkdirTemp("", "nuzur-sqlpush-*")

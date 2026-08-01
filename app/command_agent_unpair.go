@@ -26,6 +26,9 @@ func (i *Implementation) AgentUnpairCommand() cli.Command {
 			},
 		},
 		Action: func(c *cli.Context) error {
+			if err := requireNoArgs(c, "agent unpair"); err != nil {
+				return err
+			}
 			existing, err := readExistingPairingUUID()
 			if err != nil || existing == "" {
 				// Idempotent: if nothing's on disk, just make sure the secondary

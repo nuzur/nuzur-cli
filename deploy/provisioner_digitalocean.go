@@ -13,8 +13,15 @@ import (
 // the droplet on destroy.
 
 const (
-	doCLI         = "doctl"
-	doDefaultSize = "s-1vcpu-1gb"
+	doCLI = "doctl"
+	// 2 vCPU / 2GB. The generated Dockerfile compiles the Go app ON THE BOX, which
+	// OOMs on the 1GB shape (s-1vcpu-1gb): the build drove the droplet to a few MB
+	// available with no swap, it stopped answering SSH entirely, and the deploy had to
+	// be killed after 35 minutes — with provisioning, Docker, the database and the
+	// image pull already paid for, because the build is step 8 of 12. Every other
+	// provider's default is ≥2GB and --size's own help promises "a ~2GB instance per
+	// provider"; DigitalOcean was the one default that disagreed with it.
+	doDefaultSize = "s-2vcpu-2gb"
 	// Default region — --region is optional; every provider picks a sane default.
 	doDefaultRegion = "nyc3"
 	// Ubuntu 24.04 LTS (noble), supported to 2029. Not 26.04: it exists here

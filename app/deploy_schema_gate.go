@@ -31,6 +31,11 @@ type schemaGateResult struct {
 	// destructiveApplied marks a migration that deleted data WITH authorization, so
 	// the deployment history can say so.
 	destructiveApplied bool
+	// sqlIssued records that the run got past the confirmation step — the point at
+	// which sql-push starts executing statements. False means the failure happened
+	// while resolving the extension, reaching the database or computing the diff, and
+	// therefore that the database received nothing at all. See sqlPushProgress.
+	sqlIssued bool
 }
 
 // decideSchemaApply is the gate.

@@ -138,24 +138,36 @@ func TestClassify(t *testing.T) {
 		},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
-			kind, sev, obj, reason := classify(tc.sql)
-			if kind != tc.wantKind {
-				t.Errorf("kind = %q, want %q", kind, tc.wantKind)
+			c := classify(tc.sql)
+			if c.Kind != tc.wantKind {
+				t.Errorf("kind = %q, want %q", c.Kind, tc.wantKind)
 			}
-			if sev != tc.wantSev {
-				t.Errorf("severity = %q, want %q", sev, tc.wantSev)
+			if c.Severity != tc.wantSev {
+				t.Errorf("severity = %q, want %q", c.Severity, tc.wantSev)
 			}
-			if tc.wantObj != "" && obj != tc.wantObj {
-				t.Errorf("object = %q, want %q", obj, tc.wantObj)
+			if tc.wantObj != "" && c.Object != tc.wantObj {
+				t.Errorf("object = %q, want %q", c.Object, tc.wantObj)
 			}
 			// Every flagged statement must explain itself: the annotation is the
 			// whole point of flagging it.
-			if sev != SeverityNone && strings.TrimSpace(reason) == "" {
-				t.Errorf("severity %q carries no reason", sev)
+			if c.Severity != SeverityNone && strings.TrimSpace(c.Reason) == "" {
+				t.Errorf("severity %q carries no reason", c.Severity)
+			}
+			// The summary fields are the worst hazard, and a flagged statement always
+			// carries at least the one it was flagged for.
+			switch {
+			case c.Severity == SeverityNone && len(c.Hazards) != 0:
+				t.Errorf("an inert statement carries hazards: %+v", c.Hazards)
+			case c.Severity != SeverityNone && len(c.Hazards) == 0:
+				t.Errorf("severity %q carries no hazard entry", c.Severity)
+			case c.Severity != SeverityNone && c.Hazards[0].Severity != c.Severity:
+				t.Errorf("hazards are not worst-first: summary %q, first hazard %q", c.Severity, c.Hazards[0].Severity)
 			}
 			// A reason must never leak the internal {table} placeholder.
-			if strings.Contains(reason, "{table}") {
-				t.Errorf("reason leaked a placeholder: %q", reason)
+			for _, h := range append([]Hazard{{Reason: c.Reason}}, c.Hazards...) {
+				if strings.Contains(h.Reason, "{table}") {
+					t.Errorf("reason leaked a placeholder: %q", h.Reason)
+				}
 			}
 		})
 	}
@@ -253,6 +265,81 @@ DROP INDEX idx_a;`)
 
 	if !strings.Contains(p.TransactionalWarning(EngineMySQL), "ONE AT A TIME") {
 		t.Errorf("TransactionalWarning() = %q", p.TransactionalWarning(EngineMySQL))
+	}
+}
+
+// The statement is verbatim from the round-6 v3 plan. It costs three different
+// things at once, and the annotation used to name one of them: the reader was told
+// they would lose moisture_pct, and not that warehouse_bin — char(24) in the live
+// database — was being retyped to int, which coerces every value in it to 0. The
+// classification (destructive) was right; the human-readable reason was a third of
+// the answer, which is worse than a vague one because it reads as complete.
+func TestBundledAlterReportsEveryHazard(t *testing.T) {
+	const sql = "ALTER TABLE `lot` DROP KEY `idx_lot_process_organic`, DROP COLUMN `moisture_pct`, MODIFY COLUMN `warehouse_bin` int"
+
+	p := Analyze(sql)
+	if len(p.Statements) != 1 {
+		t.Fatalf("Analyze() = %d statements, want 1", len(p.Statements))
+	}
+	s := p.Statements[0]
+
+	// The gate still keys on the worst action: this is one destructive statement.
+	if s.Severity != SeverityDataLoss || s.Kind != KindDropColumn {
+		t.Errorf("summary = %q/%q, want %q/%q", s.Kind, s.Severity, KindDropColumn, SeverityDataLoss)
+	}
+	if !p.HasDestructive() || len(p.Destructive()) != 1 {
+		t.Errorf("destructive = %d statements, want 1", len(p.Destructive()))
+	}
+
+	if len(s.Hazards) != 3 {
+		t.Fatalf("hazards = %d, want 3 (index drop, column drop, retype): %+v", len(s.Hazards), s.Hazards)
+	}
+	// Worst first, whatever order the clauses appear in — the DROP KEY is written
+	// before the DROP COLUMN in this statement.
+	if s.Hazards[0].Severity != SeverityDataLoss {
+		t.Errorf("hazards are not worst-first: %+v", s.Hazards)
+	}
+
+	got := map[Severity]Hazard{}
+	for _, h := range s.Hazards {
+		got[h.Severity] = h
+	}
+	for sev, want := range map[Severity]string{
+		SeverityDataLoss:       "moisture_pct",
+		SeverityConstraintLoss: "index",
+		SeverityNarrowing:      "warehouse_bin",
+	} {
+		h, ok := got[sev]
+		if !ok {
+			t.Errorf("no %q hazard in %+v", sev, s.Hazards)
+			continue
+		}
+		if !strings.Contains(h.Reason, want) {
+			t.Errorf("%q hazard reads %q, missing %q", sev, h.Reason, want)
+		}
+	}
+	if obj := got[SeverityNarrowing].Object; obj != "lot.warehouse_bin" {
+		t.Errorf("retype hazard object = %q, want lot.warehouse_bin", obj)
+	}
+
+	// Every one of them reaches the reader, in the plan and in the called-out
+	// destructive block.
+	for _, render := range []struct {
+		name string
+		out  string
+	}{
+		{"RenderStatements", p.RenderStatements()},
+		{"RenderDestructive", p.RenderDestructive()},
+	} {
+		for _, want := range []string{
+			"-- HAZARD DELETES_DATA: drops moisture_pct from lot and every value in it",
+			"-- HAZARD INDEX_DROPPED: drops an index on lot",
+			"-- HAZARD CORRECTNESS: redefines warehouse_bin on lot; can truncate or fail depending on the values already stored",
+		} {
+			if !strings.Contains(render.out, want) {
+				t.Errorf("%s() is missing:\n  %s\ngot:\n%s", render.name, want, render.out)
+			}
+		}
 	}
 }
 

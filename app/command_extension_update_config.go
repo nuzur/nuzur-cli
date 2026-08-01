@@ -11,6 +11,9 @@ func (i *Implementation) ExtensionUpdateConfigCommand() cli.Command {
 		Name:  "extension-update-config",
 		Usage: i.localize.Localize("extension_update_config_desc", "Update the configuration of an extension"),
 		Action: func(c *cli.Context) error {
+			if err := requireNoArgs(c, "extension-update-config"); err != nil {
+				return err
+			}
 			err := i.Login()
 			if err != nil {
 				return err

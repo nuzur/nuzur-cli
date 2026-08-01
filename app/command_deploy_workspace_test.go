@@ -13,7 +13,7 @@ func TestResolveWorkspace(t *testing.T) {
 	abs := func(p string) string { a, _ := filepath.Abs(p); return a }
 
 	t.Run("flag wins", func(t *testing.T) {
-		got, err := resolveWorkspace("/tmp/ws", &deploy.Deployment{SourceDir: "/other"}, "sfapi")
+		got, err := resolveWorkspace("/tmp/ws", &deploy.Deployment{WorkspaceDir: "/other"}, "sfapi")
 		if err != nil {
 			t.Fatal(err)
 		}
@@ -22,7 +22,7 @@ func TestResolveWorkspace(t *testing.T) {
 		}
 	})
 	t.Run("prior record reused when no flag", func(t *testing.T) {
-		got, err := resolveWorkspace("", &deploy.Deployment{SourceDir: "/recorded/ws"}, "sfapi")
+		got, err := resolveWorkspace("", &deploy.Deployment{WorkspaceDir: "/recorded/ws"}, "sfapi")
 		if err != nil {
 			t.Fatal(err)
 		}

@@ -46,6 +46,9 @@ func (i *Implementation) ConnectCommand() cli.Command {
 			cli.BoolFlag{Name: "non-interactive", Usage: "Never prompt; requires --name, --driver and --dsn (and --provisioning-token if this machine isn't paired yet)"},
 		},
 		Action: func(c *cli.Context) error {
+			if err := requireNoArgs(c, "connect"); err != nil {
+				return err
+			}
 			return i.connectFlow(c)
 		},
 	}

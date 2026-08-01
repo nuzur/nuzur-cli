@@ -27,6 +27,9 @@ func (i *Implementation) ExtensionRunCommand() cli.Command {
 			i.describeSubcommand(""),
 		},
 		Action: func(c *cli.Context) error {
+			if err := requireNoArgs(c, "run-extension"); err != nil {
+				return err
+			}
 			return i.runExtensionFlow("", extRunFlagsFromContext(c))
 		},
 	}
@@ -43,6 +46,9 @@ func (i *Implementation) GoCodeGenCommand() cli.Command {
 			i.describeSubcommand(goCodeGenExtensionIdentifier),
 		},
 		Action: func(c *cli.Context) error {
+			if err := requireNoArgs(c, goCodeGenExtensionIdentifier); err != nil {
+				return err
+			}
 			return i.runExtensionFlow(goCodeGenExtensionIdentifier, extRunFlagsFromContext(c))
 		},
 	}

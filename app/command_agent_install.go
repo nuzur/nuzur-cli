@@ -15,6 +15,9 @@ func (i *Implementation) AgentInstallCommand() cli.Command {
 		Name:  "install",
 		Usage: i.localize.Localize("agent_install_desc", "Install the local agent as an OS-managed service (auto-start at login). Currently supports macOS and Linux."),
 		Action: func(c *cli.Context) error {
+			if err := requireNoArgs(c, "agent install"); err != nil {
+				return err
+			}
 			res, err := agent.Install()
 			if err != nil {
 				return err
@@ -31,6 +34,9 @@ func (i *Implementation) AgentUninstallCommand() cli.Command {
 		Name:  "uninstall",
 		Usage: i.localize.Localize("agent_uninstall_desc", "Stop the auto-start service and remove the installed unit file"),
 		Action: func(c *cli.Context) error {
+			if err := requireNoArgs(c, "agent uninstall"); err != nil {
+				return err
+			}
 			if err := agent.Uninstall(); err != nil {
 				return err
 			}
@@ -48,6 +54,9 @@ func (i *Implementation) AgentStatusCommand() cli.Command {
 		Name:  "status",
 		Usage: i.localize.Localize("agent_status_desc", "Show local pairing and auto-start service state"),
 		Action: func(c *cli.Context) error {
+			if err := requireNoArgs(c, "agent status"); err != nil {
+				return err
+			}
 			// Pairing state
 			fmt.Printf("Pairing\n")
 			if uuid, err := readExistingPairingUUID(); err == nil && uuid != "" {

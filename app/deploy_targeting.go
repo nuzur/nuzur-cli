@@ -56,6 +56,29 @@ func pickBoxAgent(deps []deploy.Deployment, host string) string {
 	return latest.LocalAgentUUID
 }
 
+// knownAgentUUID is the local agent this deploy already knows it will use, before
+// pairing has been confirmed — "" only when nothing on this machine has ever seen
+// an agent for this box.
+//
+// It exists because the deployment record is rewritten wholesale as soon as the box
+// exists (step 6b), long before step 12 learns the agent from the pairing wait. A
+// re-deploy therefore used to blank a perfectly well-known agent uuid for the whole
+// middle of the run. The three sources are the same ones the run itself uses, in the
+// same order of authority: the prior record for this host+identifier, the box's
+// shared agent (a box has one, serving every project on it), and the record of a box
+// being adopted after its own deploy died in flight.
+func knownAgentUUID(prior *deploy.Deployment, boxAgentUUID string, adopted *deploy.Deployment) string {
+	priorAgent := ""
+	if prior != nil {
+		priorAgent = prior.LocalAgentUUID
+	}
+	adoptedAgent := ""
+	if adopted != nil {
+		adoptedAgent = adopted.LocalAgentUUID
+	}
+	return firstNonEmpty(priorAgent, boxAgentUUID, adoptedAgent)
+}
+
 // boxAction is what a deploy does about the SERVER it needs, before anything is
 // generated, provisioned or billed.
 type boxAction int
@@ -203,7 +226,15 @@ func decideDeployBox(in boxDecisionInput) (boxDecision, error) {
 	}
 
 	if in.NewVM {
-		where := fmt.Sprintf("deployment %s%s already runs it", rec.ID, hostSuffix(rec.Host))
+		// Deliberately conditional. This message used to assert that the recorded box
+		// "already runs it" and that "Both servers bill" — neither of which the decision
+		// is in a position to know, and both of which are false in the case --new-vm
+		// exists for: the CLI has just refused a re-deploy because that box did not
+		// answer, and told the user to re-run with --new-vm. Reaching the box to find
+		// out costs an SSH round trip this decision does not make (it is taken before
+		// anything touches the network), so the honest form states the condition
+		// instead of guessing which side of it we are on.
+		where := fmt.Sprintf("deployment %s%s is already recorded for it", rec.ID, hostSuffix(rec.Host))
 		if strings.TrimSpace(rec.Host) == "" {
 			where = fmt.Sprintf("deployment %s was left mid-provision and may have leaked a VM", rec.ID)
 		}
@@ -211,8 +242,8 @@ func decideDeployBox(in boxDecisionInput) (boxDecision, error) {
 			Action: boxProvision,
 			Record: rec,
 			Message: fmt.Sprintf(
-				"--new-vm: creating a NEW %s VM for identifier %q even though %s. Both servers bill — remove the old one with `nuzur-cli destroy %s`.",
-				provider, in.Identifier, where, rec.ID),
+				"--new-vm: creating a NEW %s VM for identifier %q even though %s. If that server still exists it keeps billing alongside this one — check with `nuzur-cli destroy %s`, which removes it, or your %s console.",
+				provider, in.Identifier, where, rec.ID, provider),
 		}, nil
 	}
 
@@ -263,6 +294,61 @@ func reusedBoxUnreachableError(rec *deploy.Deployment, provider deploy.Provider,
 			"  - remove the stale record and its VM with `nuzur-cli destroy %s`, or\n"+
 			"  - re-run with --new-vm to provision a fresh server (which bills for a second one).",
 		provider, identifier, rec.ID, rec.Host, cause, rec.Host, rec.ID)
+}
+
+// applyDeploymentSelector adopts a recorded deployment's targeting into the settings
+// a real deploy runs from, so `--deployment <id>` selects a box the way it already
+// selects a database for --plan.
+//
+// It exists because --plan's "you can paste this" command was unrunnable. The record
+// carries the project, the provider, the host and the identifier — which is why the
+// user never typed them — and a suggestion that drops all four either fails outright
+// or, on a TTY, prompts for a project and applies to something else entirely while
+// carrying --allow-destructive. The flag's own help calls it "the most reliable
+// selector"; this makes that true of `deploy` and not only of `deploy --plan`.
+//
+// Only fills what the user did not state: an explicit flag always wins, so the record
+// is a default, never an override. Returns what it adopted, for the caller to print —
+// targeting resolved in silence is how a deploy lands somewhere its operator did not
+// expect.
+func applyDeploymentSelector(s *deploySettings, rec *deploy.Deployment, isSet func(string) bool) ([]string, error) {
+	if rec == nil {
+		return nil, nil
+	}
+	// An external database (--db-dsn / --connection) is not recoverable from the
+	// record: it stores that the database was external, never the DSN or the
+	// connection uuid. Adopting the rest and silently self-hosting a NEW database on
+	// the box is the one outcome here that would destroy something.
+	if rec.ExternalDB && !isSet("db-dsn") && !isSet("connection") &&
+		strings.TrimSpace(s.DBDSN) == "" && strings.TrimSpace(s.Connection) == "" {
+		return nil, fmt.Errorf(
+			"deployment %s runs against an EXTERNAL database, and the record does not store its credentials "+
+				"(only that it is external) — re-run with the same --db-dsn or --connection you deployed it with. "+
+				"Without one, this deploy would self-host a new, empty database on the box instead",
+			rec.ID)
+	}
+
+	var adopted []string
+	take := func(flag, name, from string, assign func()) {
+		if isSet(flag) || strings.TrimSpace(from) == "" {
+			return
+		}
+		assign()
+		adopted = append(adopted, name+"="+from)
+	}
+	take("project", "project", rec.ProjectUUID, func() { s.Project = rec.ProjectUUID })
+	take("identifier", "identifier", rec.Identifier, func() { s.Identifier = rec.Identifier })
+	take("provider", "provider", string(rec.Provider), func() { s.Provider = string(rec.Provider) })
+	take("host", "host", rec.Host, func() { s.Host = rec.Host })
+	take("user", "user", rec.User, func() { s.User = rec.User })
+	take("db", "db", string(rec.DBEngine), func() { s.DB = string(rec.DBEngine) })
+	take("domain", "domain", rec.Domain, func() { s.Domain = rec.Domain })
+	take("source-dir", "source-dir", rec.WorkspaceDir, func() { s.SourceDir = rec.WorkspaceDir })
+	if !isSet("port") && rec.Port != 0 {
+		s.Port = rec.Port
+		adopted = append(adopted, fmt.Sprintf("port=%d", rec.Port))
+	}
+	return adopted, nil
 }
 
 // deploySchemaName derives the schema that the diff engine, the data-manager deep

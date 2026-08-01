@@ -15,6 +15,9 @@ func (i *Implementation) ExtensionScaffoldCommand() cli.Command {
 		Name:  "scaffold-extension",
 		Usage: i.localize.Localize("extension_scaffold_desc", "Scaffold the code for an extension"),
 		Action: func(c *cli.Context) error {
+			if err := requireNoArgs(c, "scaffold-extension"); err != nil {
+				return err
+			}
 			err := i.Login()
 			if err != nil {
 				return err

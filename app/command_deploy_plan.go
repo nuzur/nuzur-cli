@@ -346,7 +346,7 @@ func (i *Implementation) computeSchemaPlan(targets *runTargets, t planTarget) (s
 
 	res, err := i.sqlPushRun(targets, t, func(extensionrun.StepPrompt) (extensionrun.StepDecision, error) {
 		return extensionrun.StepDecision{Confirm: false, Reason: "dry run (--plan)"}, nil
-	})
+	}, nil)
 	// A cancelled execution is the expected outcome here: the rejection landed and
 	// nothing ran. Anything else with an error is a real failure.
 	if err != nil && !errors.Is(err, extensionrun.ErrExecutionCancelled) {
@@ -416,15 +416,26 @@ func reviewStatusName(s nemgen.ProjectVersionReviewStatus) string {
 // invocation the user actually typed, minus the plan-only flags, plus
 // --allow-destructive when the plan needs it.
 //
-// Concrete beats a generic "pass --allow-destructive": the user can paste this.
+// Concrete beats a generic "pass --allow-destructive": the user can paste this. Which
+// is precisely why the SELECTOR has to survive. --deployment used to be dropped as
+// "meaningless outside a plan", so planning with `--plan --deployment r6box-c3d31228
+// --version <v3>` suggested `nuzur-cli deploy --version <v3> --allow-destructive`:
+// no project, no provider, no identifier, none of which the user had typed because
+// the record carried them. Run verbatim that fails with "--host is required for the
+// ssh provider" — or, worse, on a TTY prompts for a project and aims a command
+// carrying --allow-destructive at a database nobody planned against. --deployment is
+// now a selector for a real deploy too (see applyDeploymentSelector), so keeping it
+// is what makes the suggestion target exactly what was planned.
 func rerunCommand(argv []string, addAllowDestructive bool) string {
 	if len(argv) == 0 {
 		return "nuzur-cli deploy"
 	}
 	skip := map[string]bool{"--plan": true, "--json": true}
-	// Flags that take a value and are meaningless outside a plan; their value has
-	// to be dropped along with the flag.
-	skipWithValue := map[string]bool{"--deployment": true, "--local-agent": true, "--local-agent-connection": true}
+	// Flags that take a value and are genuinely plan-only; their value has to be
+	// dropped along with the flag. Both name a database directly rather than through
+	// a record, and a deploy has no use for either — it reaches its database through
+	// the box it is deploying to.
+	skipWithValue := map[string]bool{"--local-agent": true, "--local-agent-connection": true}
 
 	out := []string{shellQuote(baseName(argv[0]))}
 	hasAllow := false

@@ -13,6 +13,9 @@ func (i *Implementation) ExtensionCheckLimitCommand() cli.Command {
 		Name:  "extension-limit",
 		Usage: i.localize.Localize("extension_check_limit_desc", "Check monthly execution limits for a Pro extension"),
 		Action: func(c *cli.Context) error {
+			if err := requireNoArgs(c, "extension-limit"); err != nil {
+				return err
+			}
 			err := i.Login()
 			if err != nil {
 				return err

@@ -218,14 +218,40 @@ func TestRerunCommand(t *testing.T) {
 			want: "nuzur-cli deploy --host prod",
 		},
 		{
+			// --deployment is the selector that made the plan resolvable, and it works
+			// on a real deploy too: dropping it produced a command that targeted
+			// nothing (see the doc comment on rerunCommand).
+			name: "the deployment selector survives, separated",
+			argv: []string{"nuzur-cli", "deploy", "--plan", "--deployment", "acme-3f2a1c", "--version", "v_8"},
+			want: "nuzur-cli deploy --deployment acme-3f2a1c --version v_8",
+		},
+		{
+			name: "the deployment selector survives, inline",
+			argv: []string{"nuzur-cli", "deploy", "--plan", "--deployment=acme-3f2a1c", "--version", "v_8"},
+			want: "nuzur-cli deploy --deployment=acme-3f2a1c --version v_8",
+		},
+		{
+			// The exact round-6 invocation, and the whole point of the fix: what this
+			// used to suggest was `nuzur-cli deploy --version 63fc3f92 --allow-destructive`,
+			// which has no project, no provider and no identifier — it fails with
+			// "--host is required for the ssh provider", or on a TTY prompts for a
+			// project and aims --allow-destructive somewhere nobody planned.
+			name:     "a destructive plan is pasteable and still targets the deployment",
+			argv:     []string{"nuzur-cli", "deploy", "--plan", "--deployment", "r6box-c3d31228", "--version", "63fc3f92"},
+			addAllow: true,
+			want:     "nuzur-cli deploy --deployment r6box-c3d31228 --version 63fc3f92 --allow-destructive",
+		},
+		{
+			// --local-agent/--local-agent-connection stay dropped: they name a database
+			// directly, and a deploy reaches its database through the box instead.
 			// The value has to go with the flag, or it lands as a stray argument.
-			name: "a plan selector drops its separated value too",
-			argv: []string{"nuzur-cli", "deploy", "--plan", "--deployment", "acme-3f2a1c", "--host", "prod"},
+			name: "a plan-only selector drops its separated value too",
+			argv: []string{"nuzur-cli", "deploy", "--plan", "--local-agent", "agent-1", "--host", "prod"},
 			want: "nuzur-cli deploy --host prod",
 		},
 		{
-			name: "a plan selector drops its inline value too",
-			argv: []string{"nuzur-cli", "deploy", "--plan", "--deployment=acme-3f2a1c", "--host", "prod"},
+			name: "a plan-only selector drops its inline value too",
+			argv: []string{"nuzur-cli", "deploy", "--plan", "--local-agent-connection=conn-1", "--host", "prod"},
 			want: "nuzur-cli deploy --host prod",
 		},
 		{
@@ -350,7 +376,12 @@ ALTER TABLE "public"."orders" DROP COLUMN "legacy_ref";`)
 		`{"index":1,"sql":"CREATE TABLE \"clients\" (uuid UUID PRIMARY KEY)","kind":"create_table","object":"clients"},` +
 		`{"index":2,"sql":"ALTER TABLE \"public\".\"orders\" DROP COLUMN \"legacy_ref\"","kind":"drop_column",` +
 		`"severity":"data_loss","object":"public.orders.legacy_ref",` +
-		`"reason":"drops legacy_ref from public.orders and every value in it"}],` +
+		`"reason":"drops legacy_ref from public.orders and every value in it",` +
+		// Every hazard the statement carries, worst first. A single ALTER can lose
+		// several different things at once, and the summary fields above are only the
+		// worst of them; an agent reading this needs all of them.
+		`"hazards":[{"severity":"data_loss","kind":"drop_column","object":"public.orders.legacy_ref",` +
+		`"reason":"drops legacy_ref from public.orders and every value in it"}]}],` +
 		`"apply_sql":"CREATE TABLE \"clients\" (uuid UUID PRIMARY KEY);\nALTER TABLE \"public\".\"orders\" DROP COLUMN \"legacy_ref\";",` +
 		`"transactional":false,"applied":false,` +
 		`"rerun_command":"nuzur-cli deploy --host prod --allow-destructive"}`

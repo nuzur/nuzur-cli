@@ -27,37 +27,64 @@ type Deployment struct {
 	// Provisioning marks a deployment whose VM is still being created. It is set
 	// before the create call and cleared once the deploy completes, so a record left
 	// with it set is a deploy that died in flight and may have leaked a VM.
-	Provisioning       bool      `json:"provisioning,omitempty"`
-	Region             string    `json:"region,omitempty"` // cloud region the VM lives in
-	Host               string    `json:"host"`
-	User               string    `json:"user"`
-	Port               int       `json:"port"`
-	Identifier         string    `json:"identifier"`
-	ProjectUUID        string    `json:"project_uuid"`
-	ProjectVersionUUID string    `json:"project_version_uuid"`
-	LocalAgentUUID     string    `json:"local_agent_uuid"`
-	ConnUUID           string    `json:"conn_uuid,omitempty"`
-	DBEngine           DBEngine  `json:"db_engine"`
-	ExternalDB         bool      `json:"external_db,omitempty"` // --db-dsn: an existing DB, not self-hosted (never dropped on destroy)
-	SourceDir          string    `json:"source_dir,omitempty"`  // persistent app-source workspace (reused on re-deploy)
-	Domain             string    `json:"domain,omitempty"`      // set when deployed with --domain (HTTPS site)
-	APIURL             string    `json:"api_url,omitempty"`     // resolved front-door URL
-	PublicURL          string    `json:"public_url,omitempty"`  // same as APIURL; explicit alias
-	DataManagerURL     string    `json:"data_manager_url,omitempty"`
-	CreatedAt          time.Time `json:"created_at"`
+	Provisioning       bool     `json:"provisioning,omitempty"`
+	Region             string   `json:"region,omitempty"` // cloud region the VM lives in
+	Host               string   `json:"host"`
+	User               string   `json:"user"`
+	Port               int      `json:"port"`
+	Identifier         string   `json:"identifier"`
+	ProjectUUID        string   `json:"project_uuid"`
+	ProjectVersionUUID string   `json:"project_version_uuid"`
+	LocalAgentUUID     string   `json:"local_agent_uuid"`
+	ConnUUID           string   `json:"conn_uuid,omitempty"`
+	DBEngine           DBEngine `json:"db_engine"`
+	ExternalDB         bool     `json:"external_db,omitempty"` // --db-dsn: an existing DB, not self-hosted (never dropped on destroy)
+	// WorkspaceDir is the persistent app-source WORKSPACE ROOT (e.g.
+	// ./nuzur-<identifier>), the directory resolveWorkspace reuses on a
+	// re-deploy. Distinct from Spec.SourceDir, which is the app directory
+	// INSIDE the workspace (where the Dockerfile lives) — recording that here
+	// instead once sent a retried deploy generating into its own app dir. The
+	// json key stays source_dir so existing records keep working.
+	WorkspaceDir   string    `json:"source_dir,omitempty"`
+	Domain         string    `json:"domain,omitempty"`     // set when deployed with --domain (HTTPS site)
+	APIURL         string    `json:"api_url,omitempty"`    // resolved front-door URL
+	PublicURL      string    `json:"public_url,omitempty"` // same as APIURL; explicit alias
+	DataManagerURL string    `json:"data_manager_url,omitempty"`
+	CreatedAt      time.Time `json:"created_at"`
 }
 
 // SaveDeployment writes (or overwrites) the deployment's state file, 0600.
+//
+// Timestamps are normalized to UTC HERE rather than at each call site. They used to
+// be written in whatever zone the caller happened to build them in — the
+// pre-provision record used time.Now().UTC() and the post-provision one time.Now()
+// — so two records written eleven minutes apart in one session listed six hours
+// apart, with the newer one reading as the older. Ordering was never affected
+// (time.Time comparisons are absolute), but "which of these is the stale one" is
+// exactly the question that column is read to answer. One zone on disk; converted to
+// local once, at print time.
 func SaveDeployment(d *Deployment) error {
 	dir := files.DeploymentsDir()
 	if err := os.MkdirAll(dir, 0o700); err != nil {
 		return fmt.Errorf("creating deployments dir: %w", err)
 	}
+	d.CreatedAt = d.CreatedAt.UTC()
 	data, err := json.MarshalIndent(d, "", "  ")
 	if err != nil {
 		return fmt.Errorf("marshaling deployment: %w", err)
 	}
-	if err := os.WriteFile(files.DeploymentFilePath(d.ID), append(data, '\n'), 0o600); err != nil {
+	// Write-to-temp + rename, not an in-place write: this file can be the only
+	// handle on a billing VM, and a write interrupted midway used to leave it
+	// truncated — which ListDeployments then skipped, hiding the VM from
+	// `deploy list` and from the reuse decision. Rename is atomic on the same
+	// filesystem, so the record is always either the old version or the new one.
+	path := files.DeploymentFilePath(d.ID)
+	tmp := path + ".tmp"
+	if err := os.WriteFile(tmp, append(data, '\n'), 0o600); err != nil {
+		return fmt.Errorf("writing deployment state: %w", err)
+	}
+	if err := os.Rename(tmp, path); err != nil {
+		os.Remove(tmp)
 		return fmt.Errorf("writing deployment state: %w", err)
 	}
 	return nil
@@ -95,14 +122,20 @@ func ListDeployments() ([]Deployment, error) {
 			continue
 		}
 		data, err := os.ReadFile(filepath.Join(dir, e.Name()))
-		if err != nil {
-			continue
+		if err == nil {
+			var d Deployment
+			if err = json.Unmarshal(data, &d); err == nil {
+				out = append(out, d)
+				continue
+			}
 		}
-		var d Deployment
-		if err := json.Unmarshal(data, &d); err != nil {
-			continue
-		}
-		out = append(out, d)
+		// A record that cannot be read is not skippable noise: it may be the
+		// only handle on a running, billing VM, and silently omitting it makes
+		// that VM invisible to `deploy list` and to the deploy reuse decision.
+		// Surface it and keep listing the rest.
+		fmt.Fprintf(os.Stderr,
+			"warning: deployment record %s is unreadable (%v) — it is NOT listed below, but whatever it recorded (possibly a running VM) still exists; inspect or remove the file\n",
+			filepath.Join(dir, e.Name()), err)
 	}
 	sort.Slice(out, func(i, j int) bool { return out[i].CreatedAt.After(out[j].CreatedAt) })
 	return out, nil

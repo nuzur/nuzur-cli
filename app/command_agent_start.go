@@ -54,6 +54,9 @@ func (i *Implementation) AgentStartCommand() cli.Command {
 			},
 		},
 		Action: func(c *cli.Context) error {
+			if err := requireNoArgs(c, "agent start"); err != nil {
+				return err
+			}
 			if c.Bool("reset-db") {
 				_ = os.Remove(files.LocalAgentDSNFilePath())
 				_ = os.Remove(files.LocalAgentDriverFilePath())

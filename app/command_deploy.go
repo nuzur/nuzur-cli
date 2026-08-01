@@ -67,7 +67,7 @@ func (i *Implementation) DeployCommand() cli.Command {
 			cli.BoolFlag{Name: "print-config", Usage: "Print the effective deploy config (as JSON) resolved from flags + --deploy-config, then exit without deploying. Use it to snapshot an invocation into a reusable deploy-config file."},
 			cli.BoolFlag{Name: "plan", Usage: "Dry run: print the exact SQL this deploy would apply to the target database, then exit. Provisions nothing, generates nothing, issues no token, and writes nothing to the box or to nuzur. Use it to see what a deploy would change — including anything it would DROP — before running one."},
 			cli.BoolFlag{Name: "json", Usage: "With --plan: emit the plan as JSON on stdout (for agents and CI)."},
-			cli.StringFlag{Name: "deployment", Usage: "With --plan: plan against a recorded deployment by id (see 'nuzur-cli deploy list'). The most reliable selector — the record carries the project, the agent, the connection and the engine, so nothing has to be re-derived from flags. --project is optional alongside it, and only needed to override what the record says."},
+			cli.StringFlag{Name: "deployment", Usage: "Target a recorded deployment by id (see 'nuzur-cli deploy list'). The most reliable selector — the record carries the project, the provider, the box, the identifier, the agent, the connection and the engine, so nothing has to be re-derived from flags. With --plan it selects the database to diff; on a real deploy it selects the box to deploy to. Every other flag overrides what the record says."},
 			cli.StringFlag{Name: "local-agent", Usage: "With --plan: the local agent uuid to plan through, for when this machine has no record of the deployment (requires --local-agent-connection)."},
 			cli.StringFlag{Name: "local-agent-connection", Usage: "With --plan: the agent connection uuid to plan against (requires --local-agent)."},
 			cli.BoolFlag{Name: "allow-destructive", Usage: "Authorize a schema apply that DELETES DATA (DROP TABLE/SCHEMA, DROP COLUMN, TRUNCATE). Without it, a deploy whose schema plan deletes data applies nothing and exits non-zero. Flag-only — never read from a --deploy-config file. Run --plan first to see what would be dropped."},
@@ -78,6 +78,12 @@ func (i *Implementation) DeployCommand() cli.Command {
 		},
 		Subcommands: []cli.Command{i.DeployListCommand()},
 		Action: func(c *cli.Context) error {
+			// Checked before anything is resolved, generated or provisioned:
+			// `deploy --custom false --allow-destructive` used to run a real deploy
+			// with the authorization gate silently dropped. See command_args.go.
+			if err := requireNoArgs(c, "deploy"); err != nil {
+				return err
+			}
 			return i.runDeploy(c)
 		},
 	}
@@ -197,6 +203,27 @@ func (i *Implementation) runDeploy(c *cli.Context) (rerr error) {
 	s, err := resolveDeploySettings(c)
 	if err != nil {
 		return err
+	}
+	// --deployment <id>: take the targeting from a recorded deployment, the same
+	// selector --plan uses. Skipped for --plan, which resolves the record itself (it
+	// targets a DATABASE, and can legitimately plan a record this project's flags
+	// would not reach). See applyDeploymentSelector for what is adopted and why the
+	// selector had to work here at all.
+	if depID := strings.TrimSpace(c.String("deployment")); depID != "" && !c.Bool("plan") {
+		deps, _ := deploy.ListDeployments()
+		rec := findDeploymentByID(deps, depID)
+		if rec == nil {
+			return fmt.Errorf("no deployment %q on this machine (see `nuzur-cli deploy list`)", depID)
+		}
+		adopted, err := applyDeploymentSelector(s, rec, c.IsSet)
+		if err != nil {
+			return err
+		}
+		if len(adopted) > 0 {
+			outputtools.PrintlnColoredErr(fmt.Sprintf(
+				"Deploying to deployment %s, taken from its record: %s. Any flag you passed overrides it.",
+				rec.ID, strings.Join(adopted, ", ")), outputtools.Blue)
+		}
 	}
 	// --print-config: emit the resolved deploy spec and exit without deploying, so
 	// a user can snapshot an invocation into a reusable deploy-config file.
@@ -692,8 +719,12 @@ func (i *Implementation) runDeploy(c *cli.Context) (rerr error) {
 			ProjectUUID:          targets.project.Uuid,
 			ProjectVersionUUID:   targets.projectVersion.Uuid,
 			DBEngine:             dbEngine,
-			SourceDir:            sourceRoot,
-			CreatedAt:            time.Now().UTC(),
+			// The workspace ROOT, not sourceRoot: resolveWorkspace reads this
+			// back on the next run, and a deploy that died after this write
+			// used to hand it the app dir — nesting the retry's generated
+			// workspace inside the previous app.
+			WorkspaceDir: workspaceDir,
+			CreatedAt:    time.Now().UTC(),
 		}
 		if err := deploy.SaveDeployment(pending); err != nil {
 			return fmt.Errorf("recording the deploy before creating the server: %w", err)
@@ -777,6 +808,15 @@ func (i *Implementation) runDeploy(c *cli.Context) (rerr error) {
 	// interrupted), the record still carries the provider instance id, so
 	// `nuzur-cli destroy <id>` can tear the VM down instead of orphaning a billing
 	// server nuzur has no memory of. Step 12 fills in the rest (agent, URLs).
+	//
+	// The record a decision was taken from is only this deployment's when the box is
+	// being REUSED. A --new-vm run also carries one — the box it is billing alongside
+	// — and that box's agent belongs to that box, not to the fresh VM being created
+	// here.
+	var adoptedRecord *deploy.Deployment
+	if reuseBox {
+		adoptedRecord = box.Record
+	}
 	dep := &deploy.Deployment{
 		ID:                 depID,
 		Provider:           provider,
@@ -793,18 +833,29 @@ func (i *Implementation) runDeploy(c *cli.Context) (rerr error) {
 		ConnUUID:           connUUID,
 		DBEngine:           dbEngine,
 		ExternalDB:         externalDB,
-		SourceDir:          workspaceDir,
+		WorkspaceDir:       workspaceDir,
 		Domain:             s.Domain,
-		CreatedAt:          time.Now(),
+		// Carried forward for the same reason as ProviderResourceName above: this
+		// struct overwrites the record wholesale, and blanking the agent uuid for the
+		// ~20 minutes between here and step 12 is not a cosmetic loss. It makes
+		// `--plan --deployment <id>` fail with a false diagnosis ("the deploy that
+		// created it did not finish pairing" — it had), and if the re-deploy is
+		// interrupted in that window the loss is permanent: pickPriorDeployment skips
+		// agentless records, so the next deploy mints a SECOND record for the same
+		// host+identifier, which is what makes destroy's isLast refuse to delete the VM.
+		// Empty on a genuine first deploy, where no agent is known yet — that record
+		// correctly reads as "died before pairing" until step 12 fills it in.
+		LocalAgentUUID: knownAgentUUID(prior, reuseAgentUUID, adoptedRecord),
+		CreatedAt:      time.Now().UTC(),
 	}
 	switch {
 	case prior != nil:
 		dep.CreatedAt = prior.CreatedAt
 		carryForwardProvisioning(dep, prior, provider)
-	case reuseBox && box.Record != nil:
+	case adoptedRecord != nil:
 		// Adopting a died-in-flight record (no agent, so `prior` skipped it): its
 		// creation time is when this deployment really started.
-		dep.CreatedAt = box.Record.CreatedAt
+		dep.CreatedAt = adoptedRecord.CreatedAt
 	}
 	if err := deploy.SaveDeployment(dep); err != nil {
 		return err
@@ -992,10 +1043,13 @@ func (i *Implementation) runDeploy(c *cli.Context) (rerr error) {
 			outcome.destructiveCount = len(gate.plan.Destructive())
 			outcome.rerunCommand = rerunCommand(os.Args, true)
 		} else {
-			// Not "skipped": a statement reached the database and errored. Skipping is
-			// what the gate does, and calling both the same thing is how the louder
-			// problem ended up sounding like the quieter one.
+			// Not "skipped": skipping is what the gate does, and calling both the same
+			// thing is how the louder problem ended up sounding like the quieter one.
 			outputtools.PrintlnColoredErr("Schema apply FAILED: "+err.Error(), outputtools.Red)
+			// Whether a statement ever reached the database. A failure while resolving
+			// the extension, reaching the agent or computing the diff sent nothing, and
+			// used to be reported as a migration that had died partway through.
+			outcome.schemaNeverStarted = !gate.sqlIssued
 			// Whether that failure took the rest of the migration back with it. Only
 			// claimed when the plan that was attempted is in hand — an error before the
 			// confirmation step leaves gate.plan empty, and an empty plan must not be
@@ -1328,7 +1382,11 @@ func deployPushTarget(agentUUID, connUUID, schema, teamConnUUID, teamConnStore s
 // tables and rows in it. That is what the gate is for.
 func (i *Implementation) applySchema(targets *runTargets, t planTarget, allowDestructive bool, gate *schemaGateResult) error {
 	outputtools.PrintlnColoredErr("Applying schema to the database...", outputtools.Blue)
-	_, err := i.sqlPushRun(targets, t, i.schemaApplyDecider(allowDestructive, gate))
+	var progress sqlPushProgress
+	_, err := i.sqlPushRun(targets, t, i.schemaApplyDecider(allowDestructive, gate), &progress)
+	// Whether anything was actually sent. Recorded even on success, so the caller
+	// never has to infer it from the error.
+	gate.sqlIssued = progress.SQLIssued
 	if gate.blocked {
 		// The extension cancelled because we rejected it, which is the intended
 		// outcome — report it as a decision, not as the cancellation it looks like.
@@ -1342,6 +1400,9 @@ func (i *Implementation) DeployListCommand() cli.Command {
 		Name:  "list",
 		Usage: i.localize.Localize("deploy_list_desc", "List deployments created on this machine"),
 		Action: func(c *cli.Context) error {
+			if err := requireNoArgs(c, "deploy list"); err != nil {
+				return err
+			}
 			deps, err := deploy.ListDeployments()
 			if err != nil {
 				return err
@@ -1351,8 +1412,12 @@ func (i *Implementation) DeployListCommand() cli.Command {
 				return nil
 			}
 			for _, d := range deps {
+				// .Local() on every row: records are persisted in UTC (see
+				// SaveDeployment), so the conversion belongs here — once, uniformly —
+				// rather than being inherited from whatever zone each record was built
+				// in. Without it two records minutes apart could list hours apart.
 				fmt.Printf("%s  %-10s  %s@%s  agent=%s  %s\n",
-					d.ID, d.Provider, d.User, d.Host, d.LocalAgentUUID, d.CreatedAt.Format("2006-01-02 15:04"))
+					d.ID, d.Provider, d.User, d.Host, d.LocalAgentUUID, d.CreatedAt.Local().Format("2006-01-02 15:04"))
 			}
 			return nil
 		},
@@ -1377,6 +1442,12 @@ func (i *Implementation) DestroyCommand() cli.Command {
 			if !c.Args().Present() {
 				return fmt.Errorf("missing deployment-id (see `nuzur-cli deploy list`)")
 			}
+			// Exactly one. A second positional means a flag was written in a form the
+			// parser stopped at, and destroy is not a command to run with flags
+			// silently dropped — --keep-vm and --purge are both in that set.
+			if err := requireOneArg(c, "destroy", "the deployment id"); err != nil {
+				return err
+			}
 			id := c.Args().First()
 			dep, err := deploy.LoadDeployment(id)
 			if err != nil {
@@ -1386,6 +1457,18 @@ func (i *Implementation) DestroyCommand() cli.Command {
 				return err
 			}
 			ctx := context.Background()
+
+			// What actually happened, filled in as it happens and rendered at the end.
+			// The summary used to be assembled from what destroy set out to do, which is
+			// how a teardown against a box that no longer existed reported "server
+			// cleaned up" and "The database was kept".
+			outcome := destroyOutcome{
+				ID:           id,
+				Provider:     dep.Provider,
+				Provisioning: dep.Provisioning,
+				Purge:        c.Bool("purge"),
+				ExternalDB:   dep.ExternalDB,
+			}
 
 			// Read once and share: isLast, the agent resolution below and the
 			// connection re-publish all ask questions of the same list, and they must
@@ -1403,6 +1486,7 @@ func (i *Implementation) DestroyCommand() cli.Command {
 					break
 				}
 			}
+			outcome.IsLast = isLast
 
 			// The agent to act on is the BOX's agent, not necessarily this record's.
 			// A deploy that died before pairing leaves a record with no agent uuid
@@ -1433,6 +1517,7 @@ func (i *Implementation) DestroyCommand() cli.Command {
 				purge := c.Bool("purge")
 				if purge && dep.ExternalDB {
 					purge = false
+					outcome.Purge = false
 					outputtools.PrintlnColoredErr("Note: this deployment uses an external database (--db-dsn); --purge is ignored (managed elsewhere).", outputtools.Yellow)
 				}
 				script, rerr := deploy.RenderTeardown(deploy.TeardownParams{
@@ -1461,7 +1546,10 @@ func (i *Implementation) DestroyCommand() cli.Command {
 				runner.Sudo = c.Bool("sudo") || target.User != "root"
 				outputtools.PrintlnColoredErr("Cleaning up the server (this project's service, container, config"+purgeSuffix(c.Bool("purge"))+")...", outputtools.Blue)
 				if err := runner.RunScript(ctx, script); err != nil {
+					outcome.Server = teardownFailed
 					outputtools.PrintlnColoredErr(fmt.Sprintf("warning: server teardown failed (%v) — cleaning up nuzur state anyway. Re-run `nuzur-cli destroy %s` once the box is reachable, or use --skip-server.", err, id), outputtools.Yellow)
+				} else {
+					outcome.Server = teardownDone
 				}
 			}
 
@@ -1540,11 +1628,14 @@ func (i *Implementation) DestroyCommand() cli.Command {
 			// on-box teardown would have. Gating the delete on it made the flag you'd
 			// reach for on a broken box the one that silently leaks it. --keep-vm is
 			// the way to preserve a VM.
-			vmDeleted := false
+			if isLast && c.Bool("keep-vm") && dep.Provider != deploy.ProviderSSH && dep.Provider != "" {
+				outcome.VM = vmKept
+			}
 			if isLast && !c.Bool("keep-vm") &&
 				dep.Provider != deploy.ProviderSSH && dep.Provider != "" &&
 				(dep.ProviderInstanceID != "" || dep.ProviderResourceName != "") {
 				if provisioner, perr := deploy.NewProvisioner(dep.Provider); perr != nil {
+					outcome.VM = vmDeleteFailed
 					outputtools.PrintlnColoredErr(fmt.Sprintf("warning: cannot delete the %s VM (%v) — delete %s manually.", dep.Provider, perr, firstNonEmpty(dep.ProviderInstanceID, dep.ProviderResourceName)), outputtools.Yellow)
 				} else {
 					// A deploy killed during the create call never learned the instance
@@ -1563,8 +1654,10 @@ func (i *Implementation) DestroyCommand() cli.Command {
 					case instanceID == "" && dep.ProviderInstanceID == "":
 						// The create never took effect — there is nothing to delete, and
 						// saying "VM deleted" here would be a lie.
+						outcome.VM = vmNeverCreated
 						fmt.Printf("No %s server was created for this deployment — nothing to delete.\n", dep.Provider)
 					case instanceID == "":
+						outcome.VM = vmAlreadyGone
 						outputtools.PrintlnColoredErr(fmt.Sprintf("warning: %s instance %s not found — it may already be gone.", dep.Provider, dep.ProviderInstanceID), outputtools.Yellow)
 					default:
 						outputtools.PrintlnColoredErr(fmt.Sprintf("Deleting the %s VM (instance %s)...", dep.Provider, instanceID), outputtools.Blue)
@@ -1573,10 +1666,21 @@ func (i *Implementation) DestroyCommand() cli.Command {
 							InstanceID: instanceID,
 							Region:     dep.Region,
 						}
-						if err := provisioner.Destroy(ctx, prov); err != nil {
+						err := provisioner.Destroy(ctx, prov)
+						switch {
+						case err == nil:
+							outcome.VM = vmDeleted
+						case deploy.InstanceAlreadyGone(err):
+							// The recognisable "already gone" case, which used to land in the
+							// generic arm below and send the user to their provider console
+							// to hunt for a server that does not exist. A 404 from the delete
+							// means the same thing as a 404 from the lookup: nothing to do,
+							// and nothing billing.
+							outcome.VM = vmAlreadyGone
+							outputtools.PrintlnColoredErr(fmt.Sprintf("The %s VM %s no longer exists — it was already deleted. Nothing to remove.", dep.Provider, instanceID), outputtools.Blue)
+						default:
+							outcome.VM = vmDeleteFailed
 							outputtools.PrintlnColoredErr(fmt.Sprintf("warning: could not delete the %s VM %s (%v) — delete it manually to avoid charges.", dep.Provider, instanceID, err), outputtools.Yellow)
-						} else {
-							vmDeleted = true
 						}
 					}
 				}
@@ -1586,50 +1690,13 @@ func (i *Implementation) DestroyCommand() cli.Command {
 			if err := deploy.DeleteDeployment(id); err != nil {
 				return err
 			}
-			if isLast {
-				switch {
-				case dep.Provisioning:
-					// An interrupted provision never paired an agent or bootstrapped the
-					// box, so claiming either would be a lie. Only the VM was ever real.
-					if vmDeleted {
-						fmt.Printf("Destroyed deployment %s (this deploy was interrupted while creating the server; the VM was deleted).\n", id)
-					} else {
-						fmt.Printf("Destroyed deployment %s (this deploy was interrupted before the server was created; nothing to clean up).\n", id)
-					}
-				case vmDeleted:
-					fmt.Printf("Destroyed deployment %s (VM deleted%s — last project on the box).\n", id, revokedSuffix(revoked))
-				case c.Bool("skip-server"):
-					// Don't claim a cleanup we deliberately skipped.
-					fmt.Printf("Destroyed deployment %s (local state removed%s — the server was left untouched).\n", id, revokedSuffix(revoked))
-				default:
-					fmt.Printf("Destroyed deployment %s (server cleaned up%s — last project on the box).\n", id, revokedSuffix(revoked))
-				}
-			} else {
-				fmt.Printf("Destroyed deployment %s (this project removed; the box's shared agent stays for its other projects).\n", id)
-			}
-			// The database only outlives the deploy if the box does: a deleted VM took
-			// it with it, and --purge would be meaningless there. Skipping the server
-			// means we never touched the database either way.
-			if !vmDeleted && !c.Bool("purge") && !c.Bool("skip-server") {
-				fmt.Printf("  The database was kept — pass --purge to drop it.\n")
+			outcome.Revoked = revoked
+			for _, line := range outcome.summary() {
+				fmt.Println(line)
 			}
 			return nil
 		},
 	}
-}
-
-// revokedSuffix reports the shared agent's fate in the destroy summary, and only
-// when there is a fate to report.
-//
-// The phrase used to be baked into the message, so a teardown that never made the
-// revoke call — the last-destroyed record being one whose deploy died before pairing,
-// which is precisely when its uuid is missing — still told the user the agent was
-// gone. It stayed ACTIVE in nuzur forever, pointing at a deleted VM.
-func revokedSuffix(revoked bool) string {
-	if revoked {
-		return ", shared agent revoked"
-	}
-	return ""
 }
 
 func purgeSuffix(purge bool) string {
@@ -1869,7 +1936,7 @@ func parseDeployDSN(dsn string) (engine deploy.DBEngine, host, port, user, pass,
 func resolveWorkspace(flagDir string, prior *deploy.Deployment, identifier string) (string, error) {
 	dir := strings.TrimSpace(flagDir)
 	if dir == "" && prior != nil {
-		dir = prior.SourceDir
+		dir = prior.WorkspaceDir
 	}
 	if dir == "" {
 		dir = "nuzur-" + identifier

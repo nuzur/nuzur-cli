@@ -115,6 +115,54 @@ func TestDeployOutcomeSummaryNeverClaimsTheDatabaseIsEmpty(t *testing.T) {
 	}
 }
 
+// An apply that never started is not a migration that died partway through, and the
+// two used to be reported identically.
+//
+// The live case: a DeadlineExceeded while RESOLVING "sql-push-local" — before a
+// single statement existed, let alone ran — produced "a statement that failed partway
+// through leaves the ones before it applied. Check the database before retrying" and
+// "the app is now serving generated code that does NOT match the database". Both
+// false: --plan against that database 30 seconds later returned no changes at all,
+// and all 12 REST endpoints answered 200. The cost of getting this wrong is a user
+// auditing an untouched database and considering a rollback of a healthy deploy.
+func TestDeployOutcomeSummarySeparatesAnApplyThatNeverStarted(t *testing.T) {
+	never := deployOutcome{
+		catalogPublished: true, schemaApplied: false, schemaNeverStarted: true, appShipped: true,
+	}.summary()
+
+	for _, want := range []string{
+		"No SQL was sent to the database.",
+		"The app and database are unchanged and consistent; re-run the deploy or apply via SQL Push.",
+	} {
+		if !strings.Contains(never, want) {
+			t.Errorf("summary is missing %q\ngot: %s", want, never)
+		}
+	}
+	// Everything the half-applied branch says, and must not say here — including the
+	// mismatch warning, which is asserted even though the app WAS shipped: nothing
+	// changed in the database, so nothing is out of step with it.
+	for _, forbidden := range []string{
+		"leaves the",
+		"Check the database before retrying",
+		"does NOT match the database",
+		"re-deploy the version that was running before this one",
+	} {
+		if strings.Contains(never, forbidden) {
+			t.Errorf("an apply that never started should not say %q\ngot: %s", forbidden, never)
+		}
+	}
+
+	// The started-then-failed branch is untouched: not knowing still produces the
+	// conservative message.
+	started := deployOutcome{catalogPublished: true, schemaApplied: false, appShipped: true}.summary()
+	if !strings.Contains(started, "Check the database before retrying") {
+		t.Errorf("a failure past the confirmation step must still send the user checking: %s", started)
+	}
+	if strings.Contains(started, "No SQL was sent") {
+		t.Errorf("a failure past the confirmation step must not claim nothing was sent: %s", started)
+	}
+}
+
 // sql-push now requests a transaction, so a failed apply may or may not have rolled
 // back. The summary may only claim a rollback it actually knows about — telling
 // somebody their migration rolled back when it did not is how a half-applied schema
@@ -183,6 +231,13 @@ func TestDeployOutcomeRevisionMessage(t *testing.T) {
 			name: "schema failure",
 			o:    deployOutcome{catalogPublished: true, schemaApplied: false},
 			want: "schema not applied to the database",
+		},
+		{
+			// The revision history has to tell these apart too: one may need the
+			// database inspecting, the other never touched it.
+			name: "schema failure before anything was sent",
+			o:    deployOutcome{catalogPublished: true, schemaApplied: false, schemaNeverStarted: true},
+			want: "schema not applied: the apply failed before any SQL was sent",
 		},
 		{
 			name: "both",

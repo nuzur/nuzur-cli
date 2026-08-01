@@ -49,6 +49,9 @@ func (i *Implementation) AgentConnectionAddCommand() cli.Command {
 			cli.BoolFlag{Name: "non-interactive", Usage: "Never prompt; requires [name], --driver and --dsn"},
 		},
 		Action: func(c *cli.Context) error {
+			if err := requireOneArg(c, "agent connection add", "the connection name"); err != nil {
+				return err
+			}
 			reg, err := connections.Load()
 			if err != nil {
 				return err
@@ -149,6 +152,9 @@ func (i *Implementation) AgentConnectionListCommand() cli.Command {
 		Name:  "list",
 		Usage: "List the local DB connections registered to this agent",
 		Action: func(c *cli.Context) error {
+			if err := requireNoArgs(c, "agent connection list"); err != nil {
+				return err
+			}
 			reg, err := connections.Load()
 			if err != nil {
 				return err
@@ -178,6 +184,9 @@ func (i *Implementation) AgentConnectionRemoveCommand() cli.Command {
 			cli.BoolFlag{Name: "no-publish", Usage: "Only remove the connection on this machine; don't republish the catalog to nuzur (the box has no user token — the CLI running the teardown updates nuzur itself)"},
 		},
 		Action: func(c *cli.Context) error {
+			if err := requireOneArg(c, "agent connection remove", "the connection name or uuid"); err != nil {
+				return err
+			}
 			if !c.Args().Present() {
 				return fmt.Errorf("missing name or uuid")
 			}

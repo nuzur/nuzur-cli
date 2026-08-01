@@ -215,16 +215,38 @@ func DropOnlyWhatItCouldCreate() string {
 		"from the database like any other column change."
 }
 
-// writeStatement renders one numbered statement plus its hazard annotation.
+// writeStatement renders one numbered statement plus its hazard annotations —
+// ALL of them, worst first.
+//
+// One line per hazard, rather than one line for the worst: a bundled ALTER can drop
+// an index, delete a column and retype another in a single statement, and the
+// single-line form named only the drop. A reader checking "what exactly do I lose"
+// was given a third of the answer with nothing to signal the rest existed.
 func writeStatement(b *strings.Builder, s Statement) {
 	fmt.Fprintf(b, "%4d. %s\n", s.Index, s.SQL)
-	if name := hazardName(s.Severity); name != "" {
-		reason := s.Reason
+	for _, h := range s.hazards() {
+		name := hazardName(h.Severity)
+		if name == "" {
+			continue
+		}
+		reason := h.Reason
 		if reason == "" {
-			reason = string(s.Kind)
+			reason = string(h.Kind)
 		}
 		fmt.Fprintf(b, "      -- HAZARD %s: %s\n", name, reason)
 	}
+}
+
+// hazards is the statement's hazard list, falling back to the summary fields for a
+// Statement built before Hazards existed (or by hand, as tests do).
+func (s Statement) hazards() []Hazard {
+	if len(s.Hazards) > 0 {
+		return s.Hazards
+	}
+	if s.Severity == SeverityNone {
+		return nil
+	}
+	return []Hazard{{Severity: s.Severity, Kind: s.Kind, Object: s.Object, Reason: s.Reason}}
 }
 
 func plural(n int, noun string) string {

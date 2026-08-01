@@ -100,6 +100,9 @@ func (i *Implementation) describeSubcommand(extensionIdentifier string) cli.Comm
 			cli.StringFlag{Name: "connection-mode", Usage: "For paired extensions (sql-push, sql-import): describe the 'remote' (default) or 'local' variant"},
 		},
 		Action: func(c *cli.Context) error {
+			if err := requireNoArgs(c, extensionIdentifier+" describe"); err != nil {
+				return err
+			}
 			flags := extRunFlags{
 				project:        c.String("project"),
 				version:        c.String("version"),
