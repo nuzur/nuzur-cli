@@ -393,3 +393,85 @@ func TestDeployPushTarget(t *testing.T) {
 		t.Fatalf("got %+v", local)
 	}
 }
+
+// `--plan --deployment <id>` used to fail with "a project is required in
+// non-interactive mode", contradicting the flag's own help — the record carries
+// the project, so nothing about it has to be re-typed.
+func TestPlanProjectRef(t *testing.T) {
+	deps := []deploy.Deployment{planDep("dep-1", "h1", "app")}
+	// A record written before ProjectUUID existed: nothing to derive from.
+	legacy := planDep("dep-old", "h2", "app")
+	legacy.ProjectUUID = ""
+
+	for _, tc := range []struct {
+		name         string
+		flagProject  string
+		deploymentID string
+		deps         []deploy.Deployment
+		wantRef      string
+		wantDerived  string
+		wantErrHas   string
+	}{
+		{
+			name:         "the reported bug: --deployment alone supplies the project",
+			deploymentID: "dep-1", deps: deps,
+			wantRef: "project-1", wantDerived: "dep-1",
+		},
+		{
+			// Explicit --project is the override, and it is not announced as derived.
+			name: "an explicit --project wins", flagProject: "acme",
+			deploymentID: "dep-1", deps: deps,
+			wantRef: "acme",
+		},
+		{
+			// Unchanged: without --deployment there is nothing to derive from, and the
+			// caller's own "pass --project" error still applies.
+			name: "no deployment leaves the flag alone", deps: deps, wantRef: "",
+		},
+		{
+			// A typo'd id must not surface as the misleading "a project is required".
+			name: "an unknown deployment names itself", deploymentID: "nope", deps: deps,
+			wantErrHas: `no deployment "nope" on this machine`,
+		},
+		{
+			name: "a record with no project says so", deploymentID: "dep-old",
+			deps:       []deploy.Deployment{legacy},
+			wantErrHas: "records no project",
+		},
+		{
+			// The error is about the id, so it fires even with no records at all.
+			name: "no records at all", deploymentID: "dep-1", deps: nil,
+			wantErrHas: `no deployment "dep-1" on this machine`,
+		},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			ref, derived, err := planProjectRef(tc.flagProject, tc.deploymentID, tc.deps)
+			if tc.wantErrHas != "" {
+				if err == nil || !strings.Contains(err.Error(), tc.wantErrHas) {
+					t.Fatalf("error = %v, want one containing %q", err, tc.wantErrHas)
+				}
+				return
+			}
+			if err != nil {
+				t.Fatalf("unexpected error: %v", err)
+			}
+			if ref != tc.wantRef {
+				t.Errorf("ref = %q, want %q", ref, tc.wantRef)
+			}
+			if derived != tc.wantDerived {
+				t.Errorf("derivedFrom = %q, want %q", derived, tc.wantDerived)
+			}
+		})
+	}
+}
+
+// A --project that contradicts the record is still refused — the override does not
+// become a way to plan one project's schema against another's database. The check
+// lives downstream, where both sides are resolved uuids (a --project may be a name).
+func TestPlanProjectMismatchWithTheRecordIsStillRefused(t *testing.T) {
+	dep := planDep("dep-1", "h1", "app")
+	_, err := planTargetFromDeployment(&dep, "a-different-project", "")
+	if err == nil || !strings.Contains(err.Error(), "belongs to project project-1") {
+		t.Fatalf("expected a project-mismatch error, got %v", err)
+	}
+}

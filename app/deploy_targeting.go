@@ -1,6 +1,9 @@
 package app
 
 import (
+	"fmt"
+	"strings"
+
 	"github.com/nuzur/nuzur-cli/deploy"
 )
 
@@ -51,6 +54,215 @@ func pickBoxAgent(deps []deploy.Deployment, host string) string {
 		return ""
 	}
 	return latest.LocalAgentUUID
+}
+
+// boxAction is what a deploy does about the SERVER it needs, before anything is
+// generated, provisioned or billed.
+type boxAction int
+
+const (
+	// boxUseGivenHost: --provider ssh. The user named the box; nothing is created
+	// and nothing is inferred. This is also how a DIFFERENT project lands on a box
+	// that already hosts one — explicit --host, multi-project co-tenancy intact.
+	boxUseGivenHost boxAction = iota
+	// boxProvision: ask the managed provider for a fresh VM. This is the arm that
+	// costs money, so it is never taken silently.
+	boxProvision
+	// boxReuseRecorded: this project + identifier was already deployed to a box
+	// this provider created for us. Skip provisioning and bootstrap that box (the
+	// bootstrap is idempotent), exactly as if the user had passed
+	// --provider ssh --host <recorded>.
+	boxReuseRecorded
+	// boxFail: a record exists that neither describes a reusable box nor can be
+	// ignored — provisioning past it would leak a VM.
+	boxFail
+)
+
+// boxDecisionInput is everything the server decision needs, and nothing that
+// costs a network call. Deployment records are passed in rather than read so the
+// policy stays pure and table-testable.
+type boxDecisionInput struct {
+	Provider    deploy.Provider // --provider, already defaulted to ssh
+	HostFlag    string          // --host
+	NewVM       bool            // --new-vm
+	Identifier  string          // the resolved deployment identifier
+	ProjectUUID string
+	Deployments []deploy.Deployment
+}
+
+// boxDecision is the answer: which box, and what to say about it.
+type boxDecision struct {
+	Action boxAction
+	// Host/User/Port describe the recorded box on a boxReuseRecorded. They are the
+	// RECORDED SSH parameters, so the reuse connects the same way the deploy that
+	// created the box did.
+	Host string
+	User string
+	Port int
+	// Record is the deployment record the decision was taken from (the reused box,
+	// or the existing box a boxProvision is billing alongside). nil when there is
+	// no relevant record.
+	Record *deploy.Deployment
+	// Message is printed before acting — the line whose absence made every managed
+	// re-deploy create and bill for a second VM in silence.
+	Message string
+}
+
+// pickManagedBox returns the most recent recorded deployment of this project +
+// identifier whose box a MANAGED provider created for us, or nil.
+//
+// Deliberately different from pickPriorDeployment in two ways:
+//
+//   - It matches on project + identifier, not host + identifier. A managed deploy
+//     passes no --host (the provider hands one out), so the host-keyed lookup could
+//     never match on a re-deploy and every run provisioned a new droplet.
+//   - It does NOT skip records with an empty LocalAgentUUID. Such a record is a
+//     deploy that died in flight, which is precisely the case where a VM may exist
+//     and be billing with nothing adopting it. Whether that box is usable is
+//     decided by trying to reach it, not by whether pairing got that far.
+//
+// BYO-SSH records are excluded: that box is the user's, not something this CLI
+// created, and a `--provider digitalocean` run asking for a managed VM should not
+// silently land on it.
+func pickManagedBox(deps []deploy.Deployment, projectUUID, identifier string) *deploy.Deployment {
+	var match *deploy.Deployment
+	for idx := range deps {
+		d := deps[idx]
+		if d.Identifier != identifier {
+			continue
+		}
+		// An empty ProjectUUID is a record written before the field existed; treat
+		// it as belonging to whoever is asking rather than stranding the box.
+		if d.ProjectUUID != "" && projectUUID != "" && d.ProjectUUID != projectUUID {
+			continue
+		}
+		if d.Provider == "" || d.Provider == deploy.ProviderSSH {
+			continue
+		}
+		if match == nil || d.CreatedAt.After(match.CreatedAt) {
+			m := d
+			match = &m
+		}
+	}
+	return match
+}
+
+// decideDeployBox picks the server a deploy runs against.
+//
+// The bug this exists for: `deploy --provider digitalocean --identifier x` created
+// a NEW droplet, record, agent, connection, database and JWT key on every run,
+// because the re-deploy lookup was keyed on --host and a managed deploy has no
+// --host to key on. Three re-deploys meant three billing droplets and not one line
+// of output saying a server had been created rather than reused.
+//
+// The matrix:
+//
+//	provider  record for project+identifier        --new-vm  →
+//	ssh       (irrelevant)                         (ignored)   use --host as given
+//	managed   none                                 no          provision, say so
+//	managed   none                                 yes         provision, say so
+//	managed   same provider, has a host            no          REUSE that host
+//	managed   same provider, has a host            yes         provision, warn: two boxes now bill
+//	managed   same provider, mid-provision, no host no         FAIL: a VM may exist and be unfindable from here
+//	managed   same provider, mid-provision, no host yes        provision, warn about the orphan
+//	managed   a DIFFERENT managed provider         no          provision, warn: the other box still bills
+//
+// Reuse deliberately does not care whether the recorded deploy finished pairing:
+// an unfinished one left a box behind too, and the bootstrap is idempotent. What
+// it does care about is whether the box answers — decided by the caller, which can
+// reach the network; an unreachable box takes reusedBoxUnreachableError below.
+func decideDeployBox(in boxDecisionInput) (boxDecision, error) {
+	if in.Provider == "" || in.Provider == deploy.ProviderSSH {
+		return boxDecision{Action: boxUseGivenHost, Host: in.HostFlag}, nil
+	}
+
+	rec := pickManagedBox(in.Deployments, in.ProjectUUID, in.Identifier)
+	provider := string(in.Provider)
+
+	// No memory of this project+identifier on a managed provider: a first deploy.
+	// Unchanged behaviour, except that it now says a VM is being created.
+	if rec == nil {
+		return boxDecision{
+			Action: boxProvision,
+			Message: fmt.Sprintf(
+				"Creating a new %s VM for identifier %q — no previous deployment of this project under that identifier is recorded on this machine, so a new server will be created and will bill.",
+				provider, in.Identifier),
+		}, nil
+	}
+
+	// A record on a different managed provider is not reusable, but the box behind
+	// it is still running. Say so rather than quietly doubling the bill.
+	if rec.Provider != in.Provider {
+		return boxDecision{
+			Action: boxProvision,
+			Record: rec,
+			Message: fmt.Sprintf(
+				"Creating a new %s VM for identifier %q: the recorded server for this identifier is on %s (deployment %s%s), which --provider %s cannot reuse. That server keeps running and billing — remove it with `nuzur-cli destroy %s`.",
+				provider, in.Identifier, rec.Provider, rec.ID, hostSuffix(rec.Host), provider, rec.ID),
+		}, nil
+	}
+
+	if in.NewVM {
+		where := fmt.Sprintf("deployment %s%s already runs it", rec.ID, hostSuffix(rec.Host))
+		if strings.TrimSpace(rec.Host) == "" {
+			where = fmt.Sprintf("deployment %s was left mid-provision and may have leaked a VM", rec.ID)
+		}
+		return boxDecision{
+			Action: boxProvision,
+			Record: rec,
+			Message: fmt.Sprintf(
+				"--new-vm: creating a NEW %s VM for identifier %q even though %s. Both servers bill — remove the old one with `nuzur-cli destroy %s`.",
+				provider, in.Identifier, where, rec.ID),
+		}, nil
+	}
+
+	// A record with no host is a deploy that died between reserving the VM's name
+	// and learning its address (see Deployment.Provisioning). There is nothing to
+	// reuse and nothing to reach, and provisioning past it would leave a VM that
+	// only `destroy` — which can still resolve it by the reserved name — can find.
+	if strings.TrimSpace(rec.Host) == "" {
+		return boxDecision{Action: boxFail, Record: rec}, fmt.Errorf(
+			"deployment %s for identifier %q was left mid-provision on %s and never recorded a host, so there is no server to reuse and a VM may already exist and be billing.\n"+
+				"Run `nuzur-cli destroy %s` to remove it (destroy can still find the VM by the name it reserved), or re-run with --new-vm to provision a fresh server and deal with that one yourself.",
+			rec.ID, in.Identifier, provider, rec.ID)
+	}
+
+	return boxDecision{
+		Action: boxReuseRecorded,
+		Host:   rec.Host,
+		User:   rec.User,
+		Port:   rec.Port,
+		Record: rec,
+		Message: fmt.Sprintf(
+			"Reusing the existing %s server %s for identifier %q (deployment %s) — no new VM will be created. Pass --new-vm to provision a fresh one instead.",
+			provider, rec.Host, in.Identifier, rec.ID),
+	}, nil
+}
+
+// hostSuffix renders " on <host>" for a record that has one, and nothing for the
+// mid-provision records that don't — so a message never reads "on ".
+func hostSuffix(host string) string {
+	if h := strings.TrimSpace(host); h != "" {
+		return " on " + h
+	}
+	return ""
+}
+
+// reusedBoxUnreachableError is what a managed re-deploy says when the box it was
+// going to reuse doesn't answer.
+//
+// It cannot fall back to provisioning: the whole point of the reuse is that a
+// second VM is a real, recurring cost the user did not ask for. So it stops, and
+// spells out the three ways forward rather than leaving the user to guess which
+// one this is.
+func reusedBoxUnreachableError(rec *deploy.Deployment, provider deploy.Provider, identifier string, cause error) error {
+	return fmt.Errorf(
+		"the recorded %s server for identifier %q (deployment %s, host %s) is not reachable over SSH: %w\n"+
+			"A managed re-deploy reuses the recorded server instead of creating a second VM, so this deploy cannot continue. Either:\n"+
+			"  - restore connectivity to %s (the VM may be powered off, or its firewall/SSH key may have changed), or\n"+
+			"  - remove the stale record and its VM with `nuzur-cli destroy %s`, or\n"+
+			"  - re-run with --new-vm to provision a fresh server (which bills for a second one).",
+		provider, identifier, rec.ID, rec.Host, cause, rec.Host, rec.ID)
 }
 
 // deploySchemaName derives the schema that the diff engine, the data-manager deep

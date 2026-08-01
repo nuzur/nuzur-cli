@@ -37,6 +37,7 @@ func (i *Implementation) DeployCommand() cli.Command {
 			cli.StringFlag{Name: "region", Usage: "Managed providers: region/location to create the VM in — OPTIONAL, each provider has a default (nyc3 DigitalOcean; nbg1 Hetzner; us-east Linode; ewr Vultr; eastus Azure; us-central1-a GCP; fr-par-1 Scaleway). For GCP and Scaleway this takes a ZONE."},
 			cli.StringFlag{Name: "size", Usage: "Managed providers: instance size/type (default: a ~2GB instance per provider — the app image is built on the box, which OOMs on 1GB)"},
 			cli.StringFlag{Name: "image", Usage: "Managed providers: OS image (default: Ubuntu 24.04 LTS). Vultr addresses images by numeric id — see `vultr-cli os list`"},
+			cli.BoolFlag{Name: "new-vm", Usage: "Managed providers: create a FRESH VM even though this project + --identifier already has one recorded. By default a re-deploy reuses the server it created last time (same box, same agent, same database) instead of billing for a second one. Flag-only — never read from a --deploy-config file."},
 			cli.StringFlag{Name: "ssh-key-name", Usage: "Managed providers: name/id of an SSH key already registered with the provider (DigitalOcean/Hetzner/Vultr only — Linode passes the key inline, GCP injects it via metadata, Scaleway uses your account keys). Omit to upload the public half of --ssh-key (or your default ~/.ssh key)."},
 			cli.StringFlag{Name: "user", Value: "root", Usage: "SSH user"},
 			cli.StringFlag{Name: "ssh-key", Usage: "Path to an SSH private key (default: ssh-agent / ~/.ssh/config)"},
@@ -66,12 +67,12 @@ func (i *Implementation) DeployCommand() cli.Command {
 			cli.BoolFlag{Name: "print-config", Usage: "Print the effective deploy config (as JSON) resolved from flags + --deploy-config, then exit without deploying. Use it to snapshot an invocation into a reusable deploy-config file."},
 			cli.BoolFlag{Name: "plan", Usage: "Dry run: print the exact SQL this deploy would apply to the target database, then exit. Provisions nothing, generates nothing, issues no token, and writes nothing to the box or to nuzur. Use it to see what a deploy would change — including anything it would DROP — before running one."},
 			cli.BoolFlag{Name: "json", Usage: "With --plan: emit the plan as JSON on stdout (for agents and CI)."},
-			cli.StringFlag{Name: "deployment", Usage: "With --plan: plan against a recorded deployment by id (see 'nuzur-cli deploy list'). The most reliable selector — the record carries the agent, the connection and the engine, so nothing has to be re-derived from flags."},
+			cli.StringFlag{Name: "deployment", Usage: "With --plan: plan against a recorded deployment by id (see 'nuzur-cli deploy list'). The most reliable selector — the record carries the project, the agent, the connection and the engine, so nothing has to be re-derived from flags. --project is optional alongside it, and only needed to override what the record says."},
 			cli.StringFlag{Name: "local-agent", Usage: "With --plan: the local agent uuid to plan through, for when this machine has no record of the deployment (requires --local-agent-connection)."},
 			cli.StringFlag{Name: "local-agent-connection", Usage: "With --plan: the agent connection uuid to plan against (requires --local-agent)."},
 			cli.BoolFlag{Name: "allow-destructive", Usage: "Authorize a schema apply that DELETES DATA (DROP TABLE/SCHEMA, DROP COLUMN, TRUNCATE). Without it, a deploy whose schema plan deletes data applies nothing and exits non-zero. Flag-only — never read from a --deploy-config file. Run --plan first to see what would be dropped."},
 			cli.StringFlag{Name: "gen-config", Usage: "Path to a JSON go-code-gen config (overrides the deploy-config's `codegen` block; else the last-used config for this project is reused). A project that has never run the generator needs none: deploy fills the required fields from these flags (REST API, no auth, identifier/module from --identifier or the project name). Whatever it resolves is saved as the project's go-code-gen config once the code generates"},
-			cli.StringFlag{Name: "cli-install-cmd", Usage: "Command to install the nuzur CLI on the box (must leave `nuzur` on PATH)"},
+			cli.StringFlag{Name: "cli-install-cmd", Usage: "Command to install the nuzur CLI on the box (must leave `nuzur` on PATH). By default the box downloads the GitHub release PINNED to this CLI's own version — use this for boxes that can't reach GitHub, or to pin a different version on purpose."},
 			cli.BoolFlag{Name: "sudo", Usage: "Run the bootstrap via sudo (auto-enabled for non-root SSH users; the box needs passwordless sudo)"},
 			cli.StringFlag{Name: "web-url", Value: constants.WEB_PROD_URL, Usage: "nuzur web app base URL (for the data-manager deep link)"},
 		},
@@ -480,16 +481,66 @@ func (i *Implementation) runDeploy(c *cli.Context) (rerr error) {
 	connName := identifier + "-db"
 	host := s.Host
 
+	// WHICH BOX. For --provider ssh this is just --host. For a managed provider it
+	// is the decision that used to not exist: a re-deploy of the same project +
+	// identifier reuses the VM the provider already created for it instead of
+	// creating (and billing for) another one. See decideDeployBox for the matrix.
+	//
+	// Taken HERE, before the prior-deployment lookup, because everything downstream
+	// — the shared agent, the connection uuid, the deployment id, the destructive
+	// pre-flight gate, the workspace — is keyed on the host. Resolving the host
+	// first is what makes managed re-deploys preserve exactly what SSH re-deploys
+	// already preserved.
+	allDeployments, _ := deploy.ListDeployments()
+	box, err := decideDeployBox(boxDecisionInput{
+		Provider:    provider,
+		HostFlag:    s.Host,
+		NewVM:       s.NewVM,
+		Identifier:  identifier,
+		ProjectUUID: targets.project.Uuid,
+		Deployments: allDeployments,
+	})
+	if err != nil {
+		return err
+	}
+	if box.Message != "" {
+		colour := outputtools.Blue
+		if box.Action == boxProvision && box.Record != nil {
+			// A fresh VM alongside one that already exists is the billing case; it
+			// should not read like routine progress.
+			colour = outputtools.Yellow
+		}
+		outputtools.PrintlnColoredErr(box.Message, colour)
+	}
+	reuseBox := box.Action == boxReuseRecorded
+	if reuseBox {
+		// From here the run is indistinguishable from `--provider ssh --host <recorded>`:
+		// the recorded SSH parameters, no provisioning, the same idempotent bootstrap.
+		host = box.Host
+		s.Host = box.Host
+		if box.User != "" {
+			s.User = box.User
+		}
+		if box.Port != 0 {
+			s.Port = box.Port
+		}
+		// A managed re-deploy passes no --region (the box already exists), so keep
+		// reporting the one the VM actually lives in rather than blanking it.
+		if strings.TrimSpace(s.Region) == "" {
+			s.Region = box.Record.Region
+		}
+	}
+
 	// Multi-project on one box: the box has ONE shared agent (reused for every
 	// project on it — box-level), while the connection UUID + deployment record
 	// are per-project (host+identifier).
-	prior := findPriorDeployment(host, identifier)
+	prior := pickPriorDeployment(allDeployments, host, identifier)
 	// Guard: refuse if this identifier on this host maps to a DIFFERENT project —
 	// they'd share the derived DB name/user and collide. Require a distinct id.
 	if prior != nil && prior.ProjectUUID != "" && prior.ProjectUUID != targets.project.Uuid {
 		return fmt.Errorf("host %s already runs a different project under identifier %q (project %s) — deploy the new project under a distinct identifier", host, identifier, prior.ProjectUUID)
 	}
-	reuseAgentUUID := findBoxAgent(host)
+	reuseAgentUUID := pickBoxAgent(allDeployments, host)
 	connUUID := ""
 	if prior != nil {
 		connUUID = prior.ConnUUID
@@ -509,10 +560,29 @@ func (i *Implementation) runDeploy(c *cli.Context) (rerr error) {
 	// record is written as soon as the box exists (step 6b) rather than at the end,
 	// so an interrupted deploy still leaves something `nuzur-cli destroy` can clean up.
 	depID := identifier + "-" + shortID()
-	if prior != nil {
+	switch {
+	case prior != nil:
 		depID = prior.ID
+	case reuseBox && box.Record != nil:
+		// Adopting a box whose record has no agent — the deploy that created it died
+		// before pairing, which is exactly what pickPriorDeployment skips. Write back
+		// onto THAT record rather than minting a second one for the same VM: two
+		// records pointing at one box is how the orphan was created in the first
+		// place, and this run is finishing the job the dead one started.
+		depID = box.Record.ID
 	}
 	setDeployUserID(depID)
+
+	// A reused box has to answer before anything is generated or reported. If it
+	// doesn't, the deploy stops: silently provisioning a replacement is the exact
+	// behaviour this reuse exists to remove.
+	if reuseBox {
+		outputtools.PrintlnColoredErr("Checking the reused server "+host+" is reachable...", outputtools.Blue)
+		probe := deploy.NewSSHRunner(deploy.Target{Host: host, User: s.User, Port: s.Port, KeyPath: s.SSHKey})
+		if err := probe.Ping(ctx); err != nil {
+			return reusedBoxUnreachableError(box.Record, provider, identifier, err)
+		}
+	}
 
 	// 1b. RE-DEPLOY ONLY: run the destructive gate before anything is shipped.
 	//
@@ -607,7 +677,7 @@ func (i *Implementation) runDeploy(c *cli.Context) (rerr error) {
 	// find the VM — by id once we have it, by name until then. Without this a killed
 	// deploy left a running, billing VM that nothing on disk pointed at.
 	var resourceName string
-	if provider != deploy.ProviderSSH {
+	if provider != deploy.ProviderSSH && !reuseBox {
 		resourceName, err = deploy.ProviderResourceName(identifier)
 		if err != nil {
 			return err
@@ -670,12 +740,29 @@ func (i *Implementation) runDeploy(c *cli.Context) (rerr error) {
 			}
 		},
 	}
-	if provider != deploy.ProviderSSH {
-		outputtools.PrintlnColoredErr("Creating the server on "+string(provider)+" (this can take a minute)...", outputtools.Blue)
-	}
-	prov, err := provisioner.Provision(ctx, spec)
-	if err != nil {
-		return err
+	var prov deploy.Provisioned
+	switch {
+	case reuseBox:
+		// The box already exists and was reached above, so there is nothing to
+		// provision and nothing to wait for. Rebuild the Provisioned the rest of the
+		// deploy expects from the RECORD, so the provider ids survive: they are the
+		// only handle `nuzur-cli destroy` has on the VM, and re-recording this
+		// deployment without them would leave the droplet running with nothing on
+		// disk pointing at it.
+		prov = deploy.Provisioned{
+			Target:     deploy.Target{Host: host, User: s.User, Port: s.Port, KeyPath: s.SSHKey},
+			InstanceID: box.Record.ProviderInstanceID,
+			Region:     box.Record.Region,
+		}
+		resourceName = box.Record.ProviderResourceName
+	default:
+		if provider != deploy.ProviderSSH {
+			outputtools.PrintlnColoredErr("Creating the server on "+string(provider)+" (this can take a minute)...", outputtools.Blue)
+		}
+		prov, err = provisioner.Provision(ctx, spec)
+		if err != nil {
+			return err
+		}
 	}
 	target := prov.Target
 	// Managed providers create the host, so --host (and thus `host`) was empty.
@@ -710,9 +797,14 @@ func (i *Implementation) runDeploy(c *cli.Context) (rerr error) {
 		Domain:             s.Domain,
 		CreatedAt:          time.Now(),
 	}
-	if prior != nil {
+	switch {
+	case prior != nil:
 		dep.CreatedAt = prior.CreatedAt
 		carryForwardProvisioning(dep, prior, provider)
+	case reuseBox && box.Record != nil:
+		// Adopting a died-in-flight record (no agent, so `prior` skipped it): its
+		// creation time is when this deployment really started.
+		dep.CreatedAt = box.Record.CreatedAt
 	}
 	if err := deploy.SaveDeployment(dep); err != nil {
 		return err
@@ -767,7 +859,9 @@ func (i *Implementation) runDeploy(c *cli.Context) (rerr error) {
 	// Restrict inbound at the provider level to mirror the box's ufw (SSH + the
 	// Caddy front doors). Best-effort — the on-box ufw is the authoritative gate,
 	// so a firewall hiccup must not fail an otherwise-good deploy. No-op for BYO-SSH.
-	if provider != deploy.ProviderSSH {
+	// Re-run on a reused box too (a re-deploy can open a new project's port), except
+	// when the record never learned the instance id and there is nothing to address.
+	if provider != deploy.ProviderSSH && prov.InstanceID != "" {
 		if err := provisioner.ConfigureFirewall(ctx, prov, deployFirewallRules(dbOnly, s.Domain)); err != nil {
 			outputtools.PrintlnColoredErr("Provider firewall not fully configured (the box's own ufw still applies): "+err.Error(), outputtools.Yellow)
 		}
@@ -797,7 +891,10 @@ func (i *Implementation) runDeploy(c *cli.Context) (rerr error) {
 
 	// 8. Render + run the bootstrap.
 	// Empty cli-install-cmd → the bootstrap installs the nuzur CLI from GitHub
-	// releases itself.
+	// releases itself, PINNED to this CLI's own version (see
+	// BootstrapParams.CLIVersion): the box then runs exactly the CLI that is driving
+	// the deploy, and a release published while the deploy runs cannot change what
+	// the box downloads out from under it.
 	bp := deploy.BootstrapParams{
 		Identifier:        identifier,
 		DBEngine:          dbEngine,
@@ -815,6 +912,7 @@ func (i *Implementation) runDeploy(c *cli.Context) (rerr error) {
 		JWTAuth:           jwtAuth,
 		ProvisioningToken: tokRes.GetProvisioningToken(),
 		CLIInstallCmd:     s.CLIInstallCmd,
+		CLIVersion:        constants.CLI_VERSION,
 		ConnUUID:          connUUID,
 		ConnName:          connName,
 		Domain:            s.Domain,
@@ -1613,28 +1711,11 @@ func carryForwardProvisioning(dep, prior *deploy.Deployment, provider deploy.Pro
 	}
 }
 
-// findPriorDeployment returns the most recent recorded deployment for this
-// host+identifier, or nil. Used to detect a re-deploy so the existing agent and
-// connection are reused instead of pairing a fresh agent.
-func findPriorDeployment(host, identifier string) *deploy.Deployment {
-	deps, err := deploy.ListDeployments()
-	if err != nil {
-		return nil
-	}
-	return pickPriorDeployment(deps, host, identifier)
-}
-
-// findBoxAgent returns the local-agent UUID already paired on this host (any
-// project's deployment), or "". A box has ONE shared agent serving all its
-// projects, so a second project reuses it rather than pairing a new one.
-func findBoxAgent(host string) string {
-	deps, err := deploy.ListDeployments()
-	if err != nil {
-		return ""
-	}
-	return pickBoxAgent(deps, host)
-}
-
+// The findPriorDeployment / findBoxAgent wrappers that used to live here are
+// gone: runDeploy now reads the deployment records ONCE and passes that one list
+// to decideDeployBox, pickPriorDeployment and pickBoxAgent. Three questions about
+// the same box answered from three separate reads is how a re-deploy ended up
+// reusing one record's agent while provisioning past another's VM.
 // waitForAgentOnline polls until the given agent uuid reaches ONLINE. Returns
 // (true) when observed online, (false) if the timeout passes while it exists but
 // stays not-online (the caller warns rather than hard-fails, matching the

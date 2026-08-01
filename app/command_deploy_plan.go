@@ -166,13 +166,66 @@ func findDeploymentByID(deps []deploy.Deployment, id string) *deploy.Deployment 
 	return nil
 }
 
+// planProjectRef decides which project `--plan` resolves, from --project and
+// --deployment.
+//
+// `--plan --deployment <id>` used to fail with "a project is required in
+// non-interactive mode", which contradicted the flag's own help — "the record
+// carries the agent, the connection and the engine, so nothing has to be
+// re-derived from flags" — and the record carries the project too. Anything the
+// record already knows should not have to be re-typed alongside it.
+//
+// Returns (ref, derivedFrom, err). derivedFrom is the deployment id when the
+// project came from the record, so the caller can say where it got it; deriving a
+// project silently would be its own small version of the same problem.
+//
+// An explicit --project still wins: it is the override, and a contradiction
+// between it and the record is caught downstream by planTargetFromDeployment,
+// which can compare resolved UUIDs (a --project may be a NAME, which is not
+// comparable to the uuid on the record until it has been resolved).
+func planProjectRef(flagProject, deploymentID string, deps []deploy.Deployment) (ref, derivedFrom string, err error) {
+	flagProject = strings.TrimSpace(flagProject)
+	deploymentID = strings.TrimSpace(deploymentID)
+	if flagProject != "" || deploymentID == "" {
+		return flagProject, "", nil
+	}
+	dep := findDeploymentByID(deps, deploymentID)
+	if dep == nil {
+		// The same message resolvePlanTargetFromState would give, said here because
+		// this is where the id is first used — otherwise a typo'd id would surface as
+		// the misleading "a project is required".
+		return "", "", fmt.Errorf("no deployment %q on this machine (see `nuzur-cli deploy list`)", deploymentID)
+	}
+	if strings.TrimSpace(dep.ProjectUUID) == "" {
+		return "", "", fmt.Errorf("deployment %q records no project (it predates the field), so the project cannot be derived from it — pass --project <name|uuid>", deploymentID)
+	}
+	return dep.ProjectUUID, dep.ID, nil
+}
+
 // runDeployPlan is `deploy --plan`: work out what the deploy would apply, print
 // it, and exit having changed nothing.
 func (i *Implementation) runDeployPlan(c *cli.Context, s *deploySettings) error {
 	jsonOut := c.Bool("json")
 
+	// Records are read BEFORE the project is resolved, because --deployment can
+	// supply the project. See planProjectRef.
+	deps, err := deploy.ListDeployments()
+	if err != nil {
+		// Not fatal: the explicit selectors do not need local state at all.
+		deps = nil
+	}
+
+	projectRef, derivedFrom, err := planProjectRef(s.Project, c.String("deployment"), deps)
+	if err != nil {
+		return err
+	}
+	if derivedFrom != "" {
+		outputtools.PrintlnColoredErr(fmt.Sprintf(
+			"Planning project %s, taken from deployment %s (no --project given).", projectRef, derivedFrom), outputtools.Blue)
+	}
+
 	targets, err := i.resolveRunTargets(extRunFlags{
-		project:        s.Project,
+		project:        projectRef,
 		version:        s.Version,
 		nonInteractive: true,
 	}, deployPlanResolveOptions())
@@ -181,12 +234,6 @@ func (i *Implementation) runDeployPlan(c *cli.Context, s *deploySettings) error 
 	}
 
 	identifier := planIdentifier(s.Identifier, lastGoCodeGenConfig(targets), targets.project.Name)
-
-	deps, err := deploy.ListDeployments()
-	if err != nil {
-		// Not fatal: the explicit selectors do not need local state at all.
-		deps = nil
-	}
 
 	target, err := resolvePlanTargetFromState(planTargetInput{
 		DeploymentID:   c.String("deployment"),

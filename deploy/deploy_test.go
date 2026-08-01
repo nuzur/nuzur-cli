@@ -5,6 +5,8 @@ import (
 	"strings"
 	"testing"
 	"time"
+
+	"github.com/nuzur/nuzur-cli/constants"
 )
 
 func TestRenderBootstrap(t *testing.T) {
@@ -366,5 +368,81 @@ func TestDeploymentStateRoundTrip(t *testing.T) {
 	// Deleting a missing deployment is not an error.
 	if err := DeleteDeployment(d.ID); err != nil {
 		t.Fatalf("DeleteDeployment (missing) should be nil: %v", err)
+	}
+}
+
+// The box installs the CLI VERSION THAT IS DRIVING THE DEPLOY, not
+// `releases/latest`. A managed deploy once died at exit 1 with `curl: (22) 404`
+// after the droplet, Docker, MySQL and the app image had all been built, because a
+// Release had been created 79 seconds earlier carrying zero assets and `latest`
+// resolved to it. Pinning makes a release-in-progress unable to reach a running
+// deploy, and keeps the box's CLI equal to the one that paired its agent.
+func TestRenderBootstrapPinsTheCLIVersion(t *testing.T) {
+	script, err := RenderBootstrap(BootstrapParams{
+		Identifier: "shop", DBEngine: DBMySQL, DBName: "shop", DBUser: "shop_app",
+		RemoteSrcDir: "/opt/nuzur/shop/src", ProvisioningToken: "t",
+		CLIVersion: "1.5.1",
+	})
+	if err != nil {
+		t.Fatalf("RenderBootstrap: %v", err)
+	}
+	if strings.Contains(script, "releases/latest/download") {
+		t.Error("the bootstrap must not resolve the CLI through the releases/latest alias — that is the unpinned URL a release-in-progress breaks")
+	}
+	for _, want := range []string{
+		`NUZUR_CLI_URL="https://github.com/nuzur/nuzur-cli/releases/download/v1.5.1/nuzur-cli_Linux_${NUZUR_ARCH}.tar.gz"`,
+		// The failure must name the version AND the URL it tried, so a dev build
+		// with no published release reads as exactly that in the deploy log.
+		`could not download nuzur-cli v1.5.1 for Linux`,
+		`tried: $NUZUR_CLI_URL`,
+	} {
+		if !strings.Contains(script, want) {
+			t.Errorf("bootstrap script missing %q", want)
+		}
+	}
+}
+
+// Unset means "the CLI running this deploy" — no caller can accidentally render
+// an unpinned script.
+func TestRenderBootstrapDefaultsToThisCLIVersion(t *testing.T) {
+	for _, tc := range []struct{ name, given, want string }{
+		{name: "unset uses the constant", given: "", want: constants.CLI_VERSION},
+		{name: "explicit is honored", given: "1.4.0", want: "1.4.0"},
+		// The constant is bare but the git tag and the URL carry a `v`; absorb the
+		// obvious mistake rather than rendering `.../vv1.4.0/...`.
+		{name: "a leading v is tolerated", given: "v1.4.0", want: "1.4.0"},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			script, err := RenderBootstrap(BootstrapParams{
+				Identifier: "shop", DBEngine: DBMySQL, DBName: "shop", DBUser: "shop_app",
+				RemoteSrcDir: "/src", ProvisioningToken: "t", CLIVersion: tc.given,
+			})
+			if err != nil {
+				t.Fatalf("RenderBootstrap: %v", err)
+			}
+			want := "releases/download/v" + tc.want + "/nuzur-cli_Linux_"
+			if !strings.Contains(script, want) {
+				t.Errorf("bootstrap script missing %q", want)
+			}
+		})
+	}
+}
+
+// --cli-install-cmd stays the escape hatch for boxes that can't reach GitHub: it
+// replaces the download entirely, pinned URL included.
+func TestRenderBootstrapCLIInstallCmdStillOverrides(t *testing.T) {
+	script, err := RenderBootstrap(BootstrapParams{
+		Identifier: "shop", DBEngine: DBMySQL, DBName: "shop", DBUser: "shop_app",
+		RemoteSrcDir: "/src", ProvisioningToken: "t",
+		CLIInstallCmd: "curl -fsSL https://example/install | sh",
+	})
+	if err != nil {
+		t.Fatalf("RenderBootstrap: %v", err)
+	}
+	if !strings.Contains(script, "curl -fsSL https://example/install | sh") {
+		t.Error("expected the --cli-install-cmd override in the script")
+	}
+	if strings.Contains(script, "NUZUR_CLI_URL=") {
+		t.Error("--cli-install-cmd must replace the GitHub download entirely")
 	}
 }

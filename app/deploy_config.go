@@ -161,6 +161,13 @@ type deploySettings struct {
 	// committed months ago and shares across a team.
 	AllowDestructive bool
 
+	// NewVM forces a managed provider to create a fresh VM even when this project +
+	// identifier already has one recorded. Flag-only for the same reason as
+	// AllowDestructive: it is what turns a re-deploy into a second recurring bill,
+	// so it has to be typed for this run rather than inherited from a shared file
+	// where nobody would ever look for it again.
+	NewVM bool
+
 	// Codegen is the go-code-gen config map: the deploy-config's `codegen` block
 	// as the base, overlaid by a --gen-config file when given.
 	Codegen map[string]interface{}
@@ -219,8 +226,9 @@ func resolveDeploySettings(c *cli.Context) (*deploySettings, error) {
 		Sudo:          boolSetting(c, "sudo", cfg.Sudo),
 		WebURL:        strSetting(c, "web-url", cfg.WebURL, constants.WEB_PROD_URL),
 
-		// Flag-only (fileVal nil), for the reason on the struct field.
+		// Flag-only (fileVal nil), for the reason on the struct fields.
 		AllowDestructive: boolSetting(c, "allow-destructive", nil),
+		NewVM:            boolSetting(c, "new-vm", nil),
 	}
 
 	// Codegen: start from the deploy-config's nested `codegen` block, then overlay

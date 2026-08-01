@@ -4,7 +4,10 @@ import (
 	"bytes"
 	_ "embed"
 	"fmt"
+	"strings"
 	"text/template"
+
+	"github.com/nuzur/nuzur-cli/constants"
 )
 
 //go:embed templates/bootstrap.sh.tmpl
@@ -66,6 +69,25 @@ type BootstrapParams struct {
 	// the nuzur-cli GitHub releases. A custom command must leave the binary at
 	// NuzurBin.
 	CLIInstallCmd string
+	// CLIVersion PINS which nuzur-cli release the box installs; it defaults to the
+	// version of the CLI driving this deploy. Two reasons, both structural:
+	//
+	//   - box CLI == driving CLI, so the agent on the box is never a different
+	//     version from the CLI that paired it and published its connection;
+	//   - a release published WHILE a deploy runs can no longer break it. The URL
+	//     used to be `releases/latest/download/...`, which resolves at curl time to
+	//     whatever Release exists at that instant — and a GitHub Release exists from
+	//     the moment it is created, seconds before goreleaser finishes uploading its
+	//     assets. Every in-flight deploy 404s during that window, at the very end of
+	//     the expensive part (VM, Docker, database and app image all already paid
+	//     for). Pinning removes the dependency on what was published minutes ago.
+	//
+	// A dev/unreleased version still tries the pinned URL: the bootstrap's curl
+	// failure names the version AND the exact URL it tried, so the log says plainly
+	// that this version has no published assets rather than failing as a generic
+	// 404. --cli-install-cmd remains the escape hatch — for boxes that cannot reach
+	// GitHub, and for deliberately pinning some other version.
+	CLIVersion string
 	// NuzurBin is the absolute path to the installed nuzur binary (used in the
 	// agent systemd unit).
 	NuzurBin string
@@ -94,6 +116,16 @@ func (p *BootstrapParams) defaults() {
 	if p.NuzurBin == "" {
 		p.NuzurBin = "/usr/local/bin/nuzur-cli"
 	}
+	// Default rather than require: every caller wants "the CLI running this
+	// deploy", and defaulting here means direct/test callers cannot accidentally
+	// render an unpinned script.
+	if p.CLIVersion == "" {
+		p.CLIVersion = constants.CLI_VERSION
+	}
+	// Tolerate a leading `v`: the constant is bare (`1.5.2`) but the git tag and
+	// the release URL carry it, and a caller pinning by tag name is the obvious
+	// mistake to absorb rather than to render as `.../vv1.5.2/...`.
+	p.CLIVersion = strings.TrimPrefix(strings.TrimSpace(p.CLIVersion), "v")
 	if p.ImageName == "" {
 		p.ImageName = "nuzur/" + p.Identifier + ":latest"
 	}

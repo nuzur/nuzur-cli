@@ -284,7 +284,20 @@ systemctl restart {{.Identifier}}-api.service
 
 # ── 6. nuzur agent: ONE shared agent per box; this project adds its connection ─
 {{if .CLIInstallCmd}}{{.CLIInstallCmd}}{{else}}
-# install the nuzur CLI from GitHub releases (goreleaser assets)
+# Install the nuzur CLI from GitHub releases (goreleaser assets), PINNED to the
+# version of the CLI that is driving this deploy ({{.CLIVersion}}).
+#
+# Not the unpinned `releases/latest` alias: that resolves at curl time to whatever
+# Release exists at that instant, so a deploy's outcome depended on what someone
+# published minutes earlier. A GitHub Release exists from the moment it is created
+# — before goreleaser has uploaded any assets — so every in-flight deploy 404s
+# during that window, and it lands here, after the VM, Docker, the database and the
+# app image have all already been paid for. Pinning makes the box's CLI equal to
+# the driving CLI (no version skew with the agent it pairs) and makes a
+# release-in-progress unable to break a running deploy.
+#
+# A version with no published release (a dev build) fails below with the version
+# and the exact URL named — use --cli-install-cmd to install the CLI another way.
 NUZUR_ARCH="$(uname -m)"
 case "$NUZUR_ARCH" in
   x86_64|amd64) NUZUR_ARCH=x86_64 ;;
@@ -292,7 +305,14 @@ case "$NUZUR_ARCH" in
   i386|i686) NUZUR_ARCH=i386 ;;
   *) echo "[nuzur-deploy] unsupported architecture: $NUZUR_ARCH" >&2; exit 1 ;;
 esac
-curl -fsSL "https://github.com/nuzur/nuzur-cli/releases/latest/download/nuzur-cli_Linux_${NUZUR_ARCH}.tar.gz" -o /tmp/nuzur-cli.tar.gz
+NUZUR_CLI_URL="https://github.com/nuzur/nuzur-cli/releases/download/v{{.CLIVersion}}/nuzur-cli_Linux_${NUZUR_ARCH}.tar.gz"
+echo "[nuzur-deploy] installing nuzur-cli v{{.CLIVersion}} (pinned to the CLI running this deploy)"
+if ! curl -fsSL "$NUZUR_CLI_URL" -o /tmp/nuzur-cli.tar.gz; then
+  echo "[nuzur-deploy] could not download nuzur-cli v{{.CLIVersion}} for Linux ${NUZUR_ARCH}" >&2
+  echo "[nuzur-deploy] tried: $NUZUR_CLI_URL" >&2
+  echo "[nuzur-deploy] the box installs the SAME version as the CLI running this deploy; if v{{.CLIVersion}} has no published release assets (a dev build, or a release still uploading), re-run with --cli-install-cmd to install the CLI another way" >&2
+  exit 22
+fi
 tar -xzf /tmp/nuzur-cli.tar.gz -C /tmp nuzur-cli
 install -m 0755 /tmp/nuzur-cli {{.NuzurBin}}
 {{end}}
