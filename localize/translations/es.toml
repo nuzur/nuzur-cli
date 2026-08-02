@@ -2,7 +2,7 @@
 other = "Administra tus proyectos y extensiones en nuzur."
 
 [app_desc]
-other = "Nuzur CLI herramientas para adminstrar proyectos y extensione."
+other = "nuzur CLI herramientas para adminstrar proyectos y extensione."
 
 [login_desc]
 other = "Redirige al navegador en caso de ser necesario para iniciar sesión."

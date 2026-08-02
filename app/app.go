@@ -122,11 +122,11 @@ func (i *Implementation) Run() error {
 
 func initCliApp(imp Implementation) *cli.App {
 	cliapp := cli.NewApp()
-	cliapp.Name = "Nuzur CLI"
+	cliapp.Name = "nuzur CLI"
 	cliapp.Usage = imp.localize.Localize("app_usage", "Manage your nuzur projects and extensions")
 	cliapp.Version = constants.CLI_VERSION
 	cliapp.Author = "nuzur"
-	cliapp.Description = imp.localize.Localize("app_desc", "Nuzur CLI tools for developers to manage projects and extensions")
+	cliapp.Description = imp.localize.Localize("app_desc", "nuzur CLI tools for developers to manage projects and extensions")
 
 	cliapp.Commands = imp.Commands()
 

@@ -17,7 +17,7 @@ func (i *Implementation) VersionCommand() cli.Command {
 			if err := requireNoArgs(c, "version"); err != nil {
 				return err
 			}
-			fmt.Println("Nuzur CLI version " + constants.CLI_VERSION)
+			fmt.Println("nuzur CLI version " + constants.CLI_VERSION)
 			return nil
 		},
 	}

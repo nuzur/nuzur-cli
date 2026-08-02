@@ -1001,6 +1001,93 @@ func TestInstallScriptPathGuidanceWhenDestNotInPATH(t *testing.T) {
 	})
 }
 
+// A second nuzur-cli on PATH (brew, an old manual copy) is the one situation
+// where a SUCCESSFUL install looks like a failed one: the shell either resolves
+// the other binary outright, or keeps serving the old one from its command
+// cache until `hash -r`. The first live user hit exactly this — installed
+// 1.6.2, `nuzur-cli --version` said 1.6.1 (brew's) — so the report must name
+// the coexisting install and the way out.
+func TestInstallScriptWarnsAboutCoexistingInstalls(t *testing.T) {
+	otherInstall := func(t *testing.T) string {
+		t.Helper()
+		dir := filepath.Join(t.TempDir(), "otherbin")
+		if err := os.MkdirAll(dir, 0o755); err != nil {
+			t.Fatal(err)
+		}
+		fake := "#!/bin/sh\necho \"Nuzur CLI version 0.0.9\"\n"
+		if err := os.WriteFile(filepath.Join(dir, "nuzur-cli"), []byte(fake), 0o755); err != nil {
+			t.Fatal(err)
+		}
+		return dir
+	}
+
+	t.Run("another install earlier on PATH: shadow warning with the brew remedy", func(t *testing.T) {
+		dest := filepath.Join(t.TempDir(), "bin")
+		if err := os.MkdirAll(dest, 0o755); err != nil {
+			t.Fatal(err)
+		}
+		other := otherInstall(t)
+		r := runInstall(t, installCfg{dest: dest, pathExtra: []string{other, dest}})
+		if r.exit != 0 {
+			t.Fatalf("exit = %d\n%s", r.exit, r.out)
+		}
+		mustContain(t, "the shadow warning", r.out,
+			other+"/nuzur-cli", "comes FIRST on your PATH", "brew uninstall nuzur/tap/nuzur-cli")
+	})
+
+	t.Run("this install earlier on PATH: names the other copy and hash -r", func(t *testing.T) {
+		dest := filepath.Join(t.TempDir(), "bin")
+		if err := os.MkdirAll(dest, 0o755); err != nil {
+			t.Fatal(err)
+		}
+		other := otherInstall(t)
+		r := runInstall(t, installCfg{dest: dest, pathExtra: []string{dest, other}})
+		if r.exit != 0 {
+			t.Fatalf("exit = %d\n%s", r.exit, r.out)
+		}
+		mustContain(t, "the cache note", r.out,
+			other+"/nuzur-cli", "comes first on PATH", "hash -r")
+		if strings.Contains(r.out, "will shadow this install") {
+			t.Errorf("claimed shadowing when this install resolves first:\n%s", r.out)
+		}
+	})
+
+	t.Run("fresh install, no other copy: no coexistence noise", func(t *testing.T) {
+		dest := filepath.Join(t.TempDir(), "bin")
+		if err := os.MkdirAll(dest, 0o755); err != nil {
+			t.Fatal(err)
+		}
+		r := runInstall(t, installCfg{dest: dest, pathExtra: []string{dest}})
+		if r.exit != 0 {
+			t.Fatalf("exit = %d\n%s", r.exit, r.out)
+		}
+		for _, absent := range []string{"another nuzur-cli", "hash -r"} {
+			if strings.Contains(r.out, absent) {
+				t.Errorf("a clean first install mentioned %q:\n%s", absent, r.out)
+			}
+		}
+	})
+
+	t.Run("upgrade in place, no other copy: hash -r note only", func(t *testing.T) {
+		dest := filepath.Join(t.TempDir(), "bin")
+		if err := os.MkdirAll(dest, 0o755); err != nil {
+			t.Fatal(err)
+		}
+		cfg := installCfg{dest: dest, pathExtra: []string{dest}}
+		if r := runInstall(t, cfg); r.exit != 0 {
+			t.Fatalf("first install: exit = %d\n%s", r.exit, r.out)
+		}
+		r := runInstall(t, cfg)
+		if r.exit != 0 {
+			t.Fatalf("re-run: exit = %d\n%s", r.exit, r.out)
+		}
+		mustContain(t, "the upgrade cache note", r.out, "hash -r")
+		if strings.Contains(r.out, "another nuzur-cli") {
+			t.Errorf("invented a coexisting install on an in-place upgrade:\n%s", r.out)
+		}
+	})
+}
+
 // ─────────────────────────────────────────────────────────────────────────────
 // 8. The alias.
 // ─────────────────────────────────────────────────────────────────────────────

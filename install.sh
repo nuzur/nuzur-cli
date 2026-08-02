@@ -307,4 +307,34 @@ case ":${PATH}:" in
 	;;
 esac
 
+# Another nuzur-cli elsewhere on PATH (brew, an old manual copy) either shadows
+# this install or is shadowed by it — and in the shadowed-by-it case an
+# ALREADY-OPEN shell can still run the old binary from its command-location
+# cache, so the user's very first `nuzur-cli --version` appears to prove the
+# install failed. Scan PATH for other copies and say which situation this is.
+NUZUR_OTHER=""
+NUZUR_SAVED_IFS="${IFS}"
+IFS=:
+for nuzur_dir in $PATH; do
+	[ -n "$nuzur_dir" ] || continue
+	[ "$nuzur_dir" = "$NUZUR_DEST" ] && continue
+	if [ -x "$nuzur_dir/nuzur-cli" ]; then
+		NUZUR_OTHER="$nuzur_dir/nuzur-cli"
+		break
+	fi
+done
+IFS="${NUZUR_SAVED_IFS}"
+if [ -n "$NUZUR_OTHER" ]; then
+	NUZUR_RESOLVED="$(command -v nuzur-cli 2>/dev/null || true)"
+	if [ "$NUZUR_RESOLVED" != "$NUZUR_DEST/nuzur-cli" ]; then
+		nuzur_say "note: another nuzur-cli at $NUZUR_OTHER comes FIRST on your PATH and will shadow this install."
+		nuzur_say "  remove it (brew: brew uninstall nuzur/tap/nuzur-cli) or put $NUZUR_DEST earlier in PATH."
+	else
+		nuzur_say "note: another nuzur-cli exists at $NUZUR_OTHER; this install at $NUZUR_DEST comes first on PATH."
+		nuzur_say "  already-open shells may still run the old one from cache — open a new terminal, or run: hash -r"
+	fi
+elif [ -n "$NUZUR_OLD" ]; then
+	nuzur_say "already-open shells may still run the old version from cache — open a new terminal, or run: hash -r"
+fi
+
 nuzur_say "next: nuzur-cli --help  ·  docs at https://nuzur.com/cli"

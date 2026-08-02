@@ -7,7 +7,7 @@ import (
 	nemgen "github.com/nuzur/nem/idl/gen"
 )
 
-// The schema the generated JWT server is built around. Nuzur models are
+// The schema the generated JWT server is built around. nuzur models are
 // authored in English or Spanish, so each accepts the identifiers of both.
 // This mirrors go-code-gen's project package, which is the source of truth:
 // the two live in separate modules and cannot share a package.

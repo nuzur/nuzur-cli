@@ -178,7 +178,7 @@ func installLinux(execPath string) (*InstallResult, error) {
 		return nil, err
 	}
 	unit := fmt.Sprintf(`[Unit]
-Description=Nuzur Local Agent
+Description=nuzur Local Agent
 After=network.target
 
 [Service]
