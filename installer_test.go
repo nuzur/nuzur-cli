@@ -289,9 +289,12 @@ func utilityDir(t *testing.T, omit ...string) string {
 	}
 	dir := t.TempDir()
 	// Everything install.sh, the stub curl and the stub uname reach for.
+	// gzip is not invoked by the script itself but IS exec'd by GNU tar for -z
+	// (macOS bsdtar has gzip built in, so the omission only surfaced on Linux
+	// CI: "tar (child): gzip: Cannot exec").
 	for _, name := range []string{
-		"cat", "cp", "cut", "grep", "head", "id", "install", "ln", "mkdir",
-		"mktemp", "rm", "sed", "tar", "sha256sum", "shasum",
+		"cat", "cp", "cut", "grep", "gzip", "head", "id", "install", "ln",
+		"mkdir", "mktemp", "rm", "sed", "tar", "sha256sum", "shasum",
 	} {
 		if skip[name] {
 			continue
