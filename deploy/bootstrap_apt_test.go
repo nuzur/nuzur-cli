@@ -67,8 +67,12 @@ func bootstrapVariants(t *testing.T) map[string]string {
 	}
 }
 
-// The wait runs before the script touches apt at all — the whole point of it.
-func TestBootstrapWaitsForFirstBootAptBeforeTheFirstAptCall(t *testing.T) {
+// The wait is LAZY: paid the first time something is about to use apt, and
+// never at bootstrap entry. An eager top-level call cost every re-deploy the
+// full 180s bound while installing nothing (round-8 issue 2). The guard still
+// covers every apt path, because updates only happen through nuzur_apt_update
+// and its first line is the memoized ensure.
+func TestBootstrapAptWaitIsLazyAndStillCoversEveryAptPath(t *testing.T) {
 	for name, script := range bootstrapVariants(t) {
 		t.Run(name, func(t *testing.T) {
 			end := strings.Index(script, aptGuardEnd)
@@ -77,18 +81,23 @@ func TestBootstrapWaitsForFirstBootAptBeforeTheFirstAptCall(t *testing.T) {
 			}
 			body := script[end:]
 
-			call := strings.Index(body, "\nnuzur_wait_for_apt\n")
-			if call < 0 {
-				t.Fatal("the bootstrap never calls nuzur_wait_for_apt; the first-boot apt race is unguarded")
+			if strings.Contains(body, "\nnuzur_wait_for_apt\n") {
+				t.Error("the bootstrap calls nuzur_wait_for_apt at top level again — every re-deploy pays the 180s bound while installing nothing (round-8 issue 2)")
 			}
-			first := strings.Index(body, "apt-get")
-			if first >= 0 && first < call {
-				t.Errorf("an apt-get call precedes the wait:\n%s", body[:first+80])
-			}
-			if update := strings.Index(body, "nuzur_apt_update"); update >= 0 && update < call {
-				t.Errorf("an apt update precedes the wait:\n%s", body[:update+80])
+			if strings.Contains(body, "nuzur_ensure_apt_ready") {
+				t.Error("the ensure helper leaked into the body; only nuzur_apt_update may call it, or the memo stops meaning \"apt was about to be used\"")
 			}
 		})
+	}
+
+	// The coverage half: nuzur_apt_update's FIRST action is the ensure, so no
+	// update can run before the first-boot wait has been paid once.
+	guard := aptGuardBlock(t, bootstrapVariants(t)["mysql"])
+	updateBody := guard[strings.Index(guard, "nuzur_apt_update() {"):]
+	ensure := strings.Index(updateBody, "nuzur_ensure_apt_ready")
+	firstApt := strings.Index(updateBody, "apt-get")
+	if ensure < 0 || (firstApt >= 0 && firstApt < ensure) {
+		t.Errorf("nuzur_apt_update does not ensure apt readiness before touching apt:\n%s", updateBody[:120])
 	}
 }
 
@@ -137,12 +146,24 @@ func TestBootstrapAptWaitIsBoundedAndExplainsItself(t *testing.T) {
 		"local limit=180",
 		"waiting for the system's automatic package updates to finish (${waited}s)...",
 		"continuing anyway",
+		// lazy: the memoized ensure exists and gates the update helper
+		"NUZUR_APT_READY=",
+		"nuzur_ensure_apt_ready() {",
 		// (c) and the retry clears what the failed run left behind.
 		"rm -rf /var/lib/apt/lists/partial/*",
 		"/var/cache/apt/pkgcache.bin",
 	} {
 		if !strings.Contains(script, want) {
 			t.Errorf("the rendered bootstrap is missing %q", want)
+		}
+	}
+
+	// Round-8 issue 1: the timeout line must ride the SAME stream as the
+	// progress lines. On stderr it reordered past the next step's stdout marker,
+	// misattributing the whole wait to that step.
+	for _, line := range strings.Split(script, "\n") {
+		if strings.Contains(line, "continuing anyway") && strings.Contains(line, ">&2") {
+			t.Errorf("the apt-wait timeout line is redirected to stderr and will reorder against the progress lines: %q", strings.TrimSpace(line))
 		}
 	}
 }
@@ -274,6 +295,48 @@ func TestAptWaitLoopRunsAndTerminates(t *testing.T) {
 		// condition a single time would poll twice and give up, or spin forever.
 		if polls != 3 {
 			t.Errorf("fuser was consulted %d times for 2 busy polls, want 3 (two busy, one idle)", polls)
+		}
+	})
+
+	// The memo: two updates in one run pay the first-boot wait ONCE. Without it
+	// every apt block re-polls the box — and the second poll is what round-8
+	// issue 2's eager variant charged even to runs with no apt blocks at all.
+	t.Run("two updates consult the wait once", func(t *testing.T) {
+		dir := t.TempDir()
+		counter := filepath.Join(dir, "polls")
+		stubs := map[string]string{
+			"fuser": "#!/bin/sh\n" +
+				"n=$(cat " + counter + " 2>/dev/null || echo 0)\n" +
+				"echo $((n+1)) > " + counter + "\n" +
+				"exit 1\n", // idle
+			"systemctl":  "#!/bin/sh\nexit 3\n",
+			"cloud-init": "#!/bin/sh\nexit 0\n",
+			"apt-get":    "#!/bin/sh\nexit 0\n", // updates succeed
+		}
+		for name, body := range stubs {
+			if err := os.WriteFile(filepath.Join(dir, name), []byte(body), 0o755); err != nil {
+				t.Fatal(err)
+			}
+		}
+		guard := aptGuardBlock(t, bootstrapVariants(t)["mysql"])
+		script := filepath.Join(dir, "guard.sh")
+		body := "#!/usr/bin/env bash\nset -euo pipefail\n" + guard +
+			"\nnuzur_apt_update\nnuzur_apt_update\necho DONE\n"
+		if err := os.WriteFile(script, []byte(body), 0o755); err != nil {
+			t.Fatal(err)
+		}
+		cmd := exec.Command(bash, script)
+		cmd.Env = append(os.Environ(), "PATH="+dir+":/usr/bin:/bin")
+		out, err := cmd.CombinedOutput()
+		if err != nil {
+			t.Fatalf("the guarded updates failed (%v):\n%s", err, out)
+		}
+		polls := 0
+		if raw, rerr := os.ReadFile(counter); rerr == nil {
+			polls, _ = strconv.Atoi(strings.TrimSpace(string(raw)))
+		}
+		if polls != 1 {
+			t.Errorf("two successful updates consulted the wait %d times, want exactly 1 (memoized)", polls)
 		}
 	})
 }

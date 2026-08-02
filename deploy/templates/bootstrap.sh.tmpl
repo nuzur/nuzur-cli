@@ -75,7 +75,11 @@ nuzur_wait_for_apt() {
   local limit=180
   while nuzur_apt_busy; do
     if [ "$waited" -ge "$limit" ]; then
-      echo "[nuzur-deploy] the system's automatic package updates are STILL running after ${limit}s; continuing anyway" >&2
+      # Same stream as the progress lines above, NOT stderr: the two streams
+      # travel separate ssh channels and reorder, which put the next step's
+      # marker BETWEEN the last progress line and this one — misattributing a
+      # 180s wait to whatever step printed next (round-8 issue 1).
+      echo "[nuzur-deploy] the system's automatic package updates are STILL running after ${limit}s; continuing anyway"
       return 0
     fi
     if [ "$waited" -gt 0 ] && [ $((waited % 15)) -eq 0 ]; then
@@ -87,22 +91,39 @@ nuzur_wait_for_apt() {
   return 0
 }
 
+# nuzur_ensure_apt_ready runs the first-boot wait ONCE, lazily, the first time
+# something is actually about to use apt. Eager invocation at bootstrap entry
+# cost every re-deploy the full 180s bound while installing nothing (round-8
+# issue 2): unattended-upgrades runs periodically on settled boxes too, so the
+# wait must be paid only on the paths that touch apt — which a re-deploy whose
+# packages are all present never does.
+NUZUR_APT_READY=""
+nuzur_ensure_apt_ready() {
+  if [ -n "$NUZUR_APT_READY" ]; then
+    return 0
+  fi
+  nuzur_wait_for_apt
+  NUZUR_APT_READY=1
+}
+
 # nuzur_apt_update is `apt-get update` with one retry. The corrupted-cache error
 # is transient AND self-perpetuating: a half-written pkgcache.bin and partial
 # list files are read back by the next run, so a bare retry fails the same way.
 # Remove them first, re-check that apt is idle, then try once more.
 nuzur_apt_update() {
+  nuzur_ensure_apt_ready
   if apt-get update -y; then
     return 0
   fi
   echo "[nuzur-deploy] apt-get update failed; clearing the partial package cache and retrying once" >&2
   rm -rf /var/lib/apt/lists/partial/* /var/cache/apt/pkgcache.bin /var/cache/apt/srcpkgcache.bin 2>/dev/null || true
+  # Deliberately NOT the memoized ensure: a failed update means apt got busy
+  # again, so the state the memo recorded is stale.
   nuzur_wait_for_apt
   apt-get update -y
 }
 
 # Everything below reaches apt only through the two helpers above.
-nuzur_wait_for_apt
 
 # ── 1. Base packages (always) + Docker (skipped for --db-only) ───────────────
 if ! command -v openssl >/dev/null 2>&1 || ! command -v ufw >/dev/null 2>&1; then
