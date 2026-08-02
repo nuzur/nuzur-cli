@@ -58,7 +58,7 @@ func TestProbeCLIReleaseAsset(t *testing.T) {
 			}
 
 			// Whatever it decided, it asked about the URL the bootstrap uses.
-			want := "HEAD " + deploy.CLIReleaseAssetURL("1.2.3", deploy.CLIReleaseArchX8664)
+			want := "HEAD " + deploy.CLIReleaseAssetURL("1.2.3", deploy.CLIReleaseOSLinux, deploy.CLIReleaseArchX8664)
 			if reqs := rt.Requests(); len(reqs) != 1 || reqs[0] != want {
 				t.Fatalf("requests = %v, want exactly [%q]", reqs, want)
 			}
@@ -67,8 +67,11 @@ func TestProbeCLIReleaseAsset(t *testing.T) {
 			// a dead end — see the message's own doc comment.
 			if block != nil {
 				for _, must := range []string{
-					deploy.CLIReleaseAssetURL("1.2.3", deploy.CLIReleaseArchX8664),
+					deploy.CLIReleaseAssetURL("1.2.3", deploy.CLIReleaseOSLinux, deploy.CLIReleaseArchX8664),
 					"--cli-install-cmd",
+					// The hatch spelled as a command that can be pasted, not as a
+					// placeholder the reader still has to solve.
+					"nuzur.com/install.sh",
 				} {
 					if !strings.Contains(block.Error(), must) {
 						t.Errorf("the block message does not mention %q:\n%s", must, block)

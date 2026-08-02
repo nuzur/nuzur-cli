@@ -1311,7 +1311,7 @@ func TestGoldenReleaseAsset404(t *testing.T) {
 	// It asked about the URL the bootstrap would actually fetch — the single-source
 	// claim deploy.CLIReleaseAssetURL exists for, checked here end to end rather
 	// than only against the template.
-	want := "HEAD " + deploy.CLIReleaseAssetURL(constants.CLI_VERSION, deploy.CLIReleaseArchX8664)
+	want := "HEAD " + deploy.CLIReleaseAssetURL(constants.CLI_VERSION, deploy.CLIReleaseOSLinux, deploy.CLIReleaseArchX8664)
 	if reqs := g.http.Requests(); len(reqs) != 1 || reqs[0] != want {
 		t.Errorf("probe requests = %v, want exactly [%q]", reqs, want)
 	}

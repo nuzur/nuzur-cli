@@ -417,6 +417,36 @@ if ! curl -fsSL "$NUZUR_CLI_URL" -o /tmp/nuzur-cli.tar.gz; then
   echo "[nuzur-deploy] the box installs the SAME version as the CLI running this deploy; if v{{.CLIVersion}} has no published release assets (a dev build, or a release still uploading), re-run with --cli-install-cmd to install the CLI another way" >&2
   exit 22
 fi
+# Verify the download before unpacking it. The tarball is verified against the
+# release's checksums file — the same file nuzur.com/install.sh verifies against —
+# so what lands on the box is what goreleaser published, not whatever a proxy, a
+# cache or a compromised mirror handed back. The check runs BEFORE tar: an archive
+# that is not the published one must never be unpacked, let alone installed and
+# then run as root by the agent unit.
+#
+# sha256sum is coreutils and this bootstrap is Ubuntu/Debian-only, so it is
+# guaranteed present — no shasum fallback needed here (install.sh, which targets
+# macOS too, carries one).
+NUZUR_CLI_SUMS_URL="https://github.com/nuzur/nuzur-cli/releases/download/v{{.CLIVersion}}/nuzur-cli_{{.CLIVersion}}_checksums.txt"
+if ! curl -fsSL "$NUZUR_CLI_SUMS_URL" -o /tmp/nuzur-cli_checksums.txt; then
+  echo "[nuzur-deploy] could not download the checksums for nuzur-cli v{{.CLIVersion}}" >&2
+  echo "[nuzur-deploy] tried: $NUZUR_CLI_SUMS_URL" >&2
+  exit 22
+fi
+NUZUR_CLI_WANT_SUM="$(grep " nuzur-cli_Linux_${NUZUR_ARCH}.tar.gz\$" /tmp/nuzur-cli_checksums.txt | awk '{print $1}' || true)"
+if [ -z "$NUZUR_CLI_WANT_SUM" ]; then
+  echo "[nuzur-deploy] no checksum for nuzur-cli_Linux_${NUZUR_ARCH}.tar.gz in $NUZUR_CLI_SUMS_URL — refusing to install" >&2
+  exit 1
+fi
+NUZUR_CLI_GOT_SUM="$(sha256sum /tmp/nuzur-cli.tar.gz | awk '{print $1}')"
+if [ "$NUZUR_CLI_GOT_SUM" != "$NUZUR_CLI_WANT_SUM" ]; then
+  echo "[nuzur-deploy] checksum mismatch for nuzur-cli_Linux_${NUZUR_ARCH}.tar.gz — refusing to install" >&2
+  echo "[nuzur-deploy]   want: $NUZUR_CLI_WANT_SUM" >&2
+  echo "[nuzur-deploy]   got:  $NUZUR_CLI_GOT_SUM" >&2
+  echo "[nuzur-deploy]   archive:   $NUZUR_CLI_URL" >&2
+  echo "[nuzur-deploy]   checksums: $NUZUR_CLI_SUMS_URL" >&2
+  exit 1
+fi
 tar -xzf /tmp/nuzur-cli.tar.gz -C /tmp nuzur-cli
 install -m 0755 /tmp/nuzur-cli {{.NuzurBin}}
 {{end}}

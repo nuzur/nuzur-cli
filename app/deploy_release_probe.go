@@ -88,7 +88,7 @@ func (i *Implementation) checkCLIReleaseAsset(s *deploySettings) error {
 // release published x86_64 but not arm64 passes this probe and still fails on the
 // box, with the bootstrap's own message.
 func probeCLIReleaseAsset(client *http.Client, version string) (block error, warn string) {
-	url := deploy.CLIReleaseAssetURL(version, deploy.CLIReleaseArchX8664)
+	url := deploy.CLIReleaseAssetURL(version, deploy.CLIReleaseOSLinux, deploy.CLIReleaseArchX8664)
 
 	ctx, cancel := context.WithTimeout(context.Background(), cliReleaseProbeTimeout)
 	defer cancel()
@@ -119,11 +119,18 @@ func probeCLIReleaseAsset(client *http.Client, version string) (block error, war
 // one fact that lets a user check the claim themselves, and it names
 // --cli-install-cmd, because that is the way forward for every case in which the
 // user is right and the probe is inconvenient.
+//
+// It also spells that hatch out as a runnable command rather than a placeholder.
+// "<command that installs nuzur-cli on the box>" is accurate and useless at the
+// moment someone reads it: the shell installer IS that command, it resolves the
+// latest published release itself — which is exactly what an unreleased driving
+// version needs — and it puts the binary where the bootstrap expects it.
 func cliReleaseMissingError(url, version string, status int) error {
 	return fmt.Errorf(
 		"nuzur-cli v%s has no published Linux release asset (%s returned %d), and the box installs the SAME version as the CLI running this deploy.\n"+
 			"The bootstrap downloads that file in its last section — after the server, Docker, the database and the application image have all been created and paid for — so this deploy would fail there rather than here.\n"+
-			"Either deploy from a released CLI version, or re-run with --cli-install-cmd '<command that installs nuzur-cli on the box>' to install it another way (that flag skips this check entirely).",
+			"Either deploy from a released CLI version, or re-run with --cli-install-cmd to install it another way (that flag skips this check entirely) — for example the shell installer, which picks up the latest published release:\n"+
+			"  --cli-install-cmd 'curl -fsSL https://nuzur.com/install.sh | NUZUR_INSTALL_DIR=/usr/local/bin sh'",
 		version, url, status)
 }
 

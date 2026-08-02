@@ -1,0 +1,48 @@
+name: Go CI
+
+# The test suite, on every branch and every pull request.
+#
+# Until this file existed the 7-package suite ran only on developer machines, so
+# a red test reached main whenever someone forgot — and the two most
+# platform-sensitive things in the repo had no second opinion at all:
+#
+#   - install.sh is `#!/bin/sh`, and on ubuntu-latest /bin/sh IS dash. The
+#     installer tests run `sh -n` (and `dash -n`) against it here, so a bash-ism
+#     that a macOS developer cannot see — /bin/sh there is bash in posix mode —
+#     fails in CI instead of on a user's Debian box.
+#   - the sha256 fallback: macOS has `shasum`, ubuntu has `sha256sum`. The happy
+#     path uses whichever the host really has, so the two branches are covered by
+#     running the same suite on both.
+#
+# The whole suite runs: it needs no protoc, no docker, and no network (every
+# release URL is stubbed), and bash, tar and sha256sum are all present on
+# ubuntu-latest.
+
+on:
+  push:
+    branches: ['**']
+  pull_request:
+    branches: ['**']
+
+jobs:
+  test:
+    name: Run Tests
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout Code
+        uses: actions/checkout@v4
+
+      # go-version-file rather than a pinned string: go.mod already states the
+      # version this module is built with, and a second copy of it here is one
+      # that silently goes stale.
+      - name: Set up Go
+        uses: actions/setup-go@v5
+        with:
+          go-version-file: go.mod
+          cache: true
+
+      - name: Install dependencies
+        run: go mod download
+
+      - name: Run Tests
+        run: go test -v ./...

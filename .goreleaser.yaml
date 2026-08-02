@@ -196,8 +196,13 @@ brews:
     # Template: allowed
     #
     # `nuzur` is a convenience alias for people typing the command; `nuzur-cli` stays
-    # the real binary and the name every doc, message and URL uses (it's also the only
-    # one Scoop and raw-archive installs get, since neither can ship a symlink).
+    # the real binary and the name every doc, message and URL uses.
+    #
+    # Two installers create the alias now: this brew formula and the shell installer
+    # at nuzur.com/install.sh (repo root install.sh), which symlinks it next to the
+    # binary it installs. Only Scoop and hand-extracted archives are without it —
+    # neither can ship a symlink — so `nuzur-cli` remains the name everything else
+    # must use.
     extra_install: |
       bin.install_symlink bin/"nuzur-cli" => "nuzur"
 

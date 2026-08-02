@@ -7,5 +7,6 @@ ERR [34mGenerating application code into <TMP>/work/nuzur-sfapi ...[0m
 ERR [34mSaved this deploy's generator config as the project's go-code-gen config (later deploys and the web app reuse it).[0m
 ERR nuzur-cli v<CLIVERSION> has no published Linux release asset (https://github.com/nuzur/nuzur-cli/releases/download/v<CLIVERSION>/nuzur-cli_Linux_x86_64.tar.gz returned 404), and the box installs the SAME version as the CLI running this deploy.
 ERR The bootstrap downloads that file in its last section — after the server, Docker, the database and the application image have all been created and paid for — so this deploy would fail there rather than here.
-ERR Either deploy from a released CLI version, or re-run with --cli-install-cmd '<command that installs nuzur-cli on the box>' to install it another way (that flag skips this check entirely).
+ERR Either deploy from a released CLI version, or re-run with --cli-install-cmd to install it another way (that flag skips this check entirely) — for example the shell installer, which picks up the latest published release:
+ERR   --cli-install-cmd 'curl -fsSL https://nuzur.com/install.sh | NUZUR_INSTALL_DIR=/usr/local/bin sh'
 EXIT 1

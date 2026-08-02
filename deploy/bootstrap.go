@@ -149,22 +149,46 @@ func (p *BootstrapParams) defaults() {
 // published at all (a missing tag 404s every asset under it, whatever the arch).
 const CLIReleaseArchX8664 = "x86_64"
 
-// CLIReleaseAssetURL is the GitHub release asset the box downloads the nuzur CLI
-// from, for one version and one architecture.
+// CLIReleaseOSLinux is the goreleaser OS segment for Linux assets — the value
+// `{{ title .Os }}` renders, and the only one the box ever asks for. It is a
+// named constant because the installer script (install.sh) composes the same URL
+// for Darwin as well, so the OS stopped being a constant of the URL itself.
+const CLIReleaseOSLinux = "Linux"
+
+// CLIReleaseAssetURL is the GitHub release asset a machine downloads the nuzur
+// CLI from, for one version, one OS and one architecture.
 //
-// It exists so that URL has ONE definition. The bootstrap template composes the
-// same string with the arch resolved on the box (`${NUZUR_ARCH}`), and a caller
-// that wants to check the download BEFORE paying for a VM has to ask about
-// exactly the URL the script will use — a check aimed one character off is worse
-// than no check, because it reports confidently about a different file.
-// TestBootstrapTemplateUsesCLIReleaseAssetURL is what keeps the two in step; pass
-// "${NUZUR_ARCH}" as the arch to reproduce the template's form.
+// It exists so that URL has ONE definition. Three places compose it: the
+// bootstrap template (OS fixed to Linux, arch resolved on the box as
+// `${NUZUR_ARCH}`), the shell installer (both resolved from `uname`), and the
+// pre-flight probe in Go. A caller that wants to check the download BEFORE paying
+// for a VM has to ask about exactly the URL the script will use — a check aimed
+// one character off is worse than no check, because it reports confidently about
+// a different file. TestBootstrapTemplateUsesCLIReleaseAssetURL and
+// TestInstallScriptComposesTheReleaseURLs are what keep the three in step; pass
+// the scripts' own placeholders ("${NUZUR_ARCH}", "${NUZUR_OS}") to reproduce
+// their form.
 //
 // The leading `v` is added here (the constant is bare, the tag carries it) and a
 // caller that passes a tag name is absorbed rather than rendered as `.../vv1.5.2/`.
-func CLIReleaseAssetURL(version, arch string) string {
+func CLIReleaseAssetURL(version, osName, arch string) string {
 	version = strings.TrimPrefix(strings.TrimSpace(version), "v")
-	return fmt.Sprintf("https://github.com/nuzur/nuzur-cli/releases/download/v%s/nuzur-cli_Linux_%s.tar.gz", version, arch)
+	return fmt.Sprintf("https://github.com/nuzur/nuzur-cli/releases/download/v%s/nuzur-cli_%s_%s.tar.gz", version, osName, arch)
+}
+
+// CLIReleaseChecksumsURL is the release's sha256 manifest — the file both the
+// installer and the bootstrap verify their download against, so "the bytes I got
+// are the bytes that were published" is answered by the publisher rather than by
+// whoever is between us and GitHub.
+//
+// The version appears TWICE and in two forms, which is the entire reason this is
+// a function: the tag segment carries the `v` (`/download/v1.6.1/`) and
+// goreleaser's checksum filename does not (`nuzur-cli_1.6.1_checksums.txt`).
+// Getting that one character wrong yields a 404 that reads like a release with no
+// checksums at all.
+func CLIReleaseChecksumsURL(version string) string {
+	version = strings.TrimPrefix(strings.TrimSpace(version), "v")
+	return fmt.Sprintf("https://github.com/nuzur/nuzur-cli/releases/download/v%s/nuzur-cli_%s_checksums.txt", version, version)
 }
 
 // RenderBootstrap produces the bootstrap shell script for a target.

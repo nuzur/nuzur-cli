@@ -33,7 +33,7 @@ func TestBootstrapTemplateUsesCLIReleaseAssetURL(t *testing.T) {
 
 	// The template resolves the architecture on the box, so the Go form is asked
 	// for the same placeholder the shell expands.
-	want := CLIReleaseAssetURL(markerVersion, "${NUZUR_ARCH}")
+	want := CLIReleaseAssetURL(markerVersion, CLIReleaseOSLinux, "${NUZUR_ARCH}")
 	if !strings.Contains(script, want) {
 		t.Errorf("the rendered bootstrap does not contain CLIReleaseAssetURL's output.\n"+
 			"  want the script to download from: %s\n"+
@@ -53,8 +53,80 @@ func TestBootstrapTemplateUsesCLIReleaseAssetURL(t *testing.T) {
 	if err != nil {
 		t.Fatalf("RenderBootstrap (default version): %v", err)
 	}
-	if want := CLIReleaseAssetURL(constants.CLI_VERSION, "${NUZUR_ARCH}"); !strings.Contains(pinned, want) {
+	if want := CLIReleaseAssetURL(constants.CLI_VERSION, CLIReleaseOSLinux, "${NUZUR_ARCH}"); !strings.Contains(pinned, want) {
 		t.Errorf("a bootstrap rendered with no CLIVersion does not download %s", want)
+	}
+
+	// The checksums file the download is verified against is the SAME single
+	// definition, and it is the harder of the two to get right: the version appears
+	// twice, with the `v` in the tag segment and without it in goreleaser's
+	// filename. The marker version proves the shape rather than a lucky literal.
+	if want := CLIReleaseChecksumsURL(markerVersion); !strings.Contains(script, want) {
+		t.Errorf("the rendered bootstrap does not contain CLIReleaseChecksumsURL's output.\n"+
+			"  want the script to verify against: %s\n"+
+			"The template and deploy.CLIReleaseChecksumsURL have drifted, which means the\n"+
+			"box would download a checksums file the installer does not use — or none at all.", want)
+	}
+}
+
+// The version normalisation for the checksums URL, which is the one place the
+// same version has to be rendered two different ways in a single string.
+func TestCLIReleaseChecksumsURLNormalizesTheVersion(t *testing.T) {
+	want := "https://github.com/nuzur/nuzur-cli/releases/download/v1.6.1/nuzur-cli_1.6.1_checksums.txt"
+	for _, in := range []string{"1.6.1", "v1.6.1", " v1.6.1 "} {
+		if got := CLIReleaseChecksumsURL(in); got != want {
+			t.Errorf("CLIReleaseChecksumsURL(%q) = %q, want %q", in, got, want)
+		}
+	}
+}
+
+// The verification has to happen BEFORE the archive is unpacked.
+//
+// Order is the entire safety property here: an archive that is not the published
+// one must never be extracted, let alone installed to a system path and then run
+// as root by the agent's systemd unit. Checking afterwards would verify a file
+// whose contents are already on the box. So this asserts the index of the compare
+// against the index of the tar — the only way to state "before" about a script.
+func TestBootstrapVerifiesTheCLIChecksum(t *testing.T) {
+	script, err := RenderBootstrap(BootstrapParams{
+		Identifier:   "shop",
+		DBEngine:     DBMySQL,
+		DBName:       "shop",
+		DBUser:       "shop_app",
+		RemoteSrcDir: "/opt/nuzur/shop/src",
+	})
+	if err != nil {
+		t.Fatalf("RenderBootstrap: %v", err)
+	}
+
+	for _, want := range []string{
+		// the manifest, fetched with its own named-URL failure
+		"NUZUR_CLI_SUMS_URL=",
+		"could not download the checksums for nuzur-cli",
+		// the entry for THIS box's architecture, not just any line in the file
+		"nuzur-cli_Linux_${NUZUR_ARCH}.tar.gz",
+		// coreutils sha256sum: guaranteed on the Ubuntu/Debian boxes this targets
+		"sha256sum /tmp/nuzur-cli.tar.gz",
+		// and the two refusals, which must say what they refuse to do
+		"refusing to install",
+		"checksum mismatch for nuzur-cli_Linux_${NUZUR_ARCH}.tar.gz",
+	} {
+		if !strings.Contains(script, want) {
+			t.Errorf("the rendered bootstrap is missing %q", want)
+		}
+	}
+
+	verify := strings.Index(script, "NUZUR_CLI_GOT_SUM")
+	untar := strings.Index(script, "tar -xzf /tmp/nuzur-cli.tar.gz")
+	install := strings.Index(script, "install -m 0755 /tmp/nuzur-cli ")
+	if verify < 0 || untar < 0 || install < 0 {
+		t.Fatalf("the CLI install section is not where this test expects it (verify=%d untar=%d install=%d)", verify, untar, install)
+	}
+	if verify > untar {
+		t.Error("the bootstrap unpacks the nuzur-cli tarball BEFORE verifying its checksum — an unverified archive must never be extracted")
+	}
+	if untar > install {
+		t.Error("the bootstrap installs before it extracts, which cannot be right")
 	}
 }
 
@@ -64,7 +136,7 @@ func TestBootstrapTemplateUsesCLIReleaseAssetURL(t *testing.T) {
 func TestCLIReleaseAssetURLNormalizesTheVersion(t *testing.T) {
 	want := "https://github.com/nuzur/nuzur-cli/releases/download/v1.5.2/nuzur-cli_Linux_x86_64.tar.gz"
 	for _, in := range []string{"1.5.2", "v1.5.2", " v1.5.2 "} {
-		if got := CLIReleaseAssetURL(in, CLIReleaseArchX8664); got != want {
+		if got := CLIReleaseAssetURL(in, CLIReleaseOSLinux, CLIReleaseArchX8664); got != want {
 			t.Errorf("CLIReleaseAssetURL(%q) = %q, want %q", in, got, want)
 		}
 	}

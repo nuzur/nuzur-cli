@@ -2,6 +2,42 @@
 
 nuzur cli tool
 
+## Install
+
+**macOS & Linux (and WSL)** — the one-liner. It resolves the latest release,
+verifies its sha256 checksum against the release's own checksums file, and
+installs `nuzur-cli` plus the `nuzur` alias. No sudo: it installs into
+`~/.local/bin` (or `/usr/local/bin` when that is already writable).
+
+```bash
+curl -fsSL https://nuzur.com/install.sh | sh
+```
+
+Pin a version, or choose the directory — note the environment goes on the `sh`
+side of the pipe, since that is the process reading it:
+
+```bash
+curl -fsSL https://nuzur.com/install.sh | NUZUR_VERSION=v1.6.1 sh
+curl -fsSL https://nuzur.com/install.sh | NUZUR_INSTALL_DIR=$HOME/bin sh
+```
+
+**Windows** — Scoop (native Windows is not covered by the one-liner; inside WSL,
+use the Linux instructions above):
+
+```powershell
+scoop bucket add nuzur https://github.com/nuzur/scoop-bucket
+scoop install nuzur-cli
+```
+
+**Homebrew** (macOS/Linux):
+
+```bash
+brew install nuzur/tap/nuzur-cli
+```
+
+Signed archives for every platform, and everything else, are at
+<https://nuzur.com/cli>.
+
 ## See what a deploy will do before it does it
 
 `nuzur-cli deploy` is declarative: it reconciles your database to the published
