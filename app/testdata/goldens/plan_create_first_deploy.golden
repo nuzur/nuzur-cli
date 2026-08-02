@@ -1,0 +1,45 @@
+ERR [32mLogged in as [Deploy - deploy-tests@example.invalid][0m
+ERR [34mLoading projects...[0m
+ERR [34mLoading project versions...[0m
+ERR [34mRendering the CREATE script for a first deploy...[0m
+ERR [34m
+ERR Plan for project "sfapi", version v_21 (APPROVED)[0m
+ERR [34mTarget: no live database yet — mysql[0m
+ERR [33m
+ERR There is no live database for this target yet — what follows is the CREATE script
+ERR a first deploy would run, not a diff.[0m
+ERR 
+ERR [34m2 statements: 2 additive[0m
+ERR 
+ERR [33mMySQL note: nuzur cannot read a MySQL schema directly, so the "existing" side of
+ERR this diff is reconstructed — the database is introspected into a project version and
+ERR re-rendered as DDL. Anything the model cannot express comes back normalized, so this
+ERR plan can contain ALTERs that change nothing and that will reappear on every deploy
+ERR (column widths and types are the usual ones). The CREATEs and DROPs are real.
+ERR Treat a bare MODIFY/CHANGE COLUMN as suspect and compare it against the column you
+ERR actually have.[0m
+ERR 
+ERR [33mThese statements effectively commit ONE AT A TIME. A transaction is opened, but
+ERR MySQL commits DDL implicitly, so it cannot be rolled back: if one statement fails
+ERR partway through, the statements before it stay applied.[0m
+ERR 
+ERR [37mOnly tables, columns, indexes, foreign keys and schemas are reconciled. Anything
+ERR the nuzur model cannot express — triggers, functions, views, sequences, row-level
+ERR security, check constraints — is invisible to this diff and is never dropped by it.
+ERR Column defaults and foreign key referential actions ARE part of the model and are
+ERR reconciled: a default or an ON DELETE/ON UPDATE the model does not state is dropped
+ERR from the database like any other column change.[0m
+ERR 
+ERR Full plan, in execution order:
+OUT    1. CREATE TABLE `customer` (
+OUT   `uuid` char(36) NOT NULL,
+OUT   PRIMARY KEY (`uuid`)
+OUT )
+OUT    2. CREATE TABLE `invoice` (
+OUT   `uuid` char(36) NOT NULL,
+OUT   PRIMARY KEY (`uuid`)
+OUT )
+ERR 
+ERR [32mNothing was applied — this was a dry run.[0m
+ERR [32mTo apply it:  nuzur-cli deploy --provider digitalocean --project sfapi --version v_21 --identifier sfapi --api both --auth jwt[0m
+EXIT 0

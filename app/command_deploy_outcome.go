@@ -7,6 +7,47 @@ import (
 	"github.com/nuzur/nuzur-cli/outputtools"
 )
 
+// schemaOutcomeState is what happened to the schema in step 10 — exactly one of four
+// states, because they are mutually exclusive and the messages, the color, the revision
+// text and the exit code all branch on which one it is.
+//
+// It replaces three independent booleans (applied/blocked/neverStarted) that could
+// express eight combinations, of which four were meaningless and two were reachable
+// only by mistake. Every branch that read them had to re-derive the state, and
+// re-derive it identically, from a set the type did not constrain.
+//
+// The zero value is deliberately schemaStateFailedDuringApply, the conservative half:
+// an outcome nobody set claims failure and sends the user to check the database rather
+// than printing "Deployment complete." and exiting 0 on a deploy whose schema step was
+// never classified. This mirrors what the booleans it replaces defaulted to
+// (schemaApplied false, schemaNeverStarted false).
+type schemaOutcomeState int
+
+const (
+	// schemaStateFailedDuringApply: SQL reached the database and something errored.
+	// The only state in which the database may be half-migrated, and therefore the
+	// only one for which schemaRolledBack means anything.
+	schemaStateFailedDuringApply schemaOutcomeState = iota
+	// schemaStateApplied: the migration was applied.
+	schemaStateApplied
+	// schemaStateBlocked marks the one case where the schema was not applied ON
+	// PURPOSE: the migration deleted data and nobody authorized that. It is not a
+	// failure to retry — retrying changes nothing — so it gets its own message, its
+	// own color and its own revision text.
+	schemaStateBlocked
+	// schemaStateFailedBeforeSQL: the apply failed BEFORE any SQL was sent —
+	// resolving the sql-push extension, reaching the database, or computing the diff.
+	//
+	// It separates two states that were reported identically. A DeadlineExceeded while
+	// RESOLVING "sql-push-local" produced "a statement that failed partway through
+	// leaves the ones before it applied. Check the database before retrying" and "the
+	// app is now serving generated code that does NOT match the database" — of a run
+	// in which nothing had been sent. Both were false: the plan 30 seconds later was
+	// empty and every endpoint answered 200, while the user was sent to audit a
+	// database that had never been touched.
+	schemaStateFailedBeforeSQL
+)
+
 // deployOutcome records what step 10 of a deploy achieved: publishing the box's
 // database as an agent connection in nuzur, and applying the project's schema to it.
 //
@@ -16,12 +57,10 @@ import (
 // connection catalog went unnoticed until it surfaced as an unrelated UI error.
 type deployOutcome struct {
 	catalogPublished bool
-	schemaApplied    bool
-	// schemaBlocked marks the one case where the schema was not applied ON PURPOSE:
-	// the migration deleted data and nobody authorized that. It is not a failure to
-	// retry — retrying changes nothing — so it gets its own message, its own color
-	// and its own revision text.
-	schemaBlocked bool
+	// schema is which of the four terminal states the schema step ended in. Not
+	// knowing (an apply that was never classified) reads as failedDuringApply — see
+	// schemaOutcomeState.
+	schema schemaOutcomeState
 	// destructiveCount is how many statements would delete (or did delete) data.
 	destructiveCount int
 	// rerunCommand is the exact invocation that would apply the blocked migration.
@@ -34,22 +73,12 @@ type deployOutcome struct {
 	// serving code the database does not match" is only true when there is an app, and
 	// a --db-only deploy has none.
 	appShipped bool
-	// schemaNeverStarted records that the apply failed BEFORE any SQL was sent —
-	// resolving the sql-push extension, reaching the database, or computing the diff.
-	//
-	// It separates two states that were reported identically. A DeadlineExceeded while
-	// RESOLVING "sql-push-local" produced "a statement that failed partway through
-	// leaves the ones before it applied. Check the database before retrying" and "the
-	// app is now serving generated code that does NOT match the database" — of a run
-	// in which nothing had been sent. Both were false: the plan 30 seconds later was
-	// empty and every endpoint answered 200, while the user was sent to audit a
-	// database that had never been touched.
-	//
-	// Defaults false, which is the conservative half: not knowing keeps the "go and
-	// check" message.
-	schemaNeverStarted bool
 	// schemaRolledBack records that the attempted migration was applied as ONE
 	// transaction, so a failure took the whole thing back with it.
+	//
+	// An evidence bit for schemaStateFailedDuringApply and meaningful only there: it
+	// is the one state in which SQL reached the database, so it is the only one whose
+	// message has anything to roll back. The other three states leave it false.
 	//
 	// Only true when both halves are known: the engine gives real atomicity
 	// (Postgres, and only when the batch contains nothing it must run outside a
@@ -73,8 +102,8 @@ func (o deployOutcome) summary() string {
 				"in the data manager under \"Via agent\". The database and the agent are running on the box — "+
 				"re-run the deploy to retry publishing it.")
 	}
-	switch {
-	case o.schemaBlocked:
+	switch o.schema {
+	case schemaStateBlocked:
 		// Deliberately NOT "re-run the deploy to retry": re-running changes nothing.
 		// This needs a decision, and the user has to know both what it costs and
 		// what state the box is in until they make it.
@@ -90,7 +119,7 @@ func (o deployOutcome) summary() string {
 			"applies nothing."
 		msg += o.mismatchWarning()
 		parts = append(parts, msg)
-	case !o.schemaApplied && o.schemaNeverStarted:
+	case schemaStateFailedBeforeSQL:
 		// The apply never reached the database: the failure was in resolving the
 		// sql-push extension, reaching the box's agent, or computing the diff. Nothing
 		// was sent, so there is nothing to audit and nothing to be mismatched — and
@@ -102,7 +131,7 @@ func (o deployOutcome) summary() string {
 				"migration was sent — while resolving the SQL-push extension, reaching the database, "+
 				"or computing the diff. No SQL was sent to the database. The app and database are "+
 				"unchanged and consistent; re-run the deploy or apply via SQL Push.")
-	case !o.schemaApplied:
+	case schemaStateFailedDuringApply:
 		// Deliberately says NOTHING about what the database contains. This used to
 		// claim "so the database is still empty", which is first-deploy wording that
 		// was emitted unconditionally: on a re-deploy it was simply false, and it read
@@ -152,7 +181,7 @@ func (o deployOutcome) mismatchWarning() string {
 // the never-started one, where the database is intact but the migration still has
 // not happened.
 func (o deployOutcome) summaryColor() outputtools.OutputColor {
-	if o.schemaBlocked || !o.schemaApplied {
+	if o.schema != schemaStateApplied {
 		return outputtools.Red
 	}
 	return outputtools.Yellow
@@ -174,19 +203,21 @@ func (o deployOutcome) revisionMessage() string {
 	if !o.catalogPublished {
 		parts = append(parts, "connection not published to nuzur")
 	}
-	switch {
-	case o.schemaBlocked:
+	switch o.schema {
+	case schemaStateBlocked:
 		parts = append(parts, fmt.Sprintf("schema not applied: %d destructive statement(s) need --allow-destructive", o.destructiveCount))
-	case !o.schemaApplied && o.schemaNeverStarted:
+	case schemaStateFailedBeforeSQL:
 		// The revision history has to be able to tell these apart too: one says the
 		// database may need inspecting, this one says it was never touched.
 		parts = append(parts, "schema not applied: the apply failed before any SQL was sent")
-	case !o.schemaApplied:
+	case schemaStateFailedDuringApply:
 		parts = append(parts, "schema not applied to the database")
-	case o.destructiveApplied:
-		// A deploy that dropped data on purpose should be legible as such in the
-		// history, not just as a successful deploy.
-		parts = append(parts, fmt.Sprintf("schema applied including %d destructive statement(s)", o.destructiveCount))
+	case schemaStateApplied:
+		if o.destructiveApplied {
+			// A deploy that dropped data on purpose should be legible as such in the
+			// history, not just as a successful deploy.
+			parts = append(parts, fmt.Sprintf("schema applied including %d destructive statement(s)", o.destructiveCount))
+		}
 	}
 	return strings.Join(parts, "; ")
 }

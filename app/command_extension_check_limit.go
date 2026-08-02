@@ -3,7 +3,6 @@ package app
 import (
 	"fmt"
 
-	"github.com/nuzur/nuzur-cli/extensionrun"
 	"github.com/nuzur/nuzur-cli/outputtools"
 	"github.com/urfave/cli"
 )
@@ -21,9 +20,7 @@ func (i *Implementation) ExtensionCheckLimitCommand() cli.Command {
 				return err
 			}
 
-			er, err := extensionrun.New(extensionrun.Params{
-				Auth: i.auth,
-			})
+			er, err := i.extensionRunner()
 			if err != nil {
 				return err
 			}

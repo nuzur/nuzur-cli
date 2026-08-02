@@ -1,0 +1,13 @@
+ERR [32mLogged in as [Deploy - deploy-tests@example.invalid][0m
+ERR [34mLoading projects...[0m
+ERR [34mLoading project versions...[0m
+ERR [33mS3 storage is enabled but no credentials were provided (no --storage / --s3-* and none saved) — /upload and /sign will return 503 until you set the aws: block in the app's prod.yaml.[0m
+ERR [34mReusing the existing digitalocean server 203.0.113.10 for identifier "sfapi" (deployment sfapi-seedbox0) — no new VM will be created. Pass --new-vm to provision a fresh one instead.[0m
+ERR [34mReusing the box's existing agent (f8888e33-0000-0000-0000-000000000001) — no new pairing.[0m
+ERR [34mChecking the reused server 203.0.113.10 is reachable...[0m
+ERR the recorded digitalocean server for identifier "sfapi" (deployment sfapi-seedbox0, host 203.0.113.10) is not reachable over SSH: ssh preflight to root@203.0.113.10 failed (check host, user, and key): remote command failed: exit status 255
+ERR A managed re-deploy reuses the recorded server instead of creating a second VM, so this deploy cannot continue. Either:
+ERR   - restore connectivity to 203.0.113.10 (the VM may be powered off, or its firewall/SSH key may have changed), or
+ERR   - remove the stale record and its VM with `nuzur-cli destroy sfapi-seedbox0`, or
+ERR   - re-run with --new-vm to provision a fresh server (which bills for a second one).
+EXIT 1

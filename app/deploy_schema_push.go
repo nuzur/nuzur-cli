@@ -1,6 +1,7 @@
 package app
 
 import (
+	"errors"
 	"fmt"
 	"os"
 
@@ -147,6 +148,19 @@ func (i *Implementation) sqlPushRun(targets *runTargets, t planTarget, decide ex
 // database.
 const sqlGenExtensionIdentifier = "sql-gen"
 
+// errNoStandaloneEntities marks the one computeCreatePlan failure that is not a
+// problem: a project version with no standalone entities. Nothing is wrong with
+// it — an entity-less project deploys perfectly well, it simply has no tables to
+// create — so the first-deploy pre-check warns on this and blocks on everything
+// else.
+//
+// It is wrapped as a SENTENCE FRAGMENT so the full message the --plan path prints
+// is byte-for-byte what it printed before the sentinel existed: "project version
+// <id> has no standalone entities, so there is no schema to create". The odd shape
+// is the point — an error string that changed here would change what a create-mode
+// plan tells its user, and that message is the whole answer that path gives.
+var errNoStandaloneEntities = errors.New("has no standalone entities, so there is no schema to create")
+
 // computeCreatePlan renders the CREATE script a first deploy would run, for the
 // case where there is no live database to diff against.
 //
@@ -154,6 +168,25 @@ const sqlGenExtensionIdentifier = "sql-gen"
 // product than answering "here is everything it would create", and the second answer
 // is one read-only generator run away.
 func (i *Implementation) computeCreatePlan(targets *runTargets, engine deploy.DBEngine) (string, error) {
+	return i.renderCreatePlan(targets, engine, true)
+}
+
+// checkCreatePlanRenders runs the same render as a CHECK and throws the script
+// away: a first deploy wants to know whether the schema CAN be rendered before it
+// creates a server, not what it says.
+//
+// Silent on success, deliberately. It runs on every first deploy, and a line
+// announcing a check that passes on all but a handful of runs is noise in front of
+// every user for the benefit of none of them — the render only has anything to say
+// when it fails, and then it says it as a refusal.
+func (i *Implementation) checkCreatePlanRenders(targets *runTargets, engine deploy.DBEngine) error {
+	_, err := i.renderCreatePlan(targets, engine, false)
+	return err
+}
+
+// renderCreatePlan is the shared body. narrate is false for the pre-check; see
+// checkCreatePlanRenders.
+func (i *Implementation) renderCreatePlan(targets *runTargets, engine deploy.DBEngine, narrate bool) (string, error) {
 	// The resolved project version does not carry entities (it is fetched with
 	// ExcludeJsonFields), so pull the full schema here rather than reading it off
 	// the object we already have — counting entities on the stripped object made
@@ -175,7 +208,7 @@ func (i *Implementation) computeCreatePlan(targets *runTargets, engine deploy.DB
 		// sql-gen renders only the entities it is handed, so an empty list would
 		// come back as an empty script — indistinguishable from "no changes". Say
 		// what actually happened instead.
-		return "", fmt.Errorf("project version %s has no standalone entities, so there is no schema to create", targets.projectVersion.GetIdentifier())
+		return "", fmt.Errorf("project version %s %w", targets.projectVersion.GetIdentifier(), errNoStandaloneEntities)
 	}
 
 	ext, err := targets.er.FindExtensionByIdentifier(sqlGenExtensionIdentifier)
@@ -195,7 +228,9 @@ func (i *Implementation) computeCreatePlan(targets *runTargets, engine deploy.DB
 	}
 	defer os.RemoveAll(outDir)
 
-	outputtools.PrintlnColoredErr("Rendering the CREATE script for a first deploy...", outputtools.Blue)
+	if narrate {
+		outputtools.PrintlnColoredErr("Rendering the CREATE script for a first deploy...", outputtools.Blue)
+	}
 	res, err := targets.er.Run(extensionrun.RunParams{
 		Extension:          ext,
 		ExtensionVersion:   ver,

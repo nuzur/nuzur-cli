@@ -1,0 +1,6 @@
+ERR [32mLogged in as [Deploy - deploy-tests@example.invalid][0m
+ERR [34mCleaning up the server (this project's service, container, config)...[0m
+ERR [34mDeleting the digitalocean VM (instance fake-inst-1)...[0m
+OUT Destroyed deployment sfapi-seedbox0 (server cleaned up; VM deleted; shared agent revoked — last project on the box).
+OUT   The database was on that VM and went with it.
+EXIT 0

@@ -21,24 +21,24 @@ func TestDeployOutcomeSummary(t *testing.T) {
 	}{
 		{
 			name:       "both succeeded says nothing",
-			o:          deployOutcome{catalogPublished: true, schemaApplied: true},
+			o:          deployOutcome{catalogPublished: true, schema: schemaStateApplied},
 			wantAbsent: []string{"schema", "connection"},
 		},
 		{
 			name:         "publish failed blames the connection, not the schema",
-			o:            deployOutcome{catalogPublished: false, schemaApplied: true},
+			o:            deployOutcome{catalogPublished: false, schema: schemaStateApplied},
 			wantMentions: []string{"connection was NOT published", "Via agent"},
 			wantAbsent:   []string{"schema was NOT applied"},
 		},
 		{
 			name:         "schema failed blames the schema, not the connection",
-			o:            deployOutcome{catalogPublished: true, schemaApplied: false},
+			o:            deployOutcome{catalogPublished: true, schema: schemaStateFailedDuringApply},
 			wantMentions: []string{"schema was NOT applied", "--plan"},
 			wantAbsent:   []string{"connection was NOT published"},
 		},
 		{
 			name: "a failed apply on a box that was already rebuilt says the app is mismatched",
-			o:    deployOutcome{catalogPublished: true, schemaApplied: false, appShipped: true},
+			o:    deployOutcome{catalogPublished: true, schema: schemaStateFailedDuringApply, appShipped: true},
 			wantMentions: []string{
 				"does NOT match the database",
 				"re-deploy the version that was running before this one",
@@ -47,12 +47,12 @@ func TestDeployOutcomeSummary(t *testing.T) {
 		{
 			// --db-only ships no app, so there is nothing to be mismatched.
 			name:       "a db-only deploy is not told its app is mismatched",
-			o:          deployOutcome{catalogPublished: true, schemaApplied: false},
+			o:          deployOutcome{catalogPublished: true, schema: schemaStateFailedDuringApply},
 			wantAbsent: []string{"rebuilt and restarted"},
 		},
 		{
 			name:         "both failed reports both",
-			o:            deployOutcome{catalogPublished: false, schemaApplied: false},
+			o:            deployOutcome{catalogPublished: false, schema: schemaStateFailedDuringApply},
 			wantMentions: []string{"connection was NOT published", "schema was NOT applied"},
 		},
 	}
@@ -60,7 +60,7 @@ func TestDeployOutcomeSummary(t *testing.T) {
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			got := tt.o.summary()
-			if tt.o.catalogPublished && tt.o.schemaApplied && got != "" {
+			if tt.o.catalogPublished && tt.o.schema == schemaStateApplied && got != "" {
 				t.Fatalf("clean deploy produced a warning: %q", got)
 			}
 			for _, want := range tt.wantMentions {
@@ -81,9 +81,9 @@ func TestDeployOutcomeSummary(t *testing.T) {
 // agent connection was live in exactly the case where it was not.
 func TestDeployOutcomeSummaryDoesNotGuessACause(t *testing.T) {
 	for _, o := range []deployOutcome{
-		{catalogPublished: false, schemaApplied: true},
-		{catalogPublished: true, schemaApplied: false},
-		{catalogPublished: false, schemaApplied: false},
+		{catalogPublished: false, schema: schemaStateApplied},
+		{catalogPublished: true, schema: schemaStateFailedDuringApply},
+		{catalogPublished: false, schema: schemaStateFailedDuringApply},
 	} {
 		got := strings.ToLower(o.summary())
 		if strings.Contains(got, "diff step") {
@@ -101,10 +101,10 @@ func TestDeployOutcomeSummaryDoesNotGuessACause(t *testing.T) {
 // errored against a database full of rows, and it read as reassurance.
 func TestDeployOutcomeSummaryNeverClaimsTheDatabaseIsEmpty(t *testing.T) {
 	for _, o := range []deployOutcome{
-		{catalogPublished: true, schemaApplied: false},
-		{catalogPublished: true, schemaApplied: false, appShipped: true},
-		{catalogPublished: true, schemaApplied: false, schemaBlocked: true, destructiveCount: 1},
-		{catalogPublished: false, schemaApplied: false},
+		{catalogPublished: true, schema: schemaStateFailedDuringApply},
+		{catalogPublished: true, schema: schemaStateFailedDuringApply, appShipped: true},
+		{catalogPublished: true, schema: schemaStateBlocked, destructiveCount: 1},
+		{catalogPublished: false, schema: schemaStateFailedDuringApply},
 	} {
 		got := strings.ToLower(o.summary())
 		for _, forbidden := range []string{"still empty", "database is empty", "no data"} {
@@ -127,7 +127,7 @@ func TestDeployOutcomeSummaryNeverClaimsTheDatabaseIsEmpty(t *testing.T) {
 // auditing an untouched database and considering a rollback of a healthy deploy.
 func TestDeployOutcomeSummarySeparatesAnApplyThatNeverStarted(t *testing.T) {
 	never := deployOutcome{
-		catalogPublished: true, schemaApplied: false, schemaNeverStarted: true, appShipped: true,
+		catalogPublished: true, schema: schemaStateFailedBeforeSQL, appShipped: true,
 	}.summary()
 
 	for _, want := range []string{
@@ -154,7 +154,7 @@ func TestDeployOutcomeSummarySeparatesAnApplyThatNeverStarted(t *testing.T) {
 
 	// The started-then-failed branch is untouched: not knowing still produces the
 	// conservative message.
-	started := deployOutcome{catalogPublished: true, schemaApplied: false, appShipped: true}.summary()
+	started := deployOutcome{catalogPublished: true, schema: schemaStateFailedDuringApply, appShipped: true}.summary()
 	if !strings.Contains(started, "Check the database before retrying") {
 		t.Errorf("a failure past the confirmation step must still send the user checking: %s", started)
 	}
@@ -168,7 +168,7 @@ func TestDeployOutcomeSummarySeparatesAnApplyThatNeverStarted(t *testing.T) {
 // somebody their migration rolled back when it did not is how a half-applied schema
 // goes unnoticed.
 func TestDeployOutcomeSummaryOnlyClaimsAKnownRollback(t *testing.T) {
-	rolled := deployOutcome{catalogPublished: true, schemaApplied: false, schemaRolledBack: true}.summary()
+	rolled := deployOutcome{catalogPublished: true, schema: schemaStateFailedDuringApply, schemaRolledBack: true}.summary()
 	if !strings.Contains(rolled, "rolled back") {
 		t.Errorf("a known rollback should be reported: %s", rolled)
 	}
@@ -176,7 +176,7 @@ func TestDeployOutcomeSummaryOnlyClaimsAKnownRollback(t *testing.T) {
 		t.Errorf("a known rollback should not send the user checking: %s", rolled)
 	}
 
-	unknown := deployOutcome{catalogPublished: true, schemaApplied: false}.summary()
+	unknown := deployOutcome{catalogPublished: true, schema: schemaStateFailedDuringApply}.summary()
 	if strings.Contains(unknown, "rolled back and the database is as it was") {
 		t.Errorf("an unknown outcome must not claim a rollback: %s", unknown)
 	}
@@ -199,9 +199,9 @@ func TestDeployOutcomeSummaryColor(t *testing.T) {
 		o    deployOutcome
 		want outputtools.OutputColor
 	}{
-		{name: "blocked", o: deployOutcome{schemaBlocked: true, schemaApplied: false}, want: outputtools.Red},
-		{name: "failed", o: deployOutcome{schemaApplied: false}, want: outputtools.Red},
-		{name: "publish failed only", o: deployOutcome{schemaApplied: true}, want: outputtools.Yellow},
+		{name: "blocked", o: deployOutcome{schema: schemaStateBlocked}, want: outputtools.Red},
+		{name: "failed", o: deployOutcome{schema: schemaStateFailedDuringApply}, want: outputtools.Red},
+		{name: "publish failed only", o: deployOutcome{schema: schemaStateApplied}, want: outputtools.Yellow},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
 			if got := tc.o.summaryColor(); got != tc.want {
@@ -219,29 +219,29 @@ func TestDeployOutcomeRevisionMessage(t *testing.T) {
 	}{
 		{
 			name: "clean deploy records no shortfall",
-			o:    deployOutcome{catalogPublished: true, schemaApplied: true},
+			o:    deployOutcome{catalogPublished: true, schema: schemaStateApplied},
 			want: "",
 		},
 		{
 			name: "publish failure",
-			o:    deployOutcome{catalogPublished: false, schemaApplied: true},
+			o:    deployOutcome{catalogPublished: false, schema: schemaStateApplied},
 			want: "connection not published to nuzur",
 		},
 		{
 			name: "schema failure",
-			o:    deployOutcome{catalogPublished: true, schemaApplied: false},
+			o:    deployOutcome{catalogPublished: true, schema: schemaStateFailedDuringApply},
 			want: "schema not applied to the database",
 		},
 		{
 			// The revision history has to tell these apart too: one may need the
 			// database inspecting, the other never touched it.
 			name: "schema failure before anything was sent",
-			o:    deployOutcome{catalogPublished: true, schemaApplied: false, schemaNeverStarted: true},
+			o:    deployOutcome{catalogPublished: true, schema: schemaStateFailedBeforeSQL},
 			want: "schema not applied: the apply failed before any SQL was sent",
 		},
 		{
 			name: "both",
-			o:    deployOutcome{catalogPublished: false, schemaApplied: false},
+			o:    deployOutcome{catalogPublished: false, schema: schemaStateFailedDuringApply},
 			want: "connection not published to nuzur; schema not applied to the database",
 		},
 	}
@@ -257,7 +257,7 @@ func TestDeployOutcomeRevisionMessage(t *testing.T) {
 
 // The revision status message is stored in a varchar(512) and truncated past that.
 func TestDeployOutcomeRevisionMessageFitsTheColumn(t *testing.T) {
-	worst := deployOutcome{catalogPublished: false, schemaApplied: false}.revisionMessage()
+	worst := deployOutcome{catalogPublished: false, schema: schemaStateFailedDuringApply}.revisionMessage()
 	if len(worst) > maxStatusMessage {
 		t.Errorf("worst-case revision message is %d chars, exceeds the %d cap", len(worst), maxStatusMessage)
 	}

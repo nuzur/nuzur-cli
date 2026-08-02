@@ -1,0 +1,23 @@
+ERR [32mLogged in as [Deploy - deploy-tests@example.invalid][0m
+ERR [34mLoading projects...[0m
+ERR [34mLoading project versions...[0m
+ERR [33mS3 storage is enabled but no credentials were provided (no --storage / --s3-* and none saved) — /upload and /sign will return 503 until you set the aws: block in the app's prod.yaml.[0m
+ERR [34mReusing the existing digitalocean server 203.0.113.10 for identifier "sfapi" (deployment sfapi-seedbox0) — no new VM will be created. Pass --new-vm to provision a fresh one instead.[0m
+ERR [34mReusing the box's existing agent (f8888e33-0000-0000-0000-000000000001) — no new pairing.[0m
+ERR [34mChecking the reused server 203.0.113.10 is reachable...[0m
+ERR [34mComputing the schema plan (nothing will be applied)...[0m
+ERR [31m
+ERR Schema NOT applied — this migration deletes data.[0m
+ERR [31mDESTRUCTIVE — these delete data:
+ERR    2. ALTER TABLE `customer` DROP COLUMN `legacy_ref`
+ERR       -- HAZARD DELETES_DATA: drops legacy_ref from customer and every value in it
+ERR    3. DROP TABLE `audit_log_2024`
+ERR       -- HAZARD DELETES_DATA: drops audit_log_2024 and every row in it[0m
+ERR [31m
+ERR The deploy stopped here, before anything was shipped: 2 statements would DELETE DATA and --allow-destructive was not passed. The database is untouched and the app on this box is untouched — it is still running the code that matches its schema.[0m
+ERR 
+ERR [33mTo see the full plan without applying anything:[0m
+ERR [33m  nuzur-cli deploy --provider digitalocean --project sfapi --version v_21 --identifier sfapi --api both --auth jwt --plan[0m
+ERR [33mTo apply it, including the destructive statements:[0m
+ERR [33m  nuzur-cli deploy --provider digitalocean --project sfapi --version v_21 --identifier sfapi --api both --auth jwt --allow-destructive[0m
+EXIT 1

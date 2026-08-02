@@ -2,7 +2,6 @@ package app
 
 import (
 	"fmt"
-	"os"
 	"slices"
 	"strings"
 
@@ -44,6 +43,12 @@ type deployPlanReport struct {
 	Caveats       []string `json:"caveats,omitempty"`
 	Applied       bool     `json:"applied"`
 	RerunCommand  string   `json:"rerun_command,omitempty"`
+	// RerunNote is set INSTEAD of RerunCommand when no pasteable command can be
+	// promised to apply to the database that was planned — see
+	// localAgentRerunNote. The two are mutually exclusive on purpose: a consumer
+	// (including an agent reading the JSON) that finds no rerun_command has a
+	// rerun_note saying why, and never both.
+	RerunNote string `json:"rerun_note,omitempty"`
 }
 
 type planProject struct {
@@ -125,42 +130,47 @@ func printDeployPlan(r deployPlanReport, plan sqlplan.Plan) {
 		return
 	}
 
-	fmt.Fprintln(os.Stderr)
+	fmt.Fprintln(outputtools.Stderr)
 	outputtools.PrintlnColoredErr(plan.SummaryLine(), outputtools.Blue)
 
 	if r.Destructive {
-		fmt.Fprintln(os.Stderr)
+		fmt.Fprintln(outputtools.Stderr)
 		outputtools.PrintlnColoredErr(plan.RenderDestructive(), outputtools.Red)
 	}
 
 	if churn := plan.ChurnNote(); churn != "" && hasCaveat(r.Caveats, caveatMySQLChurn) {
-		fmt.Fprintln(os.Stderr)
+		fmt.Fprintln(outputtools.Stderr)
 		outputtools.PrintlnColoredErr(churn, outputtools.Yellow)
 	}
 	if hasCaveat(r.Caveats, caveatMySQLChurn) {
-		fmt.Fprintln(os.Stderr)
+		fmt.Fprintln(outputtools.Stderr)
 		outputtools.PrintlnColoredErr(sqlplan.MySQLCaveat(), outputtools.Yellow)
 	}
 
 	if w := plan.TransactionalWarning(sqlplan.Engine(r.Target.Engine)); w != "" {
-		fmt.Fprintln(os.Stderr)
+		fmt.Fprintln(outputtools.Stderr)
 		outputtools.PrintlnColoredErr(w, outputtools.Yellow)
 	}
 
 	// The blast-radius bound: worth saying because nobody currently knows it, and
 	// because a user staring at a DROP is exactly who needs to hear what CANNOT be
 	// dropped.
-	fmt.Fprintln(os.Stderr)
+	fmt.Fprintln(outputtools.Stderr)
 	outputtools.PrintlnColoredErr(sqlplan.DropOnlyWhatItCouldCreate(), outputtools.Gray)
 
 	// The body, on stdout.
-	fmt.Fprintln(os.Stderr, "\nFull plan, in execution order:")
-	fmt.Println(plan.RenderStatements())
+	fmt.Fprintln(outputtools.Stderr, "\nFull plan, in execution order:")
+	fmt.Fprintln(outputtools.Stdout, plan.RenderStatements())
 
-	fmt.Fprintln(os.Stderr)
+	fmt.Fprintln(outputtools.Stderr)
 	outputtools.PrintlnColoredErr("Nothing was applied — this was a dry run.", outputtools.Green)
-	if r.RerunCommand != "" {
+	switch {
+	case r.RerunCommand != "":
 		outputtools.PrintlnColoredErr("To apply it:  "+r.RerunCommand, outputtools.Green)
+	case r.RerunNote != "":
+		// Yellow, not green: this is the absence of the thing the reader is
+		// looking for, and the reason matters more than the plan's last line.
+		outputtools.PrintlnColoredErr(r.RerunNote, outputtools.Yellow)
 	}
 	if r.Destructive {
 		outputtools.PrintlnColoredErr(

@@ -2,6 +2,7 @@ package app
 
 import (
 	"errors"
+	"io"
 	"testing"
 
 	"github.com/nuzur/nuzur-cli/extensionrun"
@@ -64,5 +65,46 @@ func TestSQLPushProgressTracksTheConfirmationStep(t *testing.T) {
 	var nilProgress *sqlPushProgress
 	if nilProgress.track(nil) != nil {
 		t.Error("track(nil) on a nil progress should hand the decider straight back")
+	}
+}
+
+// The sentinel exists so the first-deploy pre-check can tell "this project has no
+// tables" (fine) from "this project's schema is broken" (not fine). Introducing it
+// must not have changed what a create-mode `--plan` prints, because that message
+// is the entire answer that path gives — hence the fragment-wrapping, and hence
+// this test, which pins both halves at once.
+func TestNoStandaloneEntitiesIsASentinelAndKeepsItsMessage(t *testing.T) {
+	// computeCreatePlan narrates on the way to a render failure; this test is
+	// about the errors it returns, not about that line.
+	swapOutputWriters(t, io.Discard, io.Discard)
+
+	i := &Implementation{}
+	er := newFakeExtensionRunner()
+	er.StandaloneEntities = nil
+	targets := &runTargets{
+		er:             er,
+		project:        er.Project,
+		projectVersion: er.ProjectVersion,
+	}
+
+	_, err := i.computeCreatePlan(targets, "mysql")
+	if err == nil {
+		t.Fatal("a project version with no standalone entities rendered a plan")
+	}
+	if !errors.Is(err, errNoStandaloneEntities) {
+		t.Errorf("computeCreatePlan error does not match the sentinel: %v", err)
+	}
+	const want = "project version v_21 has no standalone entities, so there is no schema to create"
+	if err.Error() != want {
+		t.Errorf("message = %q, want %q — create-mode --plan prints this verbatim", err.Error(), want)
+	}
+
+	// And a real render failure is NOT the sentinel, or the pre-check would warn
+	// its way past a broken schema.
+	er2 := newFakeExtensionRunner()
+	er2.CreateSQLErr = errors.New("extension execution failed")
+	targets2 := &runTargets{er: er2, project: er2.Project, projectVersion: er2.ProjectVersion}
+	if _, err := i.computeCreatePlan(targets2, "mysql"); err == nil || errors.Is(err, errNoStandaloneEntities) {
+		t.Errorf("a render failure was reported as the no-entities sentinel: %v", err)
 	}
 }

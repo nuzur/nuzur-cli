@@ -143,6 +143,30 @@ func (p *BootstrapParams) defaults() {
 	}
 }
 
+// CLIReleaseArchX8664 is the goreleaser architecture suffix for 64-bit Intel/AMD
+// Linux — what every managed provider hands out unless asked otherwise, and the
+// asset a pre-flight check probes when it wants to know whether a release was
+// published at all (a missing tag 404s every asset under it, whatever the arch).
+const CLIReleaseArchX8664 = "x86_64"
+
+// CLIReleaseAssetURL is the GitHub release asset the box downloads the nuzur CLI
+// from, for one version and one architecture.
+//
+// It exists so that URL has ONE definition. The bootstrap template composes the
+// same string with the arch resolved on the box (`${NUZUR_ARCH}`), and a caller
+// that wants to check the download BEFORE paying for a VM has to ask about
+// exactly the URL the script will use — a check aimed one character off is worse
+// than no check, because it reports confidently about a different file.
+// TestBootstrapTemplateUsesCLIReleaseAssetURL is what keeps the two in step; pass
+// "${NUZUR_ARCH}" as the arch to reproduce the template's form.
+//
+// The leading `v` is added here (the constant is bare, the tag carries it) and a
+// caller that passes a tag name is absorbed rather than rendered as `.../vv1.5.2/`.
+func CLIReleaseAssetURL(version, arch string) string {
+	version = strings.TrimPrefix(strings.TrimSpace(version), "v")
+	return fmt.Sprintf("https://github.com/nuzur/nuzur-cli/releases/download/v%s/nuzur-cli_Linux_%s.tar.gz", version, arch)
+}
+
 // RenderBootstrap produces the bootstrap shell script for a target.
 func RenderBootstrap(p BootstrapParams) (string, error) {
 	p.defaults()

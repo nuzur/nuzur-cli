@@ -21,16 +21,99 @@ mkdir -p /etc/nuzur {{.ProjectDir}}
 mkdir -p /etc/apt/apt.conf.d
 echo 'DPkg::Lock::Timeout "300";' > /etc/apt/apt.conf.d/99nuzur-lock-timeout
 
+# ── 0. First-boot apt guard ──────────────────────────────────────────────────
+# DPkg::Lock::Timeout above covers the dpkg FRONTEND lock only. `apt-get update`
+# takes a different pair (/var/lib/apt/lists/lock and the cache), and two writers
+# on those do not queue — they corrupt each other:
+#
+#   E: Problem renaming the file /var/cache/apt/pkgcache.bin.XXXXXX to ...
+#   E: The package cache file is corrupted            (apt exits 100)
+#
+# which under `set -e` kills the bootstrap after the VM is already created and
+# billing. That is not hypothetical: on DigitalOcean the CLI reaches a new
+# droplet within ~10s of the provider reporting it up, while the image's own
+# cloud-init / apt-daily / unattended-upgrades run is still updating apt — two
+# of two first deploys died there in one round.
+#
+# So: let the image finish its own package work before we touch apt at all.
+# Idempotent by construction — on a settled box (every re-deploy) cloud-init is
+# already `done` and no lock is held, so this costs one status call and one
+# `fuser`, and returns immediately.
+
+# nuzur_apt_busy reports whether anything else is mid-apt right now.
+nuzur_apt_busy() {
+  # A live holder of any apt/dpkg lock (fuser exits 0 when a file is in use).
+  if command -v fuser >/dev/null 2>&1; then
+    if fuser /var/lib/dpkg/lock-frontend /var/lib/dpkg/lock \
+             /var/lib/apt/lists/lock /var/cache/apt/archives/lock >/dev/null 2>&1; then
+      return 0
+    fi
+  fi
+  # ...and the boot-time updaters themselves, which are "busy" in the gaps
+  # between their own lock acquisitions too. Checking only the locks would let us
+  # slip into such a gap and start the race we are trying to avoid.
+  if command -v systemctl >/dev/null 2>&1; then
+    for unit in apt-daily.service apt-daily-upgrade.service unattended-upgrades.service; do
+      if systemctl is-active --quiet "$unit" 2>/dev/null; then
+        return 0
+      fi
+    done
+  fi
+  return 1
+}
+
+# nuzur_wait_for_apt blocks until the box's automatic package work is done, for
+# at most ~180s. It never fails the deploy: if something is still holding apt
+# after the bound, say so and go on — DPkg::Lock::Timeout and the update retry
+# below are the second line of defence, and a hard failure here would be worse
+# than the race it guards.
+nuzur_wait_for_apt() {
+  if command -v cloud-init >/dev/null 2>&1; then
+    cloud-init status --wait >/dev/null 2>&1 || true
+  fi
+  local waited=0
+  local limit=180
+  while nuzur_apt_busy; do
+    if [ "$waited" -ge "$limit" ]; then
+      echo "[nuzur-deploy] the system's automatic package updates are STILL running after ${limit}s; continuing anyway" >&2
+      return 0
+    fi
+    if [ "$waited" -gt 0 ] && [ $((waited % 15)) -eq 0 ]; then
+      echo "[nuzur-deploy] waiting for the system's automatic package updates to finish (${waited}s)..."
+    fi
+    sleep 3
+    waited=$((waited + 3))
+  done
+  return 0
+}
+
+# nuzur_apt_update is `apt-get update` with one retry. The corrupted-cache error
+# is transient AND self-perpetuating: a half-written pkgcache.bin and partial
+# list files are read back by the next run, so a bare retry fails the same way.
+# Remove them first, re-check that apt is idle, then try once more.
+nuzur_apt_update() {
+  if apt-get update -y; then
+    return 0
+  fi
+  echo "[nuzur-deploy] apt-get update failed; clearing the partial package cache and retrying once" >&2
+  rm -rf /var/lib/apt/lists/partial/* /var/cache/apt/pkgcache.bin /var/cache/apt/srcpkgcache.bin 2>/dev/null || true
+  nuzur_wait_for_apt
+  apt-get update -y
+}
+
+# Everything below reaches apt only through the two helpers above.
+nuzur_wait_for_apt
+
 # ── 1. Base packages (always) + Docker (skipped for --db-only) ───────────────
 if ! command -v openssl >/dev/null 2>&1 || ! command -v ufw >/dev/null 2>&1; then
   echo "[nuzur-deploy] installing base packages"
-  apt-get update -y
+  nuzur_apt_update
   apt-get install -y ca-certificates curl gnupg ufw openssl
 fi
 {{if not .DBOnly}}
 if ! command -v docker >/dev/null 2>&1; then
   echo "[nuzur-deploy] installing docker"
-  apt-get update -y
+  nuzur_apt_update
   apt-get install -y docker.io
   systemctl enable --now docker
 fi
@@ -48,7 +131,7 @@ if ! docker buildx version >/dev/null 2>&1; then
   fi
   . /etc/os-release
   echo "deb [arch=$(dpkg --print-architecture) signed-by=/etc/apt/keyrings/docker.gpg] https://download.docker.com/linux/ubuntu ${VERSION_CODENAME} stable" > /etc/apt/sources.list.d/docker.list
-  apt-get update -y
+  nuzur_apt_update
   apt-get install -y docker-buildx-plugin
 fi
 # BuildKit resolves DNS via the Docker daemon; on Ubuntu/systemd-resolved the
@@ -91,7 +174,7 @@ DB_HOST=127.0.0.1
 DB_PORT=5432
 if ! command -v psql >/dev/null 2>&1; then
   echo "[nuzur-deploy] installing postgresql"
-  apt-get update -y
+  nuzur_apt_update
   apt-get install -y postgresql
 fi
 systemctl enable --now postgresql 2>/dev/null || true
@@ -136,7 +219,7 @@ DB_HOST=127.0.0.1
 DB_PORT=3306
 if ! command -v mysqld >/dev/null 2>&1 && ! command -v mariadbd >/dev/null 2>&1; then
   echo "[nuzur-deploy] installing mysql-server"
-  apt-get update -y
+  nuzur_apt_update
   apt-get install -y default-mysql-server || apt-get install -y mysql-server
 fi
 mkdir -p /etc/mysql/conf.d
@@ -377,7 +460,7 @@ if ! command -v caddy >/dev/null 2>&1; then
   apt-get install -y debian-keyring debian-archive-keyring apt-transport-https curl gnupg
   curl -1sLf 'https://dl.cloudsmith.io/public/caddy/stable/gpg.key' | gpg --dearmor -o /usr/share/keyrings/caddy-stable-archive-keyring.gpg
   curl -1sLf 'https://dl.cloudsmith.io/public/caddy/stable/debian.deb.txt' | tee /etc/apt/sources.list.d/caddy-stable.list >/dev/null
-  apt-get update -y
+  nuzur_apt_update
   apt-get install -y caddy
 fi
 mkdir -p /etc/caddy /etc/caddy/conf.d

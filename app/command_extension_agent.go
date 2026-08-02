@@ -23,7 +23,7 @@ import (
 // runTargets bundles everything resolved before an extension can be described or
 // run against a specific project version.
 type runTargets struct {
-	er               *extensionrun.Implementation
+	er               extensionRunner
 	project          *nemgen.Project
 	projectVersion   *nemgen.ProjectVersion
 	extension        *nemgen.Extension
@@ -156,11 +156,11 @@ func (i *Implementation) describeFlow(extensionIdentifier string, flags extRunFl
 // version, config entity, and last-used config. In non-interactive mode a
 // missing project/version/extension is an error rather than a prompt.
 func (i *Implementation) resolveRunTargets(flags extRunFlags, opts resolveOptions) (*runTargets, error) {
-	if err := i.Login(); err != nil {
+	if err := i.login(); err != nil {
 		return nil, err
 	}
 
-	er, err := extensionrun.New(extensionrun.Params{Auth: i.auth})
+	er, err := i.extensionRunner()
 	if err != nil {
 		return nil, err
 	}
@@ -383,6 +383,6 @@ func printJSONValue(v interface{}) error {
 	if err != nil {
 		return err
 	}
-	fmt.Println(string(b))
+	fmt.Fprintln(outputtools.Stdout, string(b))
 	return nil
 }

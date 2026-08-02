@@ -1,0 +1,47 @@
+ERR [32mLogged in as [Deploy - deploy-tests@example.invalid][0m
+ERR [34mLoading projects...[0m
+ERR [34mLoading project versions...[0m
+ERR [34mComputing the schema plan (nothing will be applied)...[0m
+ERR [34m
+ERR Plan for project "sfapi", version v_21 (APPROVED)[0m
+ERR [34mTarget: deployment sfapi-seedbox0 — mysql — schema "sfapi" — via agent f8888e33-0000-0000-0000-000000000001 — connection f8888e33-0000-0000-0000-0000000000c1[0m
+ERR 
+ERR [34m3 statements: 1 additive, 2 DESTRUCTIVE (delete data)[0m
+ERR 
+ERR [31mDESTRUCTIVE — these delete data:
+ERR    2. ALTER TABLE `customer` DROP COLUMN `legacy_ref`
+ERR       -- HAZARD DELETES_DATA: drops legacy_ref from customer and every value in it
+ERR    3. DROP TABLE `audit_log_2024`
+ERR       -- HAZARD DELETES_DATA: drops audit_log_2024 and every row in it[0m
+ERR 
+ERR [33mMySQL note: nuzur cannot read a MySQL schema directly, so the "existing" side of
+ERR this diff is reconstructed — the database is introspected into a project version and
+ERR re-rendered as DDL. Anything the model cannot express comes back normalized, so this
+ERR plan can contain ALTERs that change nothing and that will reappear on every deploy
+ERR (column widths and types are the usual ones). The CREATEs and DROPs are real.
+ERR Treat a bare MODIFY/CHANGE COLUMN as suspect and compare it against the column you
+ERR actually have.[0m
+ERR 
+ERR [33mThese statements effectively commit ONE AT A TIME. A transaction is opened, but
+ERR MySQL commits DDL implicitly, so it cannot be rolled back: if one statement fails
+ERR partway through, the statements before it stay applied.[0m
+ERR 
+ERR [37mOnly tables, columns, indexes, foreign keys and schemas are reconciled. Anything
+ERR the nuzur model cannot express — triggers, functions, views, sequences, row-level
+ERR security, check constraints — is invisible to this diff and is never dropped by it.
+ERR Column defaults and foreign key referential actions ARE part of the model and are
+ERR reconciled: a default or an ON DELETE/ON UPDATE the model does not state is dropped
+ERR from the database like any other column change.[0m
+ERR 
+ERR Full plan, in execution order:
+OUT    1. ALTER TABLE `customer` ADD COLUMN `vat_number` varchar(32) NULL
+OUT    2. ALTER TABLE `customer` DROP COLUMN `legacy_ref`
+OUT       -- HAZARD DELETES_DATA: drops legacy_ref from customer and every value in it
+OUT    3. DROP TABLE `audit_log_2024`
+OUT       -- HAZARD DELETES_DATA: drops audit_log_2024 and every row in it
+ERR 
+ERR [32mNothing was applied — this was a dry run.[0m
+ERR [32mTo apply it:  nuzur-cli deploy --project sfapi --version v_21 --deployment sfapi-seedbox0 --allow-destructive[0m
+ERR [33m--allow-destructive is required because this plan deletes data. Without it the deploy
+ERR applies nothing.[0m
+EXIT 0

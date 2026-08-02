@@ -17,8 +17,8 @@ import (
 // build the cloud-side deployment record. Everything here is already computed in
 // runDeploy; this just gathers it so reportDeployment can stay declarative.
 type deploymentReportInput struct {
-	Runner         *deploy.SSHRunner // for the on-box ports read-back (full-app only)
-	Provider       deploy.Provider   // where it's deployed: ssh (BYO) or a managed provider
+	Runner         deploy.RemoteRunner // for the on-box ports read-back (full-app only)
+	Provider       deploy.Provider     // where it's deployed: ssh (BYO) or a managed provider
 	Identifier     string
 	ProjectUUID    string
 	ProjectVersion string
@@ -191,7 +191,7 @@ func (i *Implementation) reportDeployment(ctx context.Context, in deploymentRepo
 // readBackPorts reads the box-allocated ports the bootstrap recorded at
 // /etc/nuzur/{identifier}/ports (http/grpc/db, one KEY=VAL per line). Missing
 // file or fields yield zeros — the caller falls back to client-side values.
-func readBackPorts(ctx context.Context, runner *deploy.SSHRunner, identifier string) (httpP, grpcP, dbP int64) {
+func readBackPorts(ctx context.Context, runner deploy.RemoteRunner, identifier string) (httpP, grpcP, dbP int64) {
 	if runner == nil {
 		return 0, 0, 0
 	}

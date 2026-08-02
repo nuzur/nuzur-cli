@@ -1,0 +1,85 @@
+ERR [32mLogged in as [Deploy - deploy-tests@example.invalid][0m
+ERR [34mLoading projects...[0m
+ERR [34mLoading project versions...[0m
+ERR [34mComputing the schema plan (nothing will be applied)...[0m
+OUT {
+OUT   "status": "plan",
+OUT   "mode": "diff",
+OUT   "project": {
+OUT     "uuid": "f8888e33-0000-0000-0000-0000000000a1",
+OUT     "name": "sfapi"
+OUT   },
+OUT   "project_version": {
+OUT     "uuid": "f8888e33-0000-0000-0000-0000000000a2",
+OUT     "identifier": "v_21",
+OUT     "review_status": "APPROVED",
+OUT     "approved": true
+OUT   },
+OUT   "target": {
+OUT     "source": "deployment sfapi-seedbox0",
+OUT     "deployment_id": "sfapi-seedbox0",
+OUT     "mode": "local",
+OUT     "engine": "mysql",
+OUT     "schema": "sfapi",
+OUT     "local_agent_uuid": "f8888e33-0000-0000-0000-000000000001",
+OUT     "local_agent_connection_uuid": "f8888e33-0000-0000-0000-0000000000c1"
+OUT   },
+OUT   "changes": true,
+OUT   "message": "execution cancelled by the client",
+OUT   "destructive": true,
+OUT   "counts": {
+OUT     "total": 3,
+OUT     "additive": 1,
+OUT     "data_loss": 2,
+OUT     "constraint_loss": 0,
+OUT     "narrowing": 0
+OUT   },
+OUT   "statements": [
+OUT     {
+OUT       "index": 1,
+OUT       "sql": "ALTER TABLE `customer` ADD COLUMN `vat_number` varchar(32) NULL",
+OUT       "kind": "add_column",
+OUT       "object": "customer.vat_number"
+OUT     },
+OUT     {
+OUT       "index": 2,
+OUT       "sql": "ALTER TABLE `customer` DROP COLUMN `legacy_ref`",
+OUT       "kind": "drop_column",
+OUT       "severity": "data_loss",
+OUT       "object": "customer.legacy_ref",
+OUT       "reason": "drops legacy_ref from customer and every value in it",
+OUT       "hazards": [
+OUT         {
+OUT           "severity": "data_loss",
+OUT           "kind": "drop_column",
+OUT           "object": "customer.legacy_ref",
+OUT           "reason": "drops legacy_ref from customer and every value in it"
+OUT         }
+OUT       ]
+OUT     },
+OUT     {
+OUT       "index": 3,
+OUT       "sql": "DROP TABLE `audit_log_2024`",
+OUT       "kind": "drop_table",
+OUT       "severity": "data_loss",
+OUT       "object": "audit_log_2024",
+OUT       "reason": "drops audit_log_2024 and every row in it",
+OUT       "hazards": [
+OUT         {
+OUT           "severity": "data_loss",
+OUT           "kind": "drop_table",
+OUT           "object": "audit_log_2024",
+OUT           "reason": "drops audit_log_2024 and every row in it"
+OUT         }
+OUT       ]
+OUT     }
+OUT   ],
+OUT   "apply_sql": "ALTER TABLE `customer` ADD COLUMN `vat_number` varchar(32) NULL;\nALTER TABLE `customer` DROP COLUMN `legacy_ref`;\nDROP TABLE `audit_log_2024`;\n",
+OUT   "transactional": false,
+OUT   "caveats": [
+OUT     "mysql_phantom_churn"
+OUT   ],
+OUT   "applied": false,
+OUT   "rerun_command": "nuzur-cli deploy --project sfapi --version v_21 --deployment sfapi-seedbox0 --allow-destructive"
+OUT }
+EXIT 0

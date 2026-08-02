@@ -234,7 +234,7 @@ func (i *Implementation) runExtensionFlow(extensionIdentifier string, flags extR
 	return nil
 }
 
-func (i *Implementation) SelectProject(er *extensionrun.Implementation) (*nemgen.Project, error) {
+func (i *Implementation) SelectProject(er extensionRunner) (*nemgen.Project, error) {
 	outputtools.PrintlnColoredErr(i.localize.Localize("extension_run_loading_projects", "Loading projects..."), outputtools.Blue)
 	projects, err := er.ListUserProjects()
 	if err != nil {
@@ -263,7 +263,7 @@ func (i *Implementation) SelectProject(er *extensionrun.Implementation) (*nemgen
 
 // resolveProject finds one of the user's projects by name or UUID, for the
 // non-interactive --project flag.
-func (i *Implementation) resolveProject(er *extensionrun.Implementation, ref string) (*nemgen.Project, error) {
+func (i *Implementation) resolveProject(er extensionRunner, ref string) (*nemgen.Project, error) {
 	outputtools.PrintlnColoredErr(i.localize.Localize("extension_run_loading_projects", "Loading projects..."), outputtools.Blue)
 	projects, err := er.ListUserProjects()
 	if err != nil {
@@ -277,7 +277,7 @@ func (i *Implementation) resolveProject(er *extensionrun.Implementation, ref str
 	return nil, fmt.Errorf("project %q not found among your projects (match by name or uuid)", ref)
 }
 
-func (i *Implementation) SelectProjectVersion(er *extensionrun.Implementation, projectUUID string) (*nemgen.ProjectVersion, error) {
+func (i *Implementation) SelectProjectVersion(er extensionRunner, projectUUID string) (*nemgen.ProjectVersion, error) {
 	outputtools.PrintlnColoredErr(i.localize.Localize("extension_run_loading_versions", "Loading project versions..."), outputtools.Blue)
 	versions, err := er.ListProjectVersions(projectUUID)
 	if err != nil {
@@ -306,7 +306,7 @@ func (i *Implementation) SelectProjectVersion(er *extensionrun.Implementation, p
 
 // resolveProjectVersion finds a version of the given project by identifier or
 // UUID, for the non-interactive --version flag.
-func (i *Implementation) resolveProjectVersion(er *extensionrun.Implementation, projectUUID, ref string) (*nemgen.ProjectVersion, error) {
+func (i *Implementation) resolveProjectVersion(er extensionRunner, projectUUID, ref string) (*nemgen.ProjectVersion, error) {
 	outputtools.PrintlnColoredErr(i.localize.Localize("extension_run_loading_versions", "Loading project versions..."), outputtools.Blue)
 	versions, err := er.ListProjectVersions(projectUUID)
 	if err != nil {
@@ -321,7 +321,7 @@ func (i *Implementation) resolveProjectVersion(er *extensionrun.Implementation, 
 }
 
 func (i *Implementation) BuildConfigValues(
-	er *extensionrun.Implementation,
+	er extensionRunner,
 	project *nemgen.Project,
 	projectVersionUUID string,
 	configEntity *extensiongen.ExtensionConfigurationEntity,
@@ -810,7 +810,7 @@ func trimSpace(s string) string {
 	return s[start:end]
 }
 
-func (i *Implementation) SelectPublicExtension(er *extensionrun.Implementation) (*nemgen.Extension, error) {
+func (i *Implementation) SelectPublicExtension(er extensionRunner) (*nemgen.Extension, error) {
 	outputtools.PrintlnColoredErr(i.localize.Localize("extension_scaffold_loading", ""), outputtools.Blue)
 	extensions, err := er.ListRunnableExtensions(pairFrontIdentifiers())
 	if err != nil {
@@ -840,7 +840,7 @@ func (i *Implementation) SelectPublicExtension(er *extensionrun.Implementation) 
 // FindGeneratorExtension resolves a published generator extension by its
 // identifier, used by shortcut commands (e.g. `nuzur-cli go-code-gen`) that
 // skip interactive selection.
-func (i *Implementation) FindGeneratorExtension(er *extensionrun.Implementation, identifier string) (*nemgen.Extension, error) {
+func (i *Implementation) FindGeneratorExtension(er extensionRunner, identifier string) (*nemgen.Extension, error) {
 	outputtools.PrintlnColoredErr(i.localize.Localize("extension_scaffold_loading", ""), outputtools.Blue)
 	extensions, err := er.ListGeneratorExtensions()
 	if err != nil {

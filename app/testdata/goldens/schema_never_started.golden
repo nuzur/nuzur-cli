@@ -1,0 +1,45 @@
+ERR [32mLogged in as [Deploy - deploy-tests@example.invalid][0m
+ERR [34mLoading projects...[0m
+ERR [34mLoading project versions...[0m
+ERR [33mS3 storage is enabled but no credentials were provided (no --storage / --s3-* and none saved) — /upload and /sign will return 503 until you set the aws: block in the app's prod.yaml.[0m
+ERR [34mCreating a new digitalocean VM for identifier "sfapi" — no previous deployment of this project under that identifier is recorded on this machine, so a new server will be created and will bill.[0m
+ERR [34mGenerating application code into <TMP>/work/nuzur-sfapi ...[0m
+ERR [34mSaved this deploy's generator config as the project's go-code-gen config (later deploys and the web app reuse it).[0m
+ERR [34mCreating the server on digitalocean (this can take a minute)...[0m
+ERR [34mChecking SSH connectivity...[0m
+ERR [34mCopying source to the server...[0m
+ERR [34mBootstrapping the server (Docker, MySQL, build, pairing)...[0m
+ERR [34mWaiting for the agent to connect...[0m
+ERR [34mApplying schema to the database...[0m
+ERR [31mSchema apply FAILED: resolving "sql-push-local": rpc error: code = DeadlineExceeded desc = context deadline exceeded[0m
+ERR [31m
+ERR Deployment finished, but the schema was NOT applied — see the summary below.[0m
+OUT   deployment id: sfapi-<ID8>
+OUT   agent uuid:    f8888e33-0000-0000-0000-000000000001
+OUT   connection:    sfapi-db (<UUID>)
+OUT   teardown:      nuzur-cli destroy sfapi-<ID8>
+OUT [32m
+OUT What's deployed (HTTP via Caddy):[0m
+OUT   gRPC API:  203.0.113.10:8443 (plaintext)
+OUT              grpcurl -plaintext 203.0.113.10:8443 list
+OUT   REST API:  http://203.0.113.10:8443/v1
+OUT              curl http://203.0.113.10:8443/v1/<entity>
+OUT   Auth:      jwt — data endpoints need a Bearer token.
+OUT              sign in: POST http://203.0.113.10:8443/signin {"email","password"} (then /refresh, /validate)
+OUT              a signing key was generated on the box; sign-in needs a user row in your user entity.
+OUT   Info page: http://203.0.113.10:8443/
+ERR [33m  (IP-only deploy over plain HTTP — pass --domain <name> for automatic HTTPS with a trusted cert.)[0m
+OUT [32m
+OUT Manage your data:[0m
+OUT   https://app.nuzur.com/project/data-manager/f8888e33-0000-0000-0000-0000000000a1/f8888e33-0000-0000-0000-0000000000a2?mode=local&localAgent=f8888e33-0000-0000-0000-000000000001&localAgentConn=<UUID>&schema=sfapi
+OUT   The connection is listed under "Via agent" — nuzur reaches it through the agent on this box,
+OUT   which dials out to nuzur. The database stays private; nothing is exposed to the internet.
+ERR [31m
+ERR The schema was NOT applied (see the error above). The failure happened before the migration was sent — while resolving the SQL-push extension, reaching the database, or computing the diff. No SQL was sent to the database. The app and database are unchanged and consistent; re-run the deploy or apply via SQL Push.[0m
+OUT [32m
+OUT Your app source:[0m
+OUT   <TMP>/work/nuzur-sfapi/sfapi
+OUT   Re-run the same deploy to ship changes from here.
+OUT   Tip: run `git init` here (or commit) to track your changes and see what codegen
+OUT   refreshes each deploy — secrets are already covered by the generated .gitignore.
+EXIT 1

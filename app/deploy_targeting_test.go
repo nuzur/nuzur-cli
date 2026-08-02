@@ -21,56 +21,135 @@ func at(host, identifier, agent, conn string, ageMinutes int) deploy.Deployment 
 	}
 }
 
+// atID is `at` with an explicit id. A record can now be reusable WITHOUT an agent
+// uuid to identify it by — that is precisely what the checkpoint arm decides — so
+// the table below expects record ids rather than agents.
+func atID(id, host, identifier, agent string, ageMinutes int) deploy.Deployment {
+	d := at(host, identifier, agent, "conn", ageMinutes)
+	d.ID = id
+	return d
+}
+
+// steppedTo sets the checkpoint a record's run reached, for the rows whose
+// records did not all get equally far.
+func steppedTo(d deploy.Deployment, step string) deploy.Deployment {
+	d.LastCompletedStep = step
+	return d
+}
+
 func TestPickPriorDeployment(t *testing.T) {
 	for _, tc := range []struct {
-		name       string
-		deps       []deploy.Deployment
-		host       string
-		identifier string
-		wantAgent  string // "" == expect nil
+		name string
+		deps []deploy.Deployment
+		// lastCompletedStep is how far the run that wrote these records got — the
+		// fact pickPriorDeployment now reads instead of inferring from the agent
+		// uuid. "" is a record written before checkpoints existed, which is the
+		// arm that must keep behaving exactly as it did.
+		//
+		// Applied to every record in deps that does not carry one of its own, so
+		// the ordinary row reads as one column and the row with MIXED checkpoints
+		// can still be written.
+		lastCompletedStep string
+		host              string
+		identifier        string
+		wantID            string // "" == expect nil
 	}{
-		{name: "no records", deps: nil, host: "h1", identifier: "app", wantAgent: ""},
+		{name: "no records", deps: nil, host: "h1", identifier: "app", wantID: ""},
 		{
 			name: "exact match",
-			deps: []deploy.Deployment{at("h1", "app", "agent-1", "conn-1", 0)},
-			host: "h1", identifier: "app", wantAgent: "agent-1",
+			deps: []deploy.Deployment{atID("d1", "h1", "app", "agent-1", 0)},
+			host: "h1", identifier: "app", wantID: "d1",
 		},
 		{
 			name: "newest of several wins",
-			deps: []deploy.Deployment{at("h1", "app", "old", "c", 0), at("h1", "app", "new", "c", 60), at("h1", "app", "mid", "c", 30)},
-			host: "h1", identifier: "app", wantAgent: "new",
+			deps: []deploy.Deployment{atID("old", "h1", "app", "a", 0), atID("new", "h1", "app", "a", 60), atID("mid", "h1", "app", "a", 30)},
+			host: "h1", identifier: "app", wantID: "new",
 		},
 		{
 			name: "host must match",
-			deps: []deploy.Deployment{at("h2", "app", "agent-1", "c", 0)},
-			host: "h1", identifier: "app", wantAgent: "",
+			deps: []deploy.Deployment{atID("d1", "h2", "app", "agent-1", 0)},
+			host: "h1", identifier: "app", wantID: "",
 		},
 		{
 			name: "identifier must match",
-			deps: []deploy.Deployment{at("h1", "other", "agent-1", "c", 0)},
-			host: "h1", identifier: "app", wantAgent: "",
+			deps: []deploy.Deployment{atID("d1", "h1", "other", "agent-1", 0)},
+			host: "h1", identifier: "app", wantID: "",
 		},
 		{
-			// A record without an agent is a deploy that died before pairing: there
-			// is nothing to reuse and nothing to push a schema through.
-			name: "record without an agent is skipped",
-			deps: []deploy.Deployment{at("h1", "app", "", "c", 60), at("h1", "app", "agent-1", "c", 0)},
-			host: "h1", identifier: "app", wantAgent: "agent-1",
+			// THE FALLBACK ARM. These records predate checkpoints, so the empty
+			// agent uuid is the only evidence there is, and it still means "died
+			// before pairing" — unchanged behaviour for every record already on a
+			// user's machine.
+			name: "a pre-checkpoint record without an agent is skipped",
+			deps: []deploy.Deployment{atID("dead", "h1", "app", "", 60), atID("live", "h1", "app", "agent-1", 0)},
+			host: "h1", identifier: "app", wantID: "live",
+		},
+		{
+			// THE CHECKPOINT ARM, negative side: the record says it got as far as
+			// recording the box and no further, which is a deploy that died in
+			// flight. Skipping it is what lets the next run ADOPT the box instead
+			// of treating the record as a working prior deployment.
+			name:              "a record that died after box_recorded is skipped",
+			deps:              []deploy.Deployment{atID("d1", "h1", "app", "", 0)},
+			lastCompletedStep: deploy.StepBoxRecorded,
+			host:              "h1", identifier: "app", wantID: "",
+		},
+		{
+			// THE CHECKPOINT ARM, positive side. A record cannot normally reach
+			// this checkpoint without an agent uuid — the two ride the same write —
+			// but if one ever does, the recorded fact is what decides, not the
+			// missing field. This is the case the old heuristic got wrong: a uuid
+			// dropped by a wholesale write made a paired deployment unreusable.
+			name:              "a record that reached agent_paired is reusable without an agent uuid",
+			deps:              []deploy.Deployment{atID("d1", "h1", "app", "", 0)},
+			lastCompletedStep: deploy.StepAgentPaired,
+			host:              "h1", identifier: "app", wantID: "d1",
+		},
+		{
+			name:              "a finalized record is reusable without an agent uuid",
+			deps:              []deploy.Deployment{atID("d1", "h1", "app", "", 0)},
+			lastCompletedStep: deploy.StepFinalized,
+			host:              "h1", identifier: "app", wantID: "d1",
+		},
+		{
+			// Recency only decides among USABLE records. The newest here died in
+			// flight, and picking it would hand the deploy a record with no agent
+			// and no connection to push a schema through.
+			name: "the newest USABLE record wins, not the newest record",
+			deps: []deploy.Deployment{
+				steppedTo(atID("newer-dead", "h1", "app", "", 60), deploy.StepBoxRecorded),
+				steppedTo(atID("older-done", "h1", "app", "agent-1", 0), deploy.StepFinalized),
+			},
+			host: "h1", identifier: "app", wantID: "older-done",
+		},
+		{
+			// How every record a current CLI writes actually looks: both arms
+			// present and agreeing.
+			name:              "a finished record with both the uuid and the checkpoint is reusable",
+			deps:              []deploy.Deployment{atID("d1", "h1", "app", "agent-1", 0)},
+			lastCompletedStep: deploy.StepFinalized,
+			host:              "h1", identifier: "app", wantID: "d1",
 		},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
-			got := pickPriorDeployment(tc.deps, tc.host, tc.identifier)
-			if tc.wantAgent == "" {
+			deps := append([]deploy.Deployment(nil), tc.deps...)
+			for i := range deps {
+				if deps[i].LastCompletedStep == "" {
+					deps[i].LastCompletedStep = tc.lastCompletedStep
+				}
+			}
+			got := pickPriorDeployment(deps, tc.host, tc.identifier)
+			if tc.wantID == "" {
 				if got != nil {
-					t.Fatalf("expected no match, got agent %q", got.LocalAgentUUID)
+					t.Fatalf("expected no match, got record %q (agent %q, step %q)", got.ID, got.LocalAgentUUID, got.LastCompletedStep)
 				}
 				return
 			}
 			if got == nil {
-				t.Fatalf("expected agent %q, got no match", tc.wantAgent)
+				t.Fatalf("expected record %q, got no match", tc.wantID)
 			}
-			if got.LocalAgentUUID != tc.wantAgent {
-				t.Fatalf("agent = %q, want %q", got.LocalAgentUUID, tc.wantAgent)
+			if got.ID != tc.wantID {
+				t.Fatalf("record = %q, want %q", got.ID, tc.wantID)
 			}
 		})
 	}
@@ -384,6 +463,24 @@ func TestDecideDeployBox(t *testing.T) {
 	}
 	byoSSH := managedRec("terroirconv-ssh", deploy.ProviderSSH, "10.0.0.9", proj, "terroirconv", "agent-9", 5)
 
+	// The three records above are all PRE-CHECKPOINT: they carry nothing about how
+	// far their run got, so every message about them has to keep inferring from
+	// empty fields, and keep its exact wording. The three below are the same
+	// situations as a CLI that writes checkpoints records them.
+	//
+	// diedInFlight is the record `died_in_flight_adoption` seeds: the box exists
+	// and is reachable, the run that made it died with an error it wrote down.
+	diedInFlight := managedRec("terroirconv-90bda381", deploy.ProviderDigitalOcean, "134.122.10.77", proj, "terroirconv", "", 30)
+	diedInFlight.LastCompletedStep = deploy.StepBoxRecorded
+	diedInFlight.LastError = "remote bootstrap script failed: exit status 1"
+	// A healthy, finished deployment — what a re-deploy normally finds.
+	finished := managedRec("terroirconv-3fc793ce", deploy.ProviderDigitalOcean, "167.71.167.254", proj, "terroirconv", "agent-1", 0)
+	finished.LastCompletedStep = deploy.StepFinalized
+	// The create call is what this one died in, and it says so.
+	inFlightRecorded := inFlight
+	inFlightRecorded.LastCompletedStep = deploy.StepPendingRecorded
+	inFlightRecorded.LastError = "creating the digitalocean droplet: context deadline exceeded"
+
 	for _, tc := range []struct {
 		name         string
 		in           boxDecisionInput
@@ -393,6 +490,7 @@ func TestDecideDeployBox(t *testing.T) {
 		wantErr      bool
 		wantInMsg    []string
 		wantNotInMsg []string
+		wantInErr    []string
 	}{
 		{
 			// --provider ssh is untouched: the user named the box.
@@ -437,6 +535,35 @@ func TestDecideDeployBox(t *testing.T) {
 			in: boxDecisionInput{Provider: deploy.ProviderDigitalOcean, Identifier: "terroirconv",
 				ProjectUUID: proj, Deployments: []deploy.Deployment{halfBuilt}},
 			wantAction: boxReuseRecorded, wantHost: "134.122.10.77", wantRecord: halfBuilt.ID,
+			// It has no checkpoint, so there is nothing recorded to state and the
+			// message is the one it always was.
+			wantNotInMsg: []string{"The last run of this deployment"},
+		},
+		{
+			// The same adoption, of a record that says how far it got. The decision
+			// is identical — the matrix does not read checkpoints — and the message
+			// stops leaving the user to work out why a box is being reused with no
+			// agent on it.
+			name: "an adopted record's checkpoint and error are stated, not inferred",
+			in: boxDecisionInput{Provider: deploy.ProviderDigitalOcean, Identifier: "terroirconv",
+				ProjectUUID: proj, Deployments: []deploy.Deployment{diedInFlight}},
+			wantAction: boxReuseRecorded, wantHost: "134.122.10.77", wantRecord: diedInFlight.ID,
+			wantInMsg: []string{
+				"Reusing the existing digitalocean server 134.122.10.77",
+				"The last run of this deployment died after 'box_recorded': remote bootstrap script failed: exit status 1.",
+				"Pass --new-vm to provision a fresh one instead.",
+			},
+		},
+		{
+			// A finished deployment did not die, and a routine re-deploy must not be
+			// told how its last run went — the fact is only worth stating about a
+			// record that is in a bad state.
+			name: "a finished record's reuse says nothing about how it ended",
+			in: boxDecisionInput{Provider: deploy.ProviderDigitalOcean, Identifier: "terroirconv",
+				ProjectUUID: proj, Deployments: []deploy.Deployment{finished}},
+			wantAction: boxReuseRecorded, wantHost: "167.71.167.254", wantRecord: finished.ID,
+			wantInMsg:    []string{"Reusing the existing digitalocean server 167.71.167.254"},
+			wantNotInMsg: []string{"The last run of this deployment", "died after", "finalized"},
 		},
 		{
 			// No host: provisioning past it would leave a VM nothing points at.
@@ -470,7 +597,36 @@ func TestDecideDeployBox(t *testing.T) {
 			in: boxDecisionInput{Provider: deploy.ProviderDigitalOcean, NewVM: true, Identifier: "terroirconv",
 				ProjectUUID: proj, Deployments: []deploy.Deployment{inFlight}},
 			wantAction: boxProvision, wantRecord: inFlight.ID,
-			wantInMsg: []string{"left mid-provision"},
+			wantInMsg:    []string{"left mid-provision"},
+			wantNotInMsg: []string{"The last run of this deployment"},
+		},
+		{
+			// The same escape, over a record that says where it stopped. "may have
+			// leaked a VM" is still the inference — the decision has touched no
+			// network — and now it comes with the reason the run stopped.
+			name: "--new-vm over a checkpointed mid-provision record states what it stopped on",
+			in: boxDecisionInput{Provider: deploy.ProviderDigitalOcean, NewVM: true, Identifier: "terroirconv",
+				ProjectUUID: proj, Deployments: []deploy.Deployment{inFlightRecorded}},
+			wantAction: boxProvision, wantRecord: inFlightRecorded.ID,
+			wantInMsg: []string{
+				"left mid-provision",
+				"The last run of this deployment died after 'pending_recorded': creating the digitalocean droplet: context deadline exceeded.",
+				"If that server still exists it keeps billing alongside this one",
+			},
+		},
+		{
+			// The refusal, likewise: same arm, same two remedies, plus the record's
+			// own account of why there is nothing to reuse.
+			name: "a checkpointed mid-provision record fails with what it stopped on",
+			in: boxDecisionInput{Provider: deploy.ProviderDigitalOcean, Identifier: "terroirconv",
+				ProjectUUID: proj, Deployments: []deploy.Deployment{inFlightRecorded}},
+			wantAction: boxFail, wantRecord: inFlightRecorded.ID, wantErr: true,
+			wantInErr: []string{
+				"was left mid-provision on digitalocean and never recorded a host",
+				"The last run of this deployment died after 'pending_recorded': creating the digitalocean droplet: context deadline exceeded.",
+				"Run `nuzur-cli destroy terroirconv-37cb6f92`",
+				"re-run with --new-vm",
+			},
 		},
 		{
 			name: "--new-vm on a first deploy is just a first deploy",
@@ -549,6 +705,98 @@ func TestDecideDeployBox(t *testing.T) {
 				if strings.Contains(got.Message, absent) {
 					t.Errorf("message %q asserts %q, which this decision cannot know", got.Message, absent)
 				}
+			}
+			for _, want := range tc.wantInErr {
+				if err == nil || !strings.Contains(err.Error(), want) {
+					t.Errorf("error %v missing %q", err, want)
+				}
+			}
+		})
+	}
+}
+
+// lastRunFact is what lets the messages above state how a deployment ended
+// instead of guessing it. Its two SILENT cases are the load-bearing ones: a
+// record with nothing recorded must produce the wording those messages had
+// before checkpoints existed, and a healthy deployment must not be described as
+// though something had gone wrong with it.
+func TestLastRunFact(t *testing.T) {
+	for _, tc := range []struct {
+		name string
+		rec  *deploy.Deployment
+		want string
+	}{
+		{name: "no record", rec: nil, want: ""},
+		{
+			name: "a pre-checkpoint record says nothing",
+			rec:  &deploy.Deployment{},
+			want: "",
+		},
+		{
+			name: "a finished, clean deployment says nothing",
+			rec:  &deploy.Deployment{LastCompletedStep: deploy.StepFinalized},
+			want: "",
+		},
+		{
+			name: "a checkpoint and an error",
+			rec: &deploy.Deployment{
+				LastCompletedStep: deploy.StepBoxRecorded,
+				LastError:         "remote bootstrap script failed: exit status 1",
+			},
+			want: "The last run of this deployment died after 'box_recorded': remote bootstrap script failed: exit status 1.",
+		},
+		{
+			// An interrupt: the checkpoints are written as the run goes, the error
+			// is written by a deferred hook the signal skips.
+			name: "a checkpoint without an error",
+			rec:  &deploy.Deployment{LastCompletedStep: deploy.StepInstanceCreated},
+			want: "The last run of this deployment died after 'instance_created'.",
+		},
+		{
+			name: "an error before any checkpoint",
+			rec:  &deploy.Deployment{LastError: "issuing provisioning token: permission denied"},
+			want: "The last run of this deployment failed before it recorded any step: issuing provisioning token: permission denied.",
+		},
+		{
+			// Finalized AND carrying an error: the deployment itself completed and
+			// something after it did not. The error is the part worth saying.
+			name: "a finished deployment that ended on an error still says so",
+			rec: &deploy.Deployment{
+				LastCompletedStep: deploy.StepFinalized,
+				LastError:         "reading back the front door: connection refused",
+			},
+			want: "The last run of this deployment died after 'finalized': reading back the front door: connection refused.",
+		},
+		{
+			// A checkpoint written by a NEWER CLI reads as rank 0 (deploy.StepRank),
+			// which must not be mistaken for "finished".
+			name: "an unrecognised checkpoint is still reported verbatim",
+			rec:  &deploy.Deployment{LastCompletedStep: "some_future_step"},
+			want: "The last run of this deployment died after 'some_future_step'.",
+		},
+		{
+			// This CLI's own errors are frequently a diagnosis plus the ways
+			// forward. All of it inside another sentence is not a sentence; the
+			// record keeps the rest.
+			name: "a multi-line error is cut to its first line",
+			rec: &deploy.Deployment{
+				LastCompletedStep: deploy.StepBoxRecorded,
+				LastError:         "remote bootstrap script failed\nRun `nuzur-cli destroy sfapi-1` to remove it, or\nre-run to try again.",
+			},
+			want: "The last run of this deployment died after 'box_recorded': remote bootstrap script failed …",
+		},
+		{
+			name: "an error that already ends in a full stop does not get a second",
+			rec: &deploy.Deployment{
+				LastCompletedStep: deploy.StepBoxRecorded,
+				LastError:         "the box stopped answering.",
+			},
+			want: "The last run of this deployment died after 'box_recorded': the box stopped answering.",
+		},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			if got := lastRunFact(tc.rec); got != tc.want {
+				t.Fatalf("lastRunFact = %q, want %q", got, tc.want)
 			}
 		})
 	}

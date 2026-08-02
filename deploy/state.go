@@ -10,6 +10,7 @@ import (
 	"time"
 
 	"github.com/nuzur/nuzur-cli/files"
+	"github.com/nuzur/nuzur-cli/outputtools"
 )
 
 // Deployment is the persisted record of one `nuzur-cli deploy`, written under
@@ -51,9 +52,149 @@ type Deployment struct {
 	PublicURL      string    `json:"public_url,omitempty"` // same as APIURL; explicit alias
 	DataManagerURL string    `json:"data_manager_url,omitempty"`
 	CreatedAt      time.Time `json:"created_at"`
+
+	// LastCompletedStep is how far the LAST run of this deployment got: one of the
+	// Step* constants below, or "" for a record written before checkpoints existed
+	// (or by a run that died before its first checkpoint).
+	//
+	// It exists because every question the next run asks about a half-finished
+	// deploy — did it pair an agent, did it get as far as creating the VM, is this
+	// record a live deployment or the debris of one — was previously answered by
+	// INFERRING from which fields happened to be empty. An empty LocalAgentUUID
+	// meaning "died in flight" is that inference, and it is what turned an
+	// interrupted re-deploy into a second record for the same box.
+	//
+	// The values are self-describing strings rather than an integer, because the
+	// file is read by humans debugging exactly this situation.
+	//
+	// MONOTONE WITHIN A RUN, AND DELIBERATELY NOT ACROSS RUNS. A re-deploy
+	// rewrites `finalized` → `box_recorded` → `agent_paired` → `finalized`, so
+	// for the middle of every re-deploy this record describes a healthy, serving
+	// box as half-deployed. That is the field's definition working — the last run
+	// IS the one in progress — but it is worth writing down, because it is the
+	// one place a concurrent reader (a second CLI, a crash-recovery path, a human
+	// reading the file) can take a true value and draw a false conclusion.
+	//
+	// Blanking it at the start of a run was considered and rejected. "" is the
+	// sentinel for "predates checkpoints", so a re-deploy interrupted after
+	// blanking would be indistinguishable from an old record — losing precisely
+	// the adoption decision the checkpoint exists to make, which is the bug that
+	// used to mint a second record for one box. Reporting less than the truth is
+	// not more honest than reporting a truth that has to be read carefully.
+	// Telling "in flight" from "got this far" properly needs a second, in-flight
+	// marker; it is not a different value of this one.
+	//
+	// Both directions are pinned: TestDeployRecordSequenceManagedFirstDeploy for
+	// within a run, and TestRedeployPreservesURLsMidRun (which observes
+	// box_recorded on a record seeded finalized) for across them.
+	LastCompletedStep string `json:"last_completed_step,omitempty"`
+	// LastError is the error the last run of this deployment ended with, or "" if
+	// it finished cleanly. Cleared by the finalizing write, so a record carrying
+	// one is a deployment that is currently in a bad state rather than one that
+	// once was.
+	LastError string `json:"last_error,omitempty"`
 }
 
-// SaveDeployment writes (or overwrites) the deployment's state file, 0600.
+// The checkpoints a deploy writes into Deployment.LastCompletedStep. Each is
+// written by the same mutation that persists the step's result, so the
+// checkpoint cannot disagree with the fields it describes.
+const (
+	// StepPendingRecorded: the record exists and reserves a provider resource
+	// NAME, written before the create call so a VM that is created and then lost
+	// is still addressable.
+	StepPendingRecorded = "pending_recorded"
+	// StepInstanceCreated: the provider acknowledged the VM, so the record now
+	// carries its instance id. The deploy is still waiting for SSH.
+	StepInstanceCreated = "instance_created"
+	// StepBoxRecorded: the box exists and is reachable, and the record describes
+	// it fully (host, ports, workspace, connection). Everything after this point
+	// is software on a server that is already billing.
+	StepBoxRecorded = "box_recorded"
+	// StepAgentPaired: the local agent for this box is known and registered with
+	// nuzur. This is the checkpoint that makes "did the last run get far enough to
+	// be reused" a fact rather than a guess.
+	StepAgentPaired = "agent_paired"
+	// StepFinalized: the deploy completed its record — agent, front door, data
+	// manager link. A schema step may still have failed; that is reported
+	// separately and does not make the DEPLOYMENT unfinished.
+	StepFinalized = "finalized"
+)
+
+// stepRanks orders the checkpoints. Kept next to the constants so a new
+// checkpoint cannot be added without deciding where it belongs.
+var stepRanks = map[string]int{
+	StepPendingRecorded: 1,
+	StepInstanceCreated: 2,
+	StepBoxRecorded:     3,
+	StepAgentPaired:     4,
+	StepFinalized:       5,
+}
+
+// StepRank turns a checkpoint into a comparable position, so callers can ask
+// "did it get at least as far as X" instead of matching strings.
+//
+// "" is rank 0 — a record written before checkpoints existed, or by a run that
+// died before its first one. An UNRECOGNISED value is also rank 0: the only way
+// to see one is a record written by a newer CLI, and the safe reading of a step
+// this binary has never heard of is "nothing this binary knows about completed",
+// not "further along than anything I know".
+func StepRank(step string) int { return stepRanks[step] }
+
+// MutateDeployment applies fn to the deployment's record and writes it back. It
+// is the ONLY way the deploy pipeline may write a record.
+//
+// The point is what it does NOT do: it never replaces the file with a struct the
+// caller assembled. Every field fn does not touch keeps the value it had. The
+// four write sites in a deploy used to each build a whole Deployment literal,
+// which meant each of them had to remember every field of it — and when one
+// forgot, the record silently lost the agent uuid, or the resource name, or the
+// front-door URLs for the twenty minutes between two writes. Those were three
+// separate bugs with one shape.
+//
+// Load-or-create, and the distinction is load-bearing: a record that is MISSING
+// is a first write, but a record that is present and unparseable is a record
+// whose contents are unknown — quite possibly the only handle on a running,
+// billing VM — so it is an error and is never overwritten with a fresh one.
+//
+// The returned record is the one that was written, so a caller that needs the
+// post-write state does not re-read it.
+func MutateDeployment(id string, fn func(*Deployment)) (*Deployment, error) {
+	if fn == nil {
+		return nil, fmt.Errorf("mutating deployment %q: no mutation given", id)
+	}
+	rec := &Deployment{}
+	data, err := os.ReadFile(files.DeploymentFilePath(id))
+	switch {
+	case err == nil:
+		if uerr := json.Unmarshal(data, rec); uerr != nil {
+			return nil, fmt.Errorf("parsing deployment %q: %w", id, uerr)
+		}
+	case os.IsNotExist(err):
+		// First write for this id. Anything else — a permission error, a
+		// directory in the way — is a real failure and must not be mistaken for
+		// "there was nothing there".
+	default:
+		return nil, fmt.Errorf("reading deployment %q: %w", id, err)
+	}
+	fn(rec)
+	// The id is the file name, so it is not the mutator's to change: a record
+	// whose id disagrees with its path is invisible to `destroy <id>`.
+	rec.ID = id
+	if err := saveDeployment(rec); err != nil {
+		return nil, err
+	}
+	return rec, nil
+}
+
+// SaveDeployment writes a deployment record wholesale.
+//
+// NOT the production update path — MutateDeployment is, and app/ is checked for
+// direct calls to this by TestAppWritesRecordsOnlyThroughMutateDeployment. This
+// stays exported as the CREATION path used by tests that seed a machine's record
+// store with records that already exist in full.
+func SaveDeployment(d *Deployment) error { return saveDeployment(d) }
+
+// saveDeployment writes (or overwrites) the deployment's state file, 0600.
 //
 // Timestamps are normalized to UTC HERE rather than at each call site. They used to
 // be written in whatever zone the caller happened to build them in — the
@@ -63,7 +204,7 @@ type Deployment struct {
 // (time.Time comparisons are absolute), but "which of these is the stale one" is
 // exactly the question that column is read to answer. One zone on disk; converted to
 // local once, at print time.
-func SaveDeployment(d *Deployment) error {
+func saveDeployment(d *Deployment) error {
 	dir := files.DeploymentsDir()
 	if err := os.MkdirAll(dir, 0o700); err != nil {
 		return fmt.Errorf("creating deployments dir: %w", err)
@@ -133,7 +274,7 @@ func ListDeployments() ([]Deployment, error) {
 		// only handle on a running, billing VM, and silently omitting it makes
 		// that VM invisible to `deploy list` and to the deploy reuse decision.
 		// Surface it and keep listing the rest.
-		fmt.Fprintf(os.Stderr,
+		fmt.Fprintf(outputtools.Stderr,
 			"warning: deployment record %s is unreadable (%v) — it is NOT listed below, but whatever it recorded (possibly a running VM) still exists; inspect or remove the file\n",
 			filepath.Join(dir, e.Name()), err)
 	}

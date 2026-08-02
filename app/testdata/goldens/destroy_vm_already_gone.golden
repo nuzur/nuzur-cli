@@ -1,0 +1,8 @@
+ERR [32mLogged in as [Deploy - deploy-tests@example.invalid][0m
+ERR [34mCleaning up the server (this project's service, container, config)...[0m
+ERR [33mwarning: remote teardown script failed: exit status 255: ssh: connect to host 203.0.113.10 port 22: Operation timed out — cleaning up nuzur state anyway. Re-run `nuzur-cli destroy sfapi-seedbox0` once the box is reachable, or use --skip-server.[0m
+ERR [34mDeleting the digitalocean VM (instance fake-inst-1)...[0m
+ERR [34mThe digitalocean VM fake-inst-1 no longer exists — it was already deleted. Nothing to remove.[0m
+OUT Destroyed deployment sfapi-seedbox0 (the server was unreachable, so its on-box cleanup was SKIPPED; its digitalocean VM no longer exists — nothing is billing; local and cloud records removed; shared agent revoked — last project on the box).
+OUT   The database was on that VM, which no longer exists, so it is gone too.
+EXIT 0

@@ -16,21 +16,37 @@ import (
 // is worse than having no plan at all. Sharing these functions is what makes that
 // class of bug impossible rather than merely unlikely.
 
-// pickPriorDeployment returns the most recent recorded deployment for a
+// pickPriorDeployment returns the most recent REUSABLE recorded deployment for a
 // host+identifier, or nil.
 //
-// A record whose LocalAgentUUID is empty is skipped: the record is written before
-// the box finishes pairing, so one without an agent is a deploy that died in
-// flight — there is nothing to reuse and nothing to push a schema through.
+// Reusable means the run that wrote the record got at least as far as pairing an
+// agent: a deployment that never did has nothing to reuse and nothing to push a
+// schema through. That is now READ off the record — the pairing checkpoint —
+// rather than inferred from which fields happen to be filled in. The checkpoint
+// is the fact; the empty-LocalAgentUUID heuristic is the FALLBACK, kept because
+// it is the only thing a record written before checkpoints existed can be judged
+// by (StepRank("") == 0, so such a record is decided entirely by the first arm).
+//
+// On every record a current CLI writes the two arms agree by construction: the
+// pairing checkpoint rides the same write as the uuid it describes, so neither
+// can be present without the other. The inference stayed wrong only for the
+// window that write closed — and for a record whose uuid was lost by one of the
+// wholesale writes that MutateDeployment replaced.
 func pickPriorDeployment(deps []deploy.Deployment, host, identifier string) *deploy.Deployment {
 	var match *deploy.Deployment
 	for idx := range deps {
 		d := deps[idx]
-		if d.Host == host && d.Identifier == identifier && d.LocalAgentUUID != "" {
-			if match == nil || d.CreatedAt.After(match.CreatedAt) {
-				m := d
-				match = &m
-			}
+		if d.Host != host || d.Identifier != identifier {
+			continue
+		}
+		usable := d.LocalAgentUUID != "" ||
+			deploy.StepRank(d.LastCompletedStep) >= deploy.StepRank(deploy.StepAgentPaired)
+		if !usable {
+			continue
+		}
+		if match == nil || d.CreatedAt.After(match.CreatedAt) {
+			m := d
+			match = &m
 		}
 	}
 	return match
@@ -194,6 +210,13 @@ func pickManagedBox(deps []deploy.Deployment, projectUUID, identifier string) *d
 // an unfinished one left a box behind too, and the bootstrap is idempotent. What
 // it does care about is whether the box answers — decided by the caller, which can
 // reach the network; an unreachable box takes reusedBoxUnreachableError below.
+//
+// Checkpoints changed what the messages may SAY, and nothing about the matrix.
+// The three arms that speak about a half-finished deployment — reuse, --new-vm
+// and the mid-provision failure — append lastRunFact, which reads how far the
+// last run got off the record instead of guessing it from an empty field. A
+// record with nothing recorded produces no sentence, so its message is what it
+// always was.
 func decideDeployBox(in boxDecisionInput) (boxDecision, error) {
 	if in.Provider == "" || in.Provider == deploy.ProviderSSH {
 		return boxDecision{Action: boxUseGivenHost, Host: in.HostFlag}, nil
@@ -242,8 +265,8 @@ func decideDeployBox(in boxDecisionInput) (boxDecision, error) {
 			Action: boxProvision,
 			Record: rec,
 			Message: fmt.Sprintf(
-				"--new-vm: creating a NEW %s VM for identifier %q even though %s. If that server still exists it keeps billing alongside this one — check with `nuzur-cli destroy %s`, which removes it, or your %s console.",
-				provider, in.Identifier, where, rec.ID, provider),
+				"--new-vm: creating a NEW %s VM for identifier %q even though %s.%s If that server still exists it keeps billing alongside this one — check with `nuzur-cli destroy %s`, which removes it, or your %s console.",
+				provider, in.Identifier, where, spaced(lastRunFact(rec)), rec.ID, provider),
 		}, nil
 	}
 
@@ -253,9 +276,9 @@ func decideDeployBox(in boxDecisionInput) (boxDecision, error) {
 	// only `destroy` — which can still resolve it by the reserved name — can find.
 	if strings.TrimSpace(rec.Host) == "" {
 		return boxDecision{Action: boxFail, Record: rec}, fmt.Errorf(
-			"deployment %s for identifier %q was left mid-provision on %s and never recorded a host, so there is no server to reuse and a VM may already exist and be billing.\n"+
+			"deployment %s for identifier %q was left mid-provision on %s and never recorded a host, so there is no server to reuse and a VM may already exist and be billing.%s\n"+
 				"Run `nuzur-cli destroy %s` to remove it (destroy can still find the VM by the name it reserved), or re-run with --new-vm to provision a fresh server and deal with that one yourself.",
-			rec.ID, in.Identifier, provider, rec.ID)
+			rec.ID, in.Identifier, provider, spaced(lastRunFact(rec)), rec.ID)
 	}
 
 	return boxDecision{
@@ -265,9 +288,90 @@ func decideDeployBox(in boxDecisionInput) (boxDecision, error) {
 		Port:   rec.Port,
 		Record: rec,
 		Message: fmt.Sprintf(
-			"Reusing the existing %s server %s for identifier %q (deployment %s) — no new VM will be created. Pass --new-vm to provision a fresh one instead.",
-			provider, rec.Host, in.Identifier, rec.ID),
+			"Reusing the existing %s server %s for identifier %q (deployment %s) — no new VM will be created.%s Pass --new-vm to provision a fresh one instead.",
+			provider, rec.Host, in.Identifier, rec.ID, spaced(lastRunFact(rec))),
 	}, nil
+}
+
+// lastRunFact is what the RECORD says about the run that wrote it: how far it
+// got, and what it stopped on. One sentence, ready to drop into a message about
+// reusing or provisioning past that record — or "" when there is nothing
+// recorded to say.
+//
+// It exists because those messages could previously only INFER the same thing
+// from which fields happened to be empty ("no host, so it died mid-provision"),
+// which is the inference that made a re-deploy mint a second record for one box.
+// The messages keep their inferred phrasing — the matrix and its wording are
+// pinned — and this states the recorded fact alongside it.
+//
+// Returns "" in exactly two cases, both of which mean the fact would be noise:
+//
+//   - the record carries neither a checkpoint nor an error. It predates
+//     checkpoints, or its run died before reaching one; either way the
+//     empty-field reading is all there is, and those records keep today's
+//     wording byte for byte.
+//   - the record is FINALIZED and clean. Nothing died; a re-deploy of a healthy
+//     box should not be told how its last run went.
+func lastRunFact(rec *deploy.Deployment) string {
+	if rec == nil {
+		return ""
+	}
+	step := strings.TrimSpace(rec.LastCompletedStep)
+	lastErr := strings.TrimSpace(rec.LastError)
+	if step == "" && lastErr == "" {
+		return ""
+	}
+	if lastErr == "" && deploy.StepRank(step) >= deploy.StepRank(deploy.StepFinalized) {
+		return ""
+	}
+	lastErr = endSentence(firstLine(lastErr))
+	switch {
+	case step == "":
+		return "The last run of this deployment failed before it recorded any step: " + lastErr
+	case lastErr == "":
+		return fmt.Sprintf("The last run of this deployment died after '%s'.", step)
+	default:
+		return fmt.Sprintf("The last run of this deployment died after '%s': %s", step, lastErr)
+	}
+}
+
+// firstLine keeps a recorded error to ONE line.
+//
+// LastError is whatever the run ended with, and this CLI's own errors are often
+// several lines — a diagnosis followed by the ways forward. Pasted whole into
+// the middle of another sentence, that is exactly what it reads like. The record
+// keeps the full text, which is what to read when this line is not enough.
+func firstLine(s string) string {
+	if idx := strings.IndexByte(s, '\n'); idx >= 0 {
+		return strings.TrimSpace(s[:idx]) + " …"
+	}
+	return s
+}
+
+// endSentence terminates a recorded error so it can be read as prose. Errors are
+// conventionally written without a full stop, and one that already ends in a
+// terminator — including the ellipsis firstLine leaves — does not want a second.
+func endSentence(s string) string {
+	if s == "" {
+		return ""
+	}
+	for _, end := range []string{".", "!", "?", "…", ":"} {
+		if strings.HasSuffix(s, end) {
+			return s
+		}
+	}
+	return s + "."
+}
+
+// spaced prefixes a non-empty sentence with the space that separates it from the
+// one before. The empty case is the point: a record with nothing recorded
+// produces no sentence AND no stray space, so its message is byte-identical to
+// what it was before checkpoints existed.
+func spaced(sentence string) string {
+	if sentence == "" {
+		return ""
+	}
+	return " " + sentence
 }
 
 // hostSuffix renders " on <host>" for a record that has one, and nothing for the

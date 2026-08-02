@@ -6,48 +6,49 @@ import (
 	"os"
 	"path/filepath"
 	"strings"
+	"sync"
 	"testing"
 
+	"github.com/nuzur/nuzur-cli/localize"
 	"github.com/urfave/cli"
 )
 
-// deployFlagSet builds a flag set mirroring the deploy command's flags (defaults
-// included) so resolveDeploySettings can be exercised with a real *cli.Context.
-// Parsing `args` marks the passed flags as "set" (c.IsSet), which is what the
-// flags-override-file precedence hinges on.
+// deployCommandFlags is the deploy command's REAL flag list, built once.
+//
+// Building it needs an Implementation only because every Usage string goes
+// through i.localize. localize.New() is safe to call from a test: it parses two
+// embedded TOML bundles and writes them to /tmp/nuzur (an absolute path, so an
+// isolated HOME does not affect it and it does not affect the isolated HOME),
+// ignoring every error — nothing it touches is state a test can observe. It is
+// still done under a sync.Once, since deployContext is called from a table test
+// dozens of times and re-parsing the bundles each time is pure waste.
+var deployCommandFlags = sync.OnceValue(func() []cli.Flag {
+	return (&Implementation{localize: localize.New()}).DeployCommand().Flags
+})
+
+// deployContext builds a *cli.Context for the deploy command from `args`, so
+// resolveDeploySettings and friends can be exercised the way a real invocation
+// exercises them. Parsing `args` marks the passed flags as "set" (c.IsSet),
+// which is what the flags-override-file precedence hinges on.
+//
+// The flag set is DERIVED from DeployCommand().Flags rather than hand-mirrored.
+// The hand-written mirror it replaces had drifted eleven flags behind the
+// command (--new-vm, --storage, --storage-enabled, the four --s3-*, --plan,
+// --json, --deployment, --local-agent, --local-agent-connection,
+// --print-config): a test could not reach any of them, and a test that PASSED
+// one got "flag provided but not defined" rather than the behavior under test.
+// Deriving means a flag added to the command is testable the moment it exists,
+// and a flag renamed there can never leave a test asserting on a name the CLI no
+// longer accepts.
 func deployContext(t *testing.T, args []string) *cli.Context {
 	t.Helper()
 	set := flag.NewFlagSet("deploy", flag.ContinueOnError)
-	set.String("deploy-config", "", "")
-	set.String("gen-config", "", "")
-	set.String("provider", "ssh", "")
-	set.String("host", "", "")
-	set.String("region", "", "")
-	set.String("size", "", "")
-	set.String("image", "", "")
-	set.String("ssh-key-name", "", "")
-	set.String("user", "root", "")
-	set.String("ssh-key", "", "")
-	set.Int("port", 22, "")
-	set.String("domain", "", "")
-	set.String("project", "", "")
-	set.String("version", "", "")
-	set.String("identifier", "", "")
-	set.Bool("db-only", false, "")
-	set.String("db", "mysql", "")
-	set.String("db-schema", "", "")
-	set.String("db-dsn", "", "")
-	set.String("connection", "", "")
-	set.Bool("save-connection", false, "")
-	set.Bool("no-save-connection", false, "")
-	set.String("api", "", "")
-	set.String("auth", "", "")
-	set.Bool("custom", false, "")
-	set.String("source-dir", "", "")
-	set.String("cli-install-cmd", "", "")
-	set.Bool("sudo", false, "")
-	set.String("web-url", "", "")
-	set.Bool("allow-destructive", false, "")
+	// urfave/cli v1's Flag.Apply registers each flag on a stdlib FlagSet with its
+	// declared default (and every alias in a "project, p" name), which is exactly
+	// the set the real command parses against.
+	for _, f := range deployCommandFlags() {
+		f.Apply(set)
+	}
 	if err := set.Parse(args); err != nil {
 		t.Fatalf("parsing args: %v", err)
 	}

@@ -79,6 +79,58 @@ func TestDecideSchemaApply(t *testing.T) {
 	}
 }
 
+// The four states used to be re-derived from three booleans at every reader, which is
+// how "the apply died partway through" ended up describing a run that had sent nothing.
+// One classifier, one table, and the readers can only disagree with each other by
+// disagreeing with this.
+func TestClassifySchemaOutcome(t *testing.T) {
+	for _, tc := range []struct {
+		name string
+		err  error
+		gate schemaGateResult
+		want schemaOutcomeState
+	}{
+		{
+			name: "no error is an applied schema",
+			err:  nil,
+			want: schemaStateApplied,
+		},
+		{
+			// sqlIssued is recorded on success too, so the classifier must not read it
+			// as evidence of a failure that did not happen.
+			name: "sql issued and no error is still an applied schema",
+			err:  nil,
+			gate: schemaGateResult{sqlIssued: true},
+			want: schemaStateApplied,
+		},
+		{
+			// The gate cancels before the confirmation step returns, so nothing was
+			// issued — but a block is a decision, not a failure, and it outranks that.
+			name: "the gate's sentinel is a block, not a failure",
+			err:  errSchemaBlocked,
+			gate: schemaGateResult{blocked: true},
+			want: schemaStateBlocked,
+		},
+		{
+			name: "an error with nothing issued never reached the database",
+			err:  errors.New("context deadline exceeded"),
+			want: schemaStateFailedBeforeSQL,
+		},
+		{
+			name: "an error after sql was issued may have landed half-applied",
+			err:  errors.New(`ERROR: column "x" cannot be cast automatically`),
+			gate: schemaGateResult{sqlIssued: true},
+			want: schemaStateFailedDuringApply,
+		},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			if got := classifySchemaOutcome(tc.err, tc.gate); got != tc.want {
+				t.Fatalf("classifySchemaOutcome(%v, %+v) = %v, want %v", tc.err, tc.gate, got, tc.want)
+			}
+		})
+	}
+}
+
 func TestRevisionShouldFail(t *testing.T) {
 	for _, tc := range []struct {
 		name string
@@ -105,7 +157,7 @@ func TestRevisionShouldFail(t *testing.T) {
 }
 
 func TestExitCodeForOutcome(t *testing.T) {
-	if err := exitCodeForOutcome(deployOutcome{catalogPublished: true, schemaApplied: true}); err != nil {
+	if err := exitCodeForOutcome(deployOutcome{catalogPublished: true, schema: schemaStateApplied}); err != nil {
 		t.Fatalf("a clean deploy returned %v", err)
 	}
 	// A schema that failed for an ordinary reason exits non-zero too. It used to exit
@@ -116,8 +168,8 @@ func TestExitCodeForOutcome(t *testing.T) {
 		name string
 		o    deployOutcome
 	}{
-		{name: "blocked by the gate", o: deployOutcome{schemaBlocked: true, schemaApplied: false}},
-		{name: "apply errored", o: deployOutcome{schemaApplied: false}},
+		{name: "blocked by the gate", o: deployOutcome{schema: schemaStateBlocked}},
+		{name: "apply errored", o: deployOutcome{schema: schemaStateFailedDuringApply}},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
 			err := exitCodeForOutcome(tc.o)
@@ -138,8 +190,7 @@ func TestExitCodeForOutcome(t *testing.T) {
 func TestDeployOutcomeBlockedSummary(t *testing.T) {
 	o := deployOutcome{
 		catalogPublished:   true,
-		schemaApplied:      false,
-		schemaBlocked:      true,
+		schema:             schemaStateBlocked,
 		destructiveCount:   2,
 		rerunCommand:       "nuzur-cli deploy --host prod --allow-destructive",
 		destructiveApplied: false,
@@ -178,22 +229,22 @@ func TestDeployOutcomeRevisionMessages(t *testing.T) {
 	}{
 		{
 			name: "clean deploy says nothing",
-			o:    deployOutcome{catalogPublished: true, schemaApplied: true},
+			o:    deployOutcome{catalogPublished: true, schema: schemaStateApplied},
 			want: "",
 		},
 		{
 			name: "blocked names the flag and the count",
-			o:    deployOutcome{catalogPublished: true, schemaBlocked: true, destructiveCount: 2},
+			o:    deployOutcome{catalogPublished: true, schema: schemaStateBlocked, destructiveCount: 2},
 			want: "schema not applied: 2 destructive statement(s) need --allow-destructive",
 		},
 		{
 			name: "an authorized drop is legible in the history",
-			o:    deployOutcome{catalogPublished: true, schemaApplied: true, destructiveApplied: true, destructiveCount: 3},
+			o:    deployOutcome{catalogPublished: true, schema: schemaStateApplied, destructiveApplied: true, destructiveCount: 3},
 			want: "schema applied including 3 destructive statement(s)",
 		},
 		{
 			name: "an ordinary schema failure is unchanged",
-			o:    deployOutcome{catalogPublished: true, schemaApplied: false},
+			o:    deployOutcome{catalogPublished: true, schema: schemaStateFailedDuringApply},
 			want: "schema not applied to the database",
 		},
 	} {
@@ -210,8 +261,7 @@ func TestDeployOutcomeRevisionMessageFitsTheColumnWithGateFields(t *testing.T) {
 	// failed publish AND a blocked destructive schema.
 	o := deployOutcome{
 		catalogPublished: false,
-		schemaApplied:    false,
-		schemaBlocked:    true,
+		schema:           schemaStateBlocked,
 		destructiveCount: 999999,
 	}
 	if got := len(o.revisionMessage()); got > 512 {

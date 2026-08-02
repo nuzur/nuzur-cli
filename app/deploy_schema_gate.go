@@ -91,6 +91,33 @@ func (i *Implementation) schemaApplyDecider(allowDestructive bool, out *schemaGa
 	}
 }
 
+// classifySchemaOutcome turns the two things step 10 knows — whether applySchema
+// errored, and what the gate observed on the way — into the single state the reporting
+// branches on.
+//
+// Pure and total: every (err, gate) pair maps to exactly one state, so the four
+// messages, the color, the revision text and the exit code can no longer disagree
+// about what happened. It used to be re-derived at each reader from three booleans.
+//
+// Order matters. err == nil wins over gate.blocked because a blocked gate always
+// surfaces as errSchemaBlocked from applySchema — an unblocked-looking success with
+// gate.blocked set is not reachable, and if it ever became so, reporting the apply that
+// evidently happened is the honest half.
+func classifySchemaOutcome(err error, gate schemaGateResult) schemaOutcomeState {
+	switch {
+	case err == nil:
+		return schemaStateApplied
+	case gate.blocked:
+		return schemaStateBlocked
+	case !gate.sqlIssued:
+		// Nothing reached the database: the failure was in resolving the extension,
+		// reaching the agent, or computing the diff.
+		return schemaStateFailedBeforeSQL
+	default:
+		return schemaStateFailedDuringApply
+	}
+}
+
 // errSchemaBlocked distinguishes "the deploy refused to apply this" from "applying
 // it failed", which the outcome reporting has to tell apart: one is a decision
 // waiting on a human, the other is a fault to retry.
@@ -139,7 +166,7 @@ func (i *Implementation) preflightSchemaGate(targets *runTargets, t planTarget) 
 			"--allow-destructive was not passed. The database is untouched and the app on this box is "+
 			"untouched — it is still running the code that matches its schema.",
 		plural(len(dest), "statement")), outputtools.Red)
-	fmt.Fprintln(os.Stderr)
+	fmt.Fprintln(outputtools.Stderr)
 	outputtools.PrintlnColoredErr("To see the full plan without applying anything:", outputtools.Yellow)
 	outputtools.PrintlnColoredErr("  "+rerunCommand(os.Args, false)+" --plan", outputtools.Yellow)
 	outputtools.PrintlnColoredErr("To apply it, including the destructive statements:", outputtools.Yellow)
@@ -178,7 +205,7 @@ func revisionShouldFail(err error) bool {
 // whereas a failure means a statement reached the database and errored, which is also
 // the only path on which a migration can land half-applied.
 func exitCodeForOutcome(o deployOutcome) error {
-	if o.schemaBlocked || !o.schemaApplied {
+	if o.schema != schemaStateApplied {
 		return cli.NewExitError("", 1)
 	}
 	return nil
@@ -187,10 +214,10 @@ func exitCodeForOutcome(o deployOutcome) error {
 // printGateFollowUp tells a user whose deploy was blocked what to do next. Written
 // to stderr after the deployment report, where the rest of the closing summary goes.
 func printGateFollowUp(o deployOutcome) {
-	if !o.schemaBlocked {
+	if o.schema != schemaStateBlocked {
 		return
 	}
-	fmt.Fprintln(os.Stderr)
+	fmt.Fprintln(outputtools.Stderr)
 	outputtools.PrintlnColoredErr("To see the full plan without applying anything:", outputtools.Yellow)
 	outputtools.PrintlnColoredErr("  "+rerunCommand(os.Args, false)+" --plan", outputtools.Yellow)
 	if o.rerunCommand != "" {

@@ -1,0 +1,8 @@
+ERR [32mLogged in as [Deploy - deploy-tests@example.invalid][0m
+ERR [34mLoading projects...[0m
+ERR [34mLoading project versions...[0m
+ERR [33mS3 storage is enabled but no credentials were provided (no --storage / --s3-* and none saved) — /upload and /sign will return 503 until you set the aws: block in the app's prod.yaml.[0m
+ERR [34mCreating a new digitalocean VM for identifier "sfapi" — no previous deployment of this project under that identifier is recorded on this machine, so a new server will be created and will bill.[0m
+ERR this project version's schema cannot be rendered, so the deploy would create a database it could never populate: extension execution failed: entity "invoice" references enum "currency", which is not in this project version
+ERR Nothing has been provisioned — no server, no database, no deployment record. Fix the schema (`nuzur-cli deploy --plan` renders the same script) and re-run
+EXIT 1

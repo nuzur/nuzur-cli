@@ -291,7 +291,7 @@ func shouldSaveTeamConnection(noSave, save bool) bool {
 	if !stdinIsInteractive() {
 		return false
 	}
-	fmt.Print("\nSave this database as a team connection so your team can use the data manager? [y/N]: ")
+	fmt.Fprint(outputtools.Stdout, "\nSave this database as a team connection so your team can use the data manager? [y/N]: ")
 	line, err := bufio.NewReader(os.Stdin).ReadString('\n')
 	if err != nil {
 		return false
@@ -374,7 +374,7 @@ func (i *Implementation) saveTeamConnection(in saveConnectionInput) {
 	}
 
 	outputtools.PrintlnColored("\nSaved as a team connection — your team can now open the data manager on this database.", outputtools.Green)
-	fmt.Printf("  connection: %s (%s)\n", in.Identifier, conn.Uuid)
+	fmt.Fprintf(outputtools.Stdout, "  connection: %s (%s)\n", in.Identifier, conn.Uuid)
 	outputtools.PrintlnColoredErr("  Note: the data manager connects to this database directly from nuzur — its host:port must be reachable from the internet.", outputtools.Yellow)
 }
 

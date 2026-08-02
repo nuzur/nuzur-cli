@@ -1,0 +1,4 @@
+ERR `nuzur-cli deploy` takes no positional arguments, but got 2 — "false", "--allow-destructive".
+ERR Did you mean `--custom=false`? Boolean flags need the `=` form: `--custom false` sets --custom to TRUE and leaves "false" behind as a positional argument.
+ERR Flag parsing stops at the first positional argument, so these were NOT applied: "--allow-destructive".
+EXIT 1

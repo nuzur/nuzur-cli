@@ -235,7 +235,7 @@ func (i *Implementation) runDeployPlan(c *cli.Context, s *deploySettings) error 
 
 	identifier := planIdentifier(s.Identifier, lastGoCodeGenConfig(targets), targets.project.Name)
 
-	target, err := resolvePlanTargetFromState(planTargetInput{
+	targetInput := planTargetInput{
 		DeploymentID:   c.String("deployment"),
 		Host:           s.Host,
 		Identifier:     identifier,
@@ -247,7 +247,8 @@ func (i *Implementation) runDeployPlan(c *cli.Context, s *deploySettings) error 
 		DB:             s.DB,
 		ProjectUUID:    targets.project.Uuid,
 		Deployments:    deps,
-	})
+	}
+	target, err := resolvePlanTargetFromState(targetInput)
 	if err != nil {
 		return err
 	}
@@ -268,12 +269,20 @@ func (i *Implementation) runDeployPlan(c *cli.Context, s *deploySettings) error 
 		}
 	}
 
+	// Whether a pasteable command can be offered at all, decided once — see
+	// targetChosenByLocalAgentFlags.
+	suggestRerun := !targetChosenByLocalAgentFlags(targetInput)
+
 	report := deployPlanReport{
 		Status:         "plan",
 		Project:        planProject{UUID: targets.project.Uuid, Name: targets.project.Name},
 		ProjectVersion: planProjectVersion(targets.projectVersion),
 		Applied:        false,
-		RerunCommand:   rerunCommand(os.Args, false),
+	}
+	if suggestRerun {
+		report.RerunCommand = rerunCommand(os.Args, false)
+	} else {
+		report.RerunNote = localAgentRerunNote(targetInput.LocalAgentConn)
 	}
 
 	var plan sqlplan.Plan
@@ -314,7 +323,7 @@ func (i *Implementation) runDeployPlan(c *cli.Context, s *deploySettings) error 
 	// unless the batch contains something it cannot run inside one, and which MySQL
 	// cannot honor for DDL at all.
 	report.Transactional = plan.Transactional(sqlplan.Engine(report.Target.Engine))
-	if report.Destructive {
+	if report.Destructive && suggestRerun {
 		report.RerunCommand = rerunCommand(os.Args, true)
 	}
 	if isMySQL(report.Target.Engine) {
@@ -460,6 +469,46 @@ func rerunCommand(argv []string, addAllowDestructive bool) string {
 		out = append(out, "--allow-destructive")
 	}
 	return strings.Join(out, " ")
+}
+
+// targetChosenByLocalAgentFlags reports whether the plan reached its database
+// through --local-agent/--local-agent-connection — precedence 1 in
+// resolvePlanTargetFromState, which wins outright whenever both are given.
+//
+// It is derived from the same input the resolution reads rather than from the
+// resolved target's Source string, because Source is documented as reporting-only
+// and this decides whether a command is handed to the user.
+func targetChosenByLocalAgentFlags(in planTargetInput) bool {
+	return strings.TrimSpace(in.LocalAgent) != "" && strings.TrimSpace(in.LocalAgentConn) != ""
+}
+
+// localAgentRerunNote replaces the pasteable command when the plan was aimed with
+// the --local-agent pair.
+//
+// NO COMMAND IS OFFERED, deliberately. rerunCommand drops those two flags — a
+// deploy really cannot use them, it reaches its database through the box it is
+// deploying to — and what is left re-resolves through the host+identifier lookup
+// to whatever connection the record for that box happens to hold. That is a
+// DIFFERENT database from the one just diffed, and when the plan was destructive
+// the suggestion carried --allow-destructive to it.
+//
+// Qualifying the command with a warning was the alternative and is worse: the
+// value of the suggestion is that it can be pasted without being read, so a
+// pasteable command plus a caveat is a pasteable command. The rule the suggestion
+// exists to keep is that it applies to what was planned; where that cannot be
+// promised, the honest output is the explanation and no command.
+func localAgentRerunNote(connUUID string) string {
+	which := "the connection this plan targeted"
+	if c := strings.TrimSpace(connUUID); c != "" {
+		which = "connection " + c
+	}
+	return "No re-run command is offered for this plan.\n" +
+		"It was aimed with --local-agent/--local-agent-connection, and `deploy` accepts neither — a deploy\n" +
+		"reaches its database through the box it deploys to. A command with those flags removed would\n" +
+		"resolve to whatever connection the record for its host and identifier holds, which need not be\n" +
+		which + " — so pasting it could apply this migration somewhere nobody diffed.\n" +
+		"To apply it, re-plan with the selector you will deploy with (`--deployment <id>` for a box this\n" +
+		"machine deployed, or the same --host/--identifier) and use the command that plan suggests."
 }
 
 // baseName is filepath.Base without importing filepath for one call, and keeps the

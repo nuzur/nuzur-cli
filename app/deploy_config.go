@@ -122,8 +122,18 @@ type deploySettings struct {
 	Version    string
 	Identifier string
 
-	DBOnly           bool
-	DB               string
+	DBOnly bool
+	DB     string
+	// DBStated records whether the engine in DB was CHOSEN — by --db, or by a
+	// deploy-config's `db` — rather than defaulted to mysql. The value alone
+	// cannot say, because "mysql" is both the default and a legitimate choice.
+	//
+	// A re-deploy needs the difference. It adopts the engine recorded for the box
+	// it is re-deploying (see runDeploy), which is right when the user said
+	// nothing and wrong the moment they did: adopting over a stated engine would
+	// deploy something nobody asked for, and not adopting when nothing was stated
+	// is how a Postgres box got re-deployed as MySQL.
+	DBStated         bool
 	DBSchema         string
 	DBDSN            string
 	Connection       string
@@ -203,6 +213,7 @@ func resolveDeploySettings(c *cli.Context) (*deploySettings, error) {
 
 		DBOnly:           boolSetting(c, "db-only", cfg.DBOnly),
 		DB:               strSetting(c, "db", cfg.DB, "mysql"),
+		DBStated:         c.IsSet("db") || cfg.DB != nil,
 		DBSchema:         strSetting(c, "db-schema", cfg.DBSchema, ""),
 		DBDSN:            strSetting(c, "db-dsn", cfg.DBDSN, ""),
 		Connection:       strSetting(c, "connection", cfg.Connection, ""),
