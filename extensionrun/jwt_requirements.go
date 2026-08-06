@@ -10,7 +10,9 @@ import (
 // The schema the generated JWT server is built around. nuzur models are
 // authored in English or Spanish, so each accepts the identifiers of both.
 // This mirrors go-code-gen's project package, which is the source of truth:
-// the two live in separate modules and cannot share a package.
+// the two live in separate modules and cannot share a package. The shared
+// semantics the email lookup needs are now "a single-field index/unique index,
+// or field unique:true — the generator synthesizes the index".
 var (
 	userEntityIdentifiers     = []string{"user", "usuario"}
 	userEmailFieldIdentifiers = []string{"email", "correo", "correo_electronico"}
@@ -71,11 +73,13 @@ func checkJWTAuthSchema(entities []*nemgen.Entity) (missing []string, warnings [
 	emailField := firstFieldNamed(userEntity, userEmailFieldIdentifiers)
 	if emailField == nil {
 		missing = append(missing, fmt.Sprintf("an email field (%s) on the %q entity", quotedList(userEmailFieldIdentifiers), name))
-	} else if !hasSingleFieldIndex(userEntity, emailField) {
-		// Without this index the generated repo never emits the fetch-by-email
-		// select the signin and validate handlers call.
+	} else if !emailField.Unique && !hasSingleFieldIndex(userEntity, emailField) {
+		// Without a single-field index the generated repo never emits the
+		// fetch-by-email select the signin and validate handlers call. A field
+		// marked unique:true is enough on its own: the generator synthesizes the
+		// unique index for it.
 		missing = append(missing, fmt.Sprintf(
-			"an index or unique index on the %q entity covering only the %q field",
+			"an index or unique index on the %q entity covering only the %q field, or unique: true on that field (the generator synthesizes the index), which is what generates the fetch-by-email lookup sign in uses",
 			name, emailField.Identifier))
 	}
 

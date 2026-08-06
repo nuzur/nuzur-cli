@@ -108,6 +108,36 @@ func TestCheckJWTAuthSchemaMissingEmailIndex(t *testing.T) {
 	}
 }
 
+// unique:true on the email field is sugar for a single-field unique index: the
+// generator synthesizes one, so the fetch-by-email lookup is generated and the
+// schema must pass without the author declaring the index themselves.
+func TestCheckJWTAuthSchemaEmailUniqueFlagStandsInForIndex(t *testing.T) {
+	cases := []struct {
+		name       string
+		unique     bool
+		wantErrors bool
+	}{
+		{"unique flag, no covering index", true, false},
+		{"no unique flag, no covering index", false, true},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			entity := validUserEntity()
+			// Drop the email index, leaving only the primary key.
+			entity.TypeConfig.Standalone.Indexes = entity.TypeConfig.Standalone.Indexes[:1]
+			entity.Fields[1].Unique = tc.unique
+
+			missing, _ := checkJWTAuthSchema([]*nemgen.Entity{entity})
+			if tc.wantErrors && !containsSubstring(missing, "index") {
+				t.Fatalf("expected an index finding, got: %v", missing)
+			}
+			if !tc.wantErrors && len(missing) != 0 {
+				t.Fatalf("expected unique:true to satisfy the email lookup, got: %v", missing)
+			}
+		})
+	}
+}
+
 func TestCheckJWTAuthSchemaCompositeIndexRejectedDatetimeIgnored(t *testing.T) {
 	composite := validUserEntity()
 	composite.TypeConfig.Standalone.Indexes[1].Fields = []*nemgen.IndexField{
