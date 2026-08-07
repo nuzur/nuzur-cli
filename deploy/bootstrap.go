@@ -49,6 +49,23 @@ type BootstrapParams struct {
 	// its own auto-assigned public port on the host IP (plain HTTP), so multiple
 	// projects can coexist without domains.
 	Domain string
+	// GRPCDomain and AuthDomain are OPTIONAL extra hostnames for the same box,
+	// each rendered as its own site block in this project's Caddy snippet — and
+	// therefore each getting its own automatic Let's Encrypt cert. Both stay on
+	// 80/443, so neither changes the firewall.
+	//
+	// They are ADDITIONS, never a replacement. The site Domain names still routes
+	// everything by Content-Type (gRPC vs HTTP) on one hostname, which is the
+	// arrangement every existing deployment runs; with both of these empty the
+	// snippet is byte-identical to what it has always been.
+	//
+	// GRPCDomain fronts the gRPC port directly (h2c), so it is rendered only when
+	// the app actually serves gRPC. AuthDomain is a hostname ALIAS onto the same
+	// process — a VM runs one binary serving both the API and the JWT endpoints,
+	// unlike the k8s path where the auth server is a second deployment — so it
+	// proxies to the same HTTP port.
+	GRPCDomain string
+	AuthDomain string
 	// Host is the box IP/hostname the CLI connected to; used to compose the
 	// IP-only public URL (http://{host}:{publicPort}) written back for the report.
 	Host              string

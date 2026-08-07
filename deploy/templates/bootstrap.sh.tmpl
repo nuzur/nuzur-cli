@@ -505,7 +505,8 @@ systemctl restart nuzur-agent.service
 # so adding/removing a project never rewrites another's routing. With a domain the
 # site serves HTTPS/443 (auto Let's Encrypt); without one the project gets its own
 # auto-assigned public port on the host IP (plain HTTP). Routes gRPC vs REST/auth/
-# info by Content-Type.
+# info by Content-Type. Extra hostnames (--grpc-domain, --auth-domain) are appended
+# to the same snippet as their own site blocks; without them it is unchanged.
 if ! command -v caddy >/dev/null 2>&1; then
   echo "[nuzur-deploy] installing caddy"
   apt-get install -y debian-keyring debian-archive-keyring apt-transport-https curl gnupg
@@ -557,7 +558,27 @@ ${SITE_ADDR} {
 	}
 }
 CADDY
-systemctl enable --now caddy 2>/dev/null || true
+{{if and .GRPCEnabled .GRPCDomain}}# Optional: gRPC on its own hostname, straight to the gRPC port over h2c — no
+# Content-Type sniffing needed when the hostname already says which one it is.
+# Its own site block, so Caddy issues it its own certificate.
+cat >> /etc/caddy/conf.d/{{.Identifier}}.caddy <<CADDY
+
+{{.GRPCDomain}} {
+	encode gzip
+	reverse_proxy h2c://127.0.0.1:${GRPC_PORT}
+}
+CADDY
+{{end}}{{if .AuthDomain}}# Optional: the auth hostname. A VM runs ONE process serving both the API and the
+# JWT endpoints, so this is an alias onto the same HTTP port rather than a second
+# workload — the separate auth deployment exists only on the k8s path.
+cat >> /etc/caddy/conf.d/{{.Identifier}}.caddy <<CADDY
+
+{{.AuthDomain}} {
+	encode gzip
+	reverse_proxy 127.0.0.1:${HTTP_PORT}
+}
+CADDY
+{{end}}systemctl enable --now caddy 2>/dev/null || true
 systemctl reload caddy 2>/dev/null || systemctl restart caddy
 
 # Record the resolved front-door URL so the deploy command can read it back

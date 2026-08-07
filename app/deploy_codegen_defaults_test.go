@@ -2,6 +2,7 @@ package app
 
 import (
 	"reflect"
+	"strings"
 	"testing"
 
 	extensiongen "github.com/nuzur/extension-sdk/idl/gen"
@@ -312,4 +313,107 @@ func TestApplyCodegenDefaults_ExplicitNullIsMissing(t *testing.T) {
 	if provided["go_module"] != "app" {
 		t.Fatalf("go_module = %v, want the derived default", provided["go_module"])
 	}
+}
+
+// TestResolveCodegenDomains covers the project config becoming the durable home
+// for the three hostnames, in both directions.
+func TestResolveCodegenDomains(t *testing.T) {
+	t.Run("writes what this deploy resolved", func(t *testing.T) {
+		s := &deploySettings{Domain: "api.example.com", GRPCDomain: "grpc.example.com", AuthDomain: "auth.example.com"}
+		provided := map[string]interface{}{}
+		if adopted := resolveCodegenDomains(s, provided, nil); len(adopted) != 0 {
+			t.Errorf("nothing was adopted from the config, got %v", adopted)
+		}
+		for field, want := range map[string]string{
+			"domain": "api.example.com", "grpc_domain": "grpc.example.com", "auth_domain": "auth.example.com",
+		} {
+			if got := provided[field]; got != want {
+				t.Errorf("%s: got %v, want %q", field, got, want)
+			}
+		}
+	})
+
+	t.Run("adopts what the config holds", func(t *testing.T) {
+		s := &deploySettings{}
+		last := map[string]interface{}{"domain": "api.saved.com", "auth_domain": "auth.saved.com"}
+		adopted := resolveCodegenDomains(s, map[string]interface{}{}, last)
+		if s.Domain != "api.saved.com" || s.AuthDomain != "auth.saved.com" {
+			t.Errorf("hostnames not adopted: %+v", s)
+		}
+		if s.GRPCDomain != "" {
+			t.Errorf("nothing saved for grpc_domain, so nothing to adopt; got %q", s.GRPCDomain)
+		}
+		if len(adopted) != 2 {
+			t.Errorf("both adoptions should be reported, got %v", adopted)
+		}
+	})
+
+	t.Run("an explicit hostname wins over the saved one", func(t *testing.T) {
+		s := &deploySettings{Domain: "api.new.com"}
+		provided := map[string]interface{}{}
+		resolveCodegenDomains(s, provided, map[string]interface{}{"domain": "api.old.com"})
+		if s.Domain != "api.new.com" {
+			t.Errorf("the flag must win, got %q", s.Domain)
+		}
+		if provided["domain"] != "api.new.com" {
+			t.Errorf("the new value must be written back, got %v", provided["domain"])
+		}
+	})
+
+	// The one that would be silent and destructive. An omitted flag means "I did
+	// not say", not "remove it" — writing "" would clear the saved hostname, and
+	// the next deploy would then resolve nothing and delete the live Ingress.
+	t.Run("an unstated hostname never clears the saved one", func(t *testing.T) {
+		s := &deploySettings{}
+		provided := map[string]interface{}{}
+		resolveCodegenDomains(s, provided, map[string]interface{}{"domain": "api.saved.com"})
+		if _, written := provided["grpc_domain"]; written {
+			t.Errorf("an unset hostname must not be written at all, got %v", provided["grpc_domain"])
+		}
+		if v, written := provided["domain"]; written && v == "" {
+			t.Error("writing an empty domain would erase the saved one")
+		}
+	})
+}
+
+// TestCheckDistinctDomains: two Ingresses on one host is a silent misroute, not
+// an error helm or the cluster will report.
+func TestCheckDistinctDomains(t *testing.T) {
+	t.Run("distinct is fine", func(t *testing.T) {
+		s := &deploySettings{Domain: "api.example.com", GRPCDomain: "grpc.example.com", AuthDomain: "auth.example.com"}
+		if err := checkDistinctDomains(s); err != nil {
+			t.Errorf("three different hostnames must be accepted: %v", err)
+		}
+	})
+
+	t.Run("empties do not collide with each other", func(t *testing.T) {
+		if err := checkDistinctDomains(&deploySettings{}); err != nil {
+			t.Errorf("no hostnames at all is not a collision: %v", err)
+		}
+		if err := checkDistinctDomains(&deploySettings{GRPCDomain: "api.example.com"}); err != nil {
+			t.Errorf("one hostname is not a collision: %v", err)
+		}
+	})
+
+	// The live case: moving an app's front door from HTTP to gRPC leaves the old
+	// value saved in the config, so both point at the same host.
+	t.Run("moving a host between fields is refused", func(t *testing.T) {
+		s := &deploySettings{Domain: "api.example.com", GRPCDomain: "api.example.com"}
+		err := checkDistinctDomains(s)
+		if err == nil {
+			t.Fatal("the same host on two Ingresses must be refused")
+		}
+		for _, want := range []string{"domain", "grpc_domain", "api.example.com"} {
+			if !strings.Contains(err.Error(), want) {
+				t.Errorf("the error must name %q so the user knows what to clear: %v", want, err)
+			}
+		}
+	})
+
+	t.Run("case and spacing do not hide a collision", func(t *testing.T) {
+		s := &deploySettings{Domain: " API.example.com ", AuthDomain: "api.example.com"}
+		if err := checkDistinctDomains(s); err == nil {
+			t.Error("hostnames are case-insensitive; this is the same host")
+		}
+	})
 }

@@ -856,6 +856,30 @@ func (i *Implementation) stepReport(ctx context.Context, st *deployState) error 
 			fmt.Fprintf(outputtools.Stdout, "             a signing key was generated %s; sign-in needs a user row in your user entity.\n", where)
 		}
 		fmt.Fprintf(outputtools.Stdout, "  Info page: %s/\n", st.publicURL)
+		if g := strings.TrimSpace(st.s.GRPCDomain); g != "" {
+			fmt.Fprintf(outputtools.Stdout, "  gRPC API:  %s (its own hostname, on its own Ingress)\n", g)
+		}
+		// gRPC over plain HTTP does not work, and nothing downstream says so.
+		//
+		// ingress-nginx enables HTTP/2 only on its TLS listener — `listen 443 ssl
+		// http2`, while `listen 80` has no http2 — because a gRPC client negotiates
+		// HTTP/2 through ALPN, which only exists in the TLS handshake. So without a
+		// certificate the Ingress is created, carries every correct annotation, and
+		// still cannot serve gRPC: clients fail to negotiate, and a plain HTTP/1.1
+		// request gets proxied through to the gRPC server, which answers 415.
+		//
+		// Said separately from the HTTP notice below because the consequence is not
+		// the same. Plain HTTP is a downgrade for REST; for gRPC it is not working
+		// at all, which is worth more than a parenthetical.
+		if isK8s(st) && !st.useHTTPS && strings.TrimSpace(st.s.GRPCDomain) != "" {
+			outputtools.PrintlnColoredErr(fmt.Sprintf(
+				"\nwarning: %s is routed but will NOT serve gRPC until it has TLS.\n"+
+					"  ingress-nginx only enables HTTP/2 on its TLS listener, and gRPC clients negotiate\n"+
+					"  HTTP/2 through ALPN — which only happens in a TLS handshake. Over plain HTTP a client\n"+
+					"  cannot connect at all, and curl gets 415 from the gRPC server behind it.\n"+
+					"  Add a cert: a cert-manager cluster-issuer annotation, or a tls block, on grpcIngress.",
+				strings.TrimSpace(st.s.GRPCDomain)), outputtools.Yellow)
+		}
 		if !st.useHTTPS && !isK8s(st) {
 			outputtools.PrintlnColoredErr("  (IP-only deploy over plain HTTP — pass --domain <name> for automatic HTTPS with a trusted cert.)", outputtools.Yellow)
 		} else if !st.useHTTPS && strings.TrimSpace(st.s.Domain) != "" {
@@ -1112,6 +1136,12 @@ func (i *Implementation) stepRecordBox(ctx context.Context, st *deployState) err
 		rec.ExternalDB = st.externalDB
 		rec.WorkspaceDir = st.workspaceDir
 		rec.Domain = st.s.Domain
+		// The other two hostnames of this deployment, written in the same breath
+		// as the first. They are what the NEXT run adopts when it does not state
+		// them (applyDeploymentSelector), which is what stops a re-deploy that
+		// forgot a flag from taking the auth or gRPC front door down.
+		rec.AuthDomain = st.s.AuthDomain
+		rec.GRPCDomain = st.s.GRPCDomain
 		// Written from what this run KNOWS rather than left to the merge: on a
 		// --new-vm run the id being written to may be a fresh one with nothing in
 		// it, and blanking the agent uuid for the ~20 minutes between here and
@@ -1167,6 +1197,8 @@ func (i *Implementation) stepReportInProgress(ctx context.Context, st *deploySta
 		ExternalDB:     st.externalDB,
 		DBOnly:         st.dbOnly,
 		Domain:         st.s.Domain,
+		GRPCDomain:     st.s.GRPCDomain,
+		AuthDomain:     st.s.AuthDomain,
 		ExtDBPort:      st.extPort,
 		RESTEnabled:    boolValue(st.configValues, "rest_enabled"),
 		GRPCEnabled:    boolValue(st.configValues, "grpc_server_enabled"),
@@ -1267,12 +1299,16 @@ func (i *Implementation) stepBootstrap(ctx context.Context, st *deployState) err
 		ConnUUID:          st.connUUID,
 		ConnName:          st.connName,
 		Domain:            st.s.Domain,
-		Host:              st.host,
-		S3Enabled:         st.s3Enabled,
-		S3Region:          st.s3Region,
-		S3Bucket:          st.s3Bucket,
-		S3Key:             st.s3Key,
-		S3Secret:          st.s3Secret,
+		// Optional extra Caddy sites, alongside the one Domain names. Empty for
+		// almost every deploy, and the snippet is byte-identical when they are.
+		AuthDomain: st.s.AuthDomain,
+		GRPCDomain: st.s.GRPCDomain,
+		Host:       st.host,
+		S3Enabled:  st.s3Enabled,
+		S3Region:   st.s3Region,
+		S3Bucket:   st.s3Bucket,
+		S3Key:      st.s3Key,
+		S3Secret:   st.s3Secret,
 	}
 	if !st.dbOnly {
 		bp.RemoteSrcDir = remoteSrcDir
@@ -1573,6 +1609,20 @@ func (i *Implementation) stepResolveAndConfigure(ctx context.Context, st *deploy
 			outputtools.PrintlnColoredErr(fmt.Sprintf(
 				"%s — deploying with derived defaults: %s.\nOverride with the deploy flags (--identifier/--api/--auth/--db), a `codegen` block in --deploy-config, or --gen-config <file>.\nThe resolved config is saved as this project's go-code-gen config, so later deploys reuse it.",
 				lead, strings.Join(applied, ", ")), outputtools.Yellow)
+		}
+
+		// The three hostnames, in both directions: adopted from the project's saved
+		// config when this run supplies none, and written back when it does — so the
+		// generated values.yaml carries the real hosts and the config, not a local
+		// deployment record, is where they live.
+		if adopted := resolveCodegenDomains(st.s, provided, st.targets.lastConfig); len(adopted) > 0 {
+			outputtools.PrintlnColoredErr(fmt.Sprintf(
+				"Using the hostnames saved in the project's go-code-gen config: %s.",
+				strings.Join(adopted, ", ")), outputtools.Blue)
+		}
+
+		if err := checkDistinctDomains(st.s); err != nil {
+			return err
 		}
 
 		st.configValues, err = st.targets.er.BuildConfigFromJSON(st.targets.project, st.targets.projectVersion.Uuid, st.targets.configEntity, provided, st.targets.lastConfig)

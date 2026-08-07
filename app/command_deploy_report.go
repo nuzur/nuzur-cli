@@ -29,6 +29,8 @@ type deploymentReportInput struct {
 	ExternalDB     bool
 	DBOnly         bool
 	Domain         string
+	GRPCDomain     string
+	AuthDomain     string
 	PublicURL      string
 	DataManagerURL string
 	UseHTTPS       bool
@@ -128,10 +130,16 @@ func (i *Implementation) reportDeployment(ctx context.Context, in deploymentRepo
 			SshKeyName: in.SSHKeyName,
 		},
 		Server: &nemgen.DeploymentServer{
-			SshUser:        in.SSHUser,
-			SshPort:        int64(in.SSHPort),
-			PublicPort:     publicPortFromURL(in.PublicURL, in.UseHTTPS),
+			SshUser:    in.SSHUser,
+			SshPort:    int64(in.SSHPort),
+			PublicPort: publicPortFromURL(in.PublicURL, in.UseHTTPS),
+			// All three hostnames the release serves, not just the first. A
+			// revision that records one of three cannot say what it served, and a
+			// re-deploy driven from it would resolve fewer hostnames than the
+			// release has — which on k8s is what deletes a live Ingress.
 			Domain:         in.Domain,
+			GrpcDomain:     in.GRPCDomain,
+			AuthDomain:     in.AuthDomain,
 			PublicUrl:      in.PublicURL,
 			DataManagerUrl: in.DataManagerURL,
 			LocalAgentUuid: in.LocalAgentUUID,

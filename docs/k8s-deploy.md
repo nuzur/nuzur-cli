@@ -280,6 +280,47 @@ nuzur-cli deploy --provider k8s ... \
 
 Both read the *same* credentials file — they are the same binary.
 
+**You only have to pass the hostnames once.** They are stored on the deployment
+record, and a re-deploy that selects it (`--deployment <id>`) restates them for
+you. A flag you do pass always wins, so renaming a host is just passing the new
+one.
+
+That matters more than it sounds. Deploy rewrites the release's values on every
+run, and a hostname it is not given is a hostname the chart *disables* — its
+default is `ingress.enabled: false`, so `helm upgrade` would delete the Ingress
+and the address would stop answering, with nothing failing along the way. A
+deploy that would leave the release serving fewer hostnames than it does now is
+refused before anything is applied:
+
+```
+refusing to release: "sfapi" in namespace "sfapi" currently serves 2 Ingress
+host(s) — apiv2.example.com, auth.example.com — and this deploy resolved only 1
+```
+
+Pass the missing one, or select the deployment by id. To remove a hostname on
+purpose, delete its Ingress first (`kubectl -n <ns> delete ingress <name>`);
+there is then nothing left to protect.
+
+### Serving gRPC and HTTP together
+
+An app that serves both is served on **two hostnames**, from **two Ingress
+objects**, out of one chart and one release:
+
+```sh
+nuzur-cli deploy --provider k8s --domain api.example.com --grpc-domain grpc.example.com
+```
+
+They cannot share a hostname. `nginx.ingress.kubernetes.io/backend-protocol` is
+an annotation on the Ingress *object*, so a single Ingress speaks exactly one
+protocol to its backend however its rules are written — one for HTTP/1.1, one
+carrying the h2c annotations gRPC needs. Give both hostnames their own DNS
+record.
+
+(The VM providers are the one place a single hostname does work: Caddy can split
+gRPC from HTTP by inspecting `Content-Type: application/grpc`. `--grpc-domain`
+is still honoured there, as its own Caddy site, so the same project config means
+the same thing on both targets.)
+
 ## Removing a deployment
 
 ```sh

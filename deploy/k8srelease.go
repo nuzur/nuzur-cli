@@ -108,6 +108,33 @@ func (t ClusterTools) ReleaseExists(ctx context.Context, runner RemoteRunner, re
 	return err == nil
 }
 
+// IngressHosts returns every hostname the release's Ingresses currently serve,
+// across the parent chart and any subchart (they share the release's `instance`
+// label).
+//
+// It answers one question: what would `helm upgrade` be taking away? An Ingress
+// this release owns is deleted the moment the values stop asking for it, and the
+// values are rewritten from scratch on every deploy — so a host nobody restated
+// is a host that goes offline. Without reading the cluster there is no way to
+// know a release HAS one, since the record only says what past runs were told.
+//
+// Best-effort, like ServiceEndpoint: an empty result means "found none, or could
+// not ask". The caller uses it to REFUSE, never to remove, so the failure mode of
+// a cluster that cannot answer is the behaviour that already exists today.
+func (t ClusterTools) IngressHosts(ctx context.Context, runner RemoteRunner, release, namespace string) []string {
+	cmd := strings.Join([]string{
+		t.Kubectl, "get", "ingress",
+		"-l", shellQuote("app.kubernetes.io/instance=" + release),
+		"--namespace", shellQuote(namespace),
+		"-o", shellQuote("jsonpath={.items[*].spec.rules[*].host}"),
+	}, " ")
+	out, err := runner.Capture(ctx, cmd)
+	if err != nil {
+		return nil
+	}
+	return strings.Fields(out)
+}
+
 // ServiceEndpoint returns a URL for the deployed app, preferring an Ingress host
 // and falling back to the node IP plus a NodePort.
 //

@@ -28,17 +28,17 @@ type Deployment struct {
 	// Provisioning marks a deployment whose VM is still being created. It is set
 	// before the create call and cleared once the deploy completes, so a record left
 	// with it set is a deploy that died in flight and may have leaked a VM.
-	Provisioning       bool     `json:"provisioning,omitempty"`
-	Region             string   `json:"region,omitempty"` // cloud region the VM lives in
+	Provisioning bool   `json:"provisioning,omitempty"`
+	Region       string `json:"region,omitempty"` // cloud region the VM lives in
 	// Namespace, ReleaseName, ChartVersion and ImageRef describe a Kubernetes
 	// deployment (Provider == ProviderK8s); empty for every other provider.
 	// Destroy needs the first two to uninstall the release, and --release-only
 	// reads the last two back so it can re-release without regenerating or
 	// waiting on CI.
-	Namespace    string `json:"namespace,omitempty"`
-	ReleaseName  string `json:"release_name,omitempty"`
-	ChartVersion string `json:"chart_version,omitempty"`
-	ImageRef     string `json:"image_ref,omitempty"`
+	Namespace          string   `json:"namespace,omitempty"`
+	ReleaseName        string   `json:"release_name,omitempty"`
+	ChartVersion       string   `json:"chart_version,omitempty"`
+	ImageRef           string   `json:"image_ref,omitempty"`
 	Host               string   `json:"host"`
 	User               string   `json:"user"`
 	Port               int      `json:"port"`
@@ -55,8 +55,23 @@ type Deployment struct {
 	// INSIDE the workspace (where the Dockerfile lives) — recording that here
 	// instead once sent a retried deploy generating into its own app dir. The
 	// json key stays source_dir so existing records keep working.
-	WorkspaceDir   string    `json:"source_dir,omitempty"`
-	Domain         string    `json:"domain,omitempty"`     // set when deployed with --domain (HTTPS site)
+	WorkspaceDir string `json:"source_dir,omitempty"`
+	Domain       string `json:"domain,omitempty"` // set when deployed with --domain (HTTPS site)
+	// AuthDomain and GRPCDomain are the OTHER hostnames this deployment was given
+	// — --auth-domain (the JWT auth server) and --grpc-domain (the gRPC front
+	// door) — recorded for the same reason Domain is, and read back by the same
+	// code: applyDeploymentSelector adopts all three when the next run does not
+	// state them.
+	//
+	// Recording them is not bookkeeping. On the k8s path a host that this run
+	// cannot see is a host the values file does not enable, and the chart's own
+	// default is `ingress.enabled: false` — so a re-deploy that simply forgot the
+	// flag made `helm upgrade` DELETE a live Ingress and took the site offline.
+	// Domain was half-protected by being in the record; these two were not stored
+	// anywhere, so they were lost on EVERY re-deploy. On the VM path they name the
+	// extra Caddy sites (see BootstrapParams), which are dropped the same way.
+	AuthDomain     string    `json:"auth_domain,omitempty"`
+	GRPCDomain     string    `json:"grpc_domain,omitempty"`
 	APIURL         string    `json:"api_url,omitempty"`    // resolved front-door URL
 	PublicURL      string    `json:"public_url,omitempty"` // same as APIURL; explicit alias
 	DataManagerURL string    `json:"data_manager_url,omitempty"`

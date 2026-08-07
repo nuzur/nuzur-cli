@@ -1,6 +1,7 @@
 package app
 
 import (
+	"context"
 	"sort"
 	"strings"
 	"testing"
@@ -305,6 +306,158 @@ func TestK8sAuthValuesOmittedWithoutAuthDomain(t *testing.T) {
 	}
 }
 
+// ── the ingress a re-deploy used to delete ───────────────────────────────────
+
+// ingressCluster answers the one question the release pre-flight asks — which
+// hostnames the release's Ingresses currently serve — and panics on anything
+// else. The guard runs before the chart is copied or helm is invoked, and a
+// guard that touched the cluster for any other reason would be doing work a
+// refusal is supposed to make free.
+type ingressCluster struct {
+	hosts    string
+	captures []string
+}
+
+func (c *ingressCluster) Ping(ctx context.Context) error { return nil }
+func (c *ingressCluster) SetSudo(bool)                   {}
+func (c *ingressCluster) RunCommand(ctx context.Context, cmd string) error {
+	panic("guard ran a command: " + cmd)
+}
+func (c *ingressCluster) RunScript(ctx context.Context, l, s string) error {
+	panic("guard ran a script: " + l)
+}
+func (c *ingressCluster) CopyDir(ctx context.Context, from, to string) error {
+	panic("guard copied to " + to)
+}
+
+func (c *ingressCluster) Capture(ctx context.Context, cmd string) (string, error) {
+	c.captures = append(c.captures, cmd)
+	if strings.Contains(cmd, "get ingress") {
+		return c.hosts, nil
+	}
+	panic("unscripted Capture: " + cmd)
+}
+
+// releaseServing is a k8s deploy about to release over a cluster whose release
+// already serves the given hosts.
+func releaseServing(hosts string) (*deployState, *ingressCluster) {
+	st := k8sState()
+	st.identifier, st.releaseName, st.namespace = "sfapi", "sfapi", "sfapi"
+	st.imageRef = "ghcr.io/mklfarha/sfapi:sha-abc"
+	st.tools = deploy.ClusterTools{Helm: "helm", Kubectl: "kubectl"}
+	cluster := &ingressCluster{hosts: hosts}
+	st.runner = cluster
+	return st, cluster
+}
+
+// TestK8sDeployCannotSilentlyRemoveALiveIngress is the bug this guard exists
+// for, and it fails against the behaviour that shipped.
+//
+// Deploy rewrites the release's values from scratch every run. writeIngressValues
+// writes NOTHING when it has no host, and the chart's own default is
+// `ingress.enabled: false` — so a re-deploy that simply omitted a hostname made
+// `helm upgrade` DELETE the Ingress. Nothing failed: the deploy printed success
+// while the site stopped answering. --auth-domain was the worst of it, being
+// recorded nowhere at all, so EVERY re-deploy dropped it.
+func TestK8sDeployCannotSilentlyRemoveALiveIngress(t *testing.T) {
+	t.Run("a forgotten hostname is refused, and says which flags", func(t *testing.T) {
+		st, _ := releaseServing("apiv2.dragium.com auth.dragium.com")
+		st.s.Domain = "apiv2.dragium.com" // --auth-domain forgotten
+
+		err := guardIngressRemoval(context.Background(), st)
+		if err == nil {
+			t.Fatal("a deploy that would delete the live auth Ingress must not be allowed to run")
+		}
+		for _, want := range []string{"auth.dragium.com", "--auth-domain", "--domain", "--deployment"} {
+			if !strings.Contains(err.Error(), want) {
+				t.Errorf("error does not mention %q, so it does not say how to fix it:\n%v", want, err)
+			}
+		}
+	})
+
+	t.Run("forgetting every hostname is refused too", func(t *testing.T) {
+		st, _ := releaseServing("apiv2.dragium.com")
+		if err := guardIngressRemoval(context.Background(), st); err == nil {
+			t.Fatal("a deploy with no hostname at all against a release that has one must be refused")
+		}
+	})
+
+	t.Run("restating them releases normally", func(t *testing.T) {
+		st, _ := releaseServing("apiv2.dragium.com auth.dragium.com")
+		st.s.Domain, st.s.AuthDomain = "apiv2.dragium.com", "auth.dragium.com"
+		if err := guardIngressRemoval(context.Background(), st); err != nil {
+			t.Fatalf("a deploy that keeps every host must not be blocked: %v", err)
+		}
+	})
+
+	t.Run("a rename is not a removal", func(t *testing.T) {
+		// Moving a hostname is a legitimate deploy, and a guard that compared host
+		// SETS rather than counts would refuse it — turning a safety net into a
+		// wall. One in, one out.
+		st, _ := releaseServing("apiv2.dragium.com")
+		st.s.Domain = "api3.dragium.com"
+		if err := guardIngressRemoval(context.Background(), st); err != nil {
+			t.Fatalf("renaming the only host must still be possible: %v", err)
+		}
+	})
+
+	t.Run("a first deploy has nothing to protect", func(t *testing.T) {
+		st, _ := releaseServing("")
+		if err := guardIngressRemoval(context.Background(), st); err != nil {
+			t.Fatalf("a release with no Ingress cannot lose one: %v", err)
+		}
+		// Nor can adding one be refused.
+		st.s.Domain = "apiv2.dragium.com"
+		if err := guardIngressRemoval(context.Background(), st); err != nil {
+			t.Fatalf("adding a host must never be refused: %v", err)
+		}
+	})
+
+	t.Run("a cluster that cannot answer is not a refusal", func(t *testing.T) {
+		// IngressHosts is best-effort: an unreachable or ingress-less cluster
+		// returns nothing. Refusing on silence would block deploys over a kubectl
+		// hiccup, which is a worse failure than the one being prevented.
+		st, cluster := releaseServing("")
+		cluster.hosts = "   \n"
+		if err := guardIngressRemoval(context.Background(), st); err != nil {
+			t.Fatalf("an empty answer must read as 'no ingress', not as a block: %v", err)
+		}
+	})
+}
+
+// TestPlannedIngressHostsMatchTheValues keeps the guard honest about what the
+// values file actually does. The guard clears a release by counting hosts; if it
+// counted a host k8sValuesYAML never writes, it would wave through exactly the
+// removal it exists to stop.
+func TestPlannedIngressHostsMatchTheValues(t *testing.T) {
+	st := k8sState()
+	st.identifier = "sfapi"
+	st.imageRef = "ghcr.io/mklfarha/sfapi:sha-abc"
+	st.s.Domain = "apiv2.dragium.com"
+	st.s.AuthDomain = "auth.dragium.com"
+	st.s.GRPCDomain = "grpc.dragium.com"
+
+	values := k8sValuesYAML(st)
+	planned := plannedIngressHosts(st)
+	if got := strings.Count(values, "host: "); got != len(planned) {
+		t.Errorf("the values enable %d ingress host(s) but the guard counts %d (%v):\n%s",
+			got, len(planned), planned, values)
+	}
+	for _, h := range planned {
+		if !strings.Contains(values, `host: "`+h+`"`) {
+			t.Errorf("guard counts %q, which the values never write:\n%s", h, values)
+		}
+	}
+
+	// And with nothing stated, the values write no ingress at all — which is
+	// precisely why the guard has to run.
+	bare := k8sState()
+	bare.identifier = "sfapi"
+	if len(plannedIngressHosts(bare)) != 0 || strings.Contains(k8sValuesYAML(bare), "ingress:") {
+		t.Error("an unstated hostname must still write no ingress; the guard, not the values, is what protects the live one")
+	}
+}
+
 // connState is a k8s state with a resolved team connection, as
 // stepResolveAndConfigure would leave it.
 func connState() *deployState {
@@ -568,5 +721,52 @@ func TestK8sCodegenRequirementsAreForced(t *testing.T) {
 	}, nil)
 	if len(quiet) != 0 {
 		t.Errorf("nothing was changed, so nothing should be reported; got %v", quiet)
+	}
+}
+
+// TestK8sValuesServeGRPCOnItsOwnHost covers the seam between the CLI and the
+// generated chart, which is invisible at both ends.
+//
+// nginx.ingress.kubernetes.io/backend-protocol is an annotation on the Ingress
+// OBJECT, so one Ingress speaks exactly one protocol to its backend and an app
+// serving both is served from two objects on two hostnames. The chart therefore
+// exposes two keys — `ingress` and `grpcIngress` — and helm SILENTLY IGNORES a
+// values key no template reads. Write the gRPC host under the wrong key, or not
+// at all, and the deploy still succeeds while reporting an address nothing
+// answers on.
+func TestK8sValuesServeGRPCOnItsOwnHost(t *testing.T) {
+	st := k8sState()
+	st.imageRef = "ghcr.io/acme/app:sha-abc"
+	st.s.Domain = "api.example.com"
+	st.s.GRPCDomain = "grpc.example.com"
+
+	values := k8sValuesYAML(st)
+
+	// Two separate blocks, each enabled, each with its own host.
+	for _, want := range []string{
+		"ingress:\n  enabled: true",
+		"grpcIngress:\n  enabled: true",
+		`host: "api.example.com"`,
+		`host: "grpc.example.com"`,
+	} {
+		if !strings.Contains(values, want) {
+			t.Errorf("values missing %q:\n%s", want, values)
+		}
+	}
+
+	// The gRPC host must not land in the HTTP block: it would be served over
+	// HTTP/1.1 to an HTTP/2 backend, which fails at request time, not at deploy.
+	httpBlock := values[strings.Index(values, "ingress:"):strings.Index(values, "grpcIngress:")]
+	if strings.Contains(httpBlock, "grpc.example.com") {
+		t.Errorf("the gRPC host leaked into the HTTP ingress block:\n%s", httpBlock)
+	}
+
+	// A project that serves no gRPC states no gRPC host, and then nothing is
+	// written — the chart's own default (disabled) is what applies.
+	bare := k8sState()
+	bare.imageRef = st.imageRef
+	bare.s.Domain = "api.example.com"
+	if strings.Contains(k8sValuesYAML(bare), "grpcIngress:") {
+		t.Errorf("no --grpc-domain must write no grpcIngress block:\n%s", k8sValuesYAML(bare))
 	}
 }

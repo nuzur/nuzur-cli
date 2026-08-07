@@ -78,6 +78,7 @@ type DeployConfig struct {
 	ImageRepo   *string `json:"image_repo,omitempty"`
 	ImageTag    *string `json:"image_tag,omitempty"`
 	AuthDomain  *string `json:"auth_domain,omitempty"`
+	GRPCDomain  *string `json:"grpc_domain,omitempty"`
 	ChartValues *string `json:"chart_values,omitempty"`
 
 	Codegen map[string]interface{} `json:"codegen,omitempty"`
@@ -195,13 +196,22 @@ type deploySettings struct {
 	// Namespace and Release address the Helm release. HelmCmd/KubectlCmd
 	// override the on-host tooling probe (see deploy.DetectClusterTools) for a
 	// box that runs microk8s but where this deploy targets another cluster.
-	Namespace   string
-	Release     string
-	HelmCmd     string
-	KubectlCmd  string
-	ImageRepo   string
-	ImageTag    string
+	Namespace  string
+	Release    string
+	HelmCmd    string
+	KubectlCmd string
+	ImageRepo  string
+	ImageTag   string
+	// AuthDomain and GRPCDomain are the extra hostnames this deployment serves,
+	// beside Domain. Listed under the k8s block because that is where they were
+	// introduced, but they are NOT k8s-only: the VM path renders each as its own
+	// Caddy site in the project's snippet (see deploy.BootstrapParams).
+	//
+	// Both are recorded (deploy.Deployment) and adopted back by a re-deploy that
+	// does not state them — an unstated host is a host the next release stops
+	// serving, which is a live front door going offline rather than a default.
 	AuthDomain  string
+	GRPCDomain  string
 	ChartValues string
 
 	// WriteConfig says how much of the host's credentials file deploy may write
@@ -303,6 +313,7 @@ func resolveDeploySettings(c *cli.Context) (*deploySettings, error) {
 		ImageRepo:   strSetting(c, "image-repo", cfg.ImageRepo, ""),
 		ImageTag:    strSetting(c, "image-tag", cfg.ImageTag, ""),
 		AuthDomain:  strSetting(c, "auth-domain", cfg.AuthDomain, ""),
+		GRPCDomain:  strSetting(c, "grpc-domain", cfg.GRPCDomain, ""),
 		ChartValues: strSetting(c, "chart-values", cfg.ChartValues, ""),
 
 		// Flag-only (fileVal nil), for the reason on the struct fields.

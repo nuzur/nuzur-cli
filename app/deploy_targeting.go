@@ -459,6 +459,12 @@ func applyDeploymentSelector(s *deploySettings, rec *deploy.Deployment, isSet fu
 	take("user", "user", rec.User, func() { s.User = rec.User })
 	take("db", "db", string(rec.DBEngine), func() { s.DB = string(rec.DBEngine) })
 	take("domain", "domain", rec.Domain, func() { s.Domain = rec.Domain })
+	// The other two hostnames, adopted exactly like the first. Forgetting one is
+	// not a cosmetic omission: on k8s an unstated host writes no ingress block,
+	// the chart defaults to `ingress.enabled: false`, and helm deletes the live
+	// Ingress. See Deployment.AuthDomain.
+	take("auth-domain", "auth-domain", rec.AuthDomain, func() { s.AuthDomain = rec.AuthDomain })
+	take("grpc-domain", "grpc-domain", rec.GRPCDomain, func() { s.GRPCDomain = rec.GRPCDomain })
 	take("source-dir", "source-dir", rec.WorkspaceDir, func() { s.SourceDir = rec.WorkspaceDir })
 	if !isSet("port") && rec.Port != 0 {
 		s.Port = rec.Port

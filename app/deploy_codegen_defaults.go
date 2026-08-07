@@ -261,3 +261,88 @@ func configBool(v interface{}) (bool, bool) {
 	}
 	return false, false
 }
+
+// codegenDomainFields pairs each deploy setting with the go-code-gen config
+// field that is its durable home.
+var codegenDomainFields = []struct {
+	field string
+	get   func(*deploySettings) string
+	set   func(*deploySettings, string)
+}{
+	{"domain", func(s *deploySettings) string { return s.Domain }, func(s *deploySettings, v string) { s.Domain = v }},
+	{"grpc_domain", func(s *deploySettings) string { return s.GRPCDomain }, func(s *deploySettings, v string) { s.GRPCDomain = v }},
+	{"auth_domain", func(s *deploySettings) string { return s.AuthDomain }, func(s *deploySettings, v string) { s.AuthDomain = v }},
+}
+
+// resolveCodegenDomains carries the three hostnames between this deploy and the
+// project's saved generator config, in BOTH directions.
+//
+// Reading: a hostname nothing else supplied is taken from the saved config. That
+// is the point of putting domains there — they stop living only in a flag and a
+// local deployment record, and survive a new machine.
+//
+// Writing: a hostname this deploy resolved is written back, so the config becomes
+// the durable home rather than a stale copy, and so the values.yaml the generator
+// commits carries the REAL host instead of a placeholder. Anything reaching here
+// has already been through flag / --deploy-config / deployment-record resolution,
+// so the config is consulted last and overridden by all three.
+//
+// An empty hostname is never written. Writing one would clear a domain the config
+// already holds — the same silent removal guardIngressRemoval exists to stop, just
+// one layer earlier and with no cluster to notice it. Removing a hostname is done
+// by editing the project config, not by omitting a flag.
+//
+// Returns the "field=value" pairs it adopted FROM the config, for the deploy to
+// report; values written back are not news, since the user just supplied them.
+func resolveCodegenDomains(s *deploySettings, provided, lastConfig map[string]interface{}) []string {
+	if s == nil || provided == nil {
+		return nil
+	}
+	var adopted []string
+	for _, d := range codegenDomainFields {
+		host := strings.TrimSpace(d.get(s))
+		if host == "" {
+			if saved := strings.TrimSpace(stringValue(lastConfig, d.field, "")); saved != "" {
+				d.set(s, saved)
+				adopted = append(adopted, d.field+"="+saved)
+			}
+			continue
+		}
+		provided[d.field] = host
+	}
+	return adopted
+}
+
+// checkDistinctDomains refuses two hostnames that are the same.
+//
+// Each of the three renders its OWN Ingress object, and ingress-nginx MERGES
+// Ingresses that share a host. Which object's annotations survive the merge then
+// depends on creation age, so the same config produces different routing
+// depending on install order — and the failure is silent: helm installs, both
+// objects exist, and gRPC either works or does not depending on which one was
+// created first.
+//
+// It is reachable in one step now that domains are saved: pointing --grpc-domain
+// at the host already saved as `domain` leaves both set, which is exactly what
+// moving an app from an HTTP front door to a gRPC one looks like. Clearing the
+// old one is a config edit, so this says which field to clear rather than
+// guessing which the user meant.
+func checkDistinctDomains(s *deploySettings) error {
+	if s == nil {
+		return nil
+	}
+	seen := map[string]string{}
+	for _, d := range codegenDomainFields {
+		host := strings.ToLower(strings.TrimSpace(d.get(s)))
+		if host == "" {
+			continue
+		}
+		if first, dup := seen[host]; dup {
+			return fmt.Errorf(
+				"%s and %s are both %s, and each renders its own Ingress — ingress-nginx merges Ingresses sharing a host, so which annotations apply would depend on which object is older. Give them different hostnames, or clear the one you no longer serve in the project's go-code-gen config (a deploy never clears a saved hostname, so omitting the flag will not do it)",
+				first, d.field, host)
+		}
+		seen[host] = d.field
+	}
+	return nil
+}

@@ -110,6 +110,145 @@ func TestRenderBootstrap_DomainAndNoGRPC(t *testing.T) {
 	}
 }
 
+// ── the optional extra Caddy sites ───────────────────────────────────────────
+
+// caddySnippet returns the shell that writes this project's Caddy snippet: from
+// the first `cat` that opens it through the heredoc terminator of that first
+// block. That block is the site every existing deployment is served by, and it
+// is what must not move.
+func caddySnippet(t *testing.T, script, identifier string) string {
+	t.Helper()
+	open := "cat > /etc/caddy/conf.d/" + identifier + ".caddy <<CADDY\n"
+	start := strings.Index(script, open)
+	if start < 0 {
+		t.Fatalf("no Caddy snippet for %q in the rendered script", identifier)
+	}
+	end := strings.Index(script[start+len(open):], "\nCADDY\n")
+	if end < 0 {
+		t.Fatalf("the Caddy snippet for %q is never terminated", identifier)
+	}
+	return script[start : start+len(open)+end+len("\nCADDY\n")]
+}
+
+// TestRenderBootstrapExtraCaddySites covers the two OPTIONAL hostnames a VM can
+// serve alongside the one --domain names.
+//
+// The existing arrangement is the thing being protected, not the thing being
+// replaced: one site block routing gRPC and HTTP apart by Content-Type, which is
+// what every deployed box runs and what ingress-nginx cannot do. The extra
+// blocks are appended to the same snippet, so each gets its own Let's Encrypt
+// cert, and everything stays on 80/443 — no firewall change.
+func TestRenderBootstrapExtraCaddySites(t *testing.T) {
+	base := BootstrapParams{
+		Identifier: "shop", DBEngine: DBMySQL, DBName: "shop", DBUser: "shop_app",
+		GRPCEnabled: true, RemoteSrcDir: "/opt/nuzur/shop/src", ProvisioningToken: "t",
+		Domain: "api.example.com",
+	}
+	render := func(t *testing.T, p BootstrapParams) string {
+		t.Helper()
+		script, err := RenderBootstrap(p)
+		if err != nil {
+			t.Fatalf("RenderBootstrap: %v", err)
+		}
+		return script
+	}
+
+	plain := render(t, base)
+	withHosts := base
+	withHosts.GRPCDomain = "grpc.example.com"
+	withHosts.AuthDomain = "auth.example.com"
+	extra := render(t, withHosts)
+
+	t.Run("the existing site block is byte-identical", func(t *testing.T) {
+		before, after := caddySnippet(t, plain, "shop"), caddySnippet(t, extra, "shop")
+		if before != after {
+			t.Errorf("the existing site block changed.\nwas:\n%s\nnow:\n%s", before, after)
+		}
+		// And so is everything on either side of the insertion point: the script
+		// up to the end of that block, and everything from the Caddy reload on
+		// (the url/ports readback, the ufw rules, the backup cron).
+		if idx := strings.Index(plain, before) + len(before); plain[:idx] != extra[:idx] {
+			t.Error("the script BEFORE the extra sites changed")
+		}
+		const tail = "systemctl enable --now caddy"
+		if plain[strings.Index(plain, tail):] != extra[strings.Index(extra, tail):] {
+			t.Error("the script AFTER the extra sites changed — the firewall and the readbacks must be untouched")
+		}
+	})
+
+	t.Run("nothing is appended when no host is set", func(t *testing.T) {
+		if strings.Contains(plain, "cat >> /etc/caddy/conf.d/") {
+			t.Error("a deploy with neither host must append nothing to the snippet")
+		}
+	})
+
+	t.Run("each host becomes its own site in the same snippet", func(t *testing.T) {
+		for _, want := range []string{
+			// Appended (>>), not written (>): the Content-Type site stays.
+			"cat >> /etc/caddy/conf.d/shop.caddy",
+			"grpc.example.com {",
+			"reverse_proxy h2c://127.0.0.1:${GRPC_PORT}",
+			"auth.example.com {",
+			"reverse_proxy 127.0.0.1:${HTTP_PORT}",
+		} {
+			if !strings.Contains(extra, want) {
+				t.Errorf("the rendered snippet is missing %q", want)
+			}
+		}
+		if got := strings.Count(extra, "cat >> /etc/caddy/conf.d/shop.caddy"); got != 2 {
+			t.Errorf("expected exactly two appended site blocks, got %d", got)
+		}
+	})
+
+	t.Run("each host is independent of the other", func(t *testing.T) {
+		onlyAuth := base
+		onlyAuth.AuthDomain = "auth.example.com"
+		script := render(t, onlyAuth)
+		if !strings.Contains(script, "auth.example.com {") {
+			t.Error("the auth site must render on its own")
+		}
+		if strings.Contains(script, "grpc.example.com") {
+			t.Error("an unset gRPC host must render nothing")
+		}
+
+		onlyGRPC := base
+		onlyGRPC.GRPCDomain = "grpc.example.com"
+		script = render(t, onlyGRPC)
+		if !strings.Contains(script, "grpc.example.com {") {
+			t.Error("the gRPC site must render on its own")
+		}
+		if strings.Contains(script, "auth.example.com") {
+			t.Error("an unset auth host must render nothing")
+		}
+	})
+
+	t.Run("a gRPC host on an app that serves no gRPC renders nothing", func(t *testing.T) {
+		// The site would proxy h2c to a port nothing listens on, and Caddy would
+		// still take out a certificate for it — a hostname that answers only with
+		// failures is worse than one that does not resolve.
+		noGRPC := base
+		noGRPC.GRPCEnabled = false
+		noGRPC.GRPCDomain = "grpc.example.com"
+		if script := render(t, noGRPC); strings.Contains(script, "grpc.example.com") {
+			t.Error("no gRPC server means no gRPC site")
+		}
+	})
+
+	t.Run("a database-only deploy has no Caddy at all", func(t *testing.T) {
+		dbOnly := BootstrapParams{
+			Identifier: "shop", DBEngine: DBMySQL, DBName: "shop", DBUser: "shop_app",
+			DBOnly: true, ProvisioningToken: "t",
+			GRPCEnabled: true, GRPCDomain: "grpc.example.com", AuthDomain: "auth.example.com",
+		}
+		script := render(t, dbOnly)
+		for _, unwanted := range []string{"grpc.example.com", "auth.example.com", "/etc/caddy/conf.d/"} {
+			if strings.Contains(script, unwanted) {
+				t.Errorf("--db-only installs no Caddy, so %q must not appear", unwanted)
+			}
+		}
+	})
+}
+
 func TestRenderBootstrap_DBOnly(t *testing.T) {
 	script, err := RenderBootstrap(BootstrapParams{
 		Identifier: "dbonly", DBEngine: DBMySQL, DBName: "dbonly", DBUser: "dbonly_app",

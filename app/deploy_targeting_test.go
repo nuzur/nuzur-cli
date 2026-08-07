@@ -331,6 +331,42 @@ func TestApplyDeploymentSelector(t *testing.T) {
 			t.Fatalf("adopted = %v, err = %v, settings = %+v", adopted, err, s)
 		}
 	})
+
+	// EVERY hostname is adopted, not just --domain.
+	//
+	// This is the half of the ingress-deletion bug that lived in the record.
+	// --auth-domain was stored nowhere at all, so a re-deploy could not restate
+	// it however it selected its target — and on k8s a hostname this run cannot
+	// see is one the values file stops enabling, which makes `helm upgrade`
+	// delete the live Ingress and take auth.example.com offline.
+	t.Run("every hostname the deployment serves is adopted", func(t *testing.T) {
+		hosts := rec
+		hosts.AuthDomain = "auth.example.com"
+		hosts.GRPCDomain = "grpc.example.com"
+
+		s := &deploySettings{Provider: "ssh", User: "root", Port: 22, DB: "mysql"}
+		adopted, err := applyDeploymentSelector(s, &hosts, none)
+		if err != nil {
+			t.Fatalf("unexpected error: %v", err)
+		}
+		if s.Domain != "app.example.com" || s.AuthDomain != "auth.example.com" || s.GRPCDomain != "grpc.example.com" {
+			t.Fatalf("hostnames not adopted: domain=%q auth=%q grpc=%q", s.Domain, s.AuthDomain, s.GRPCDomain)
+		}
+		for _, want := range []string{"auth-domain=auth.example.com", "grpc-domain=grpc.example.com"} {
+			if !strings.Contains(strings.Join(adopted, " "), want) {
+				t.Errorf("adopted = %v, missing %q — an adopted hostname has to be reported like any other targeting", adopted, want)
+			}
+		}
+
+		// And an explicit flag still wins, so a rename is possible.
+		s2 := &deploySettings{AuthDomain: "login.example.com"}
+		if _, err := applyDeploymentSelector(s2, &hosts, func(f string) bool { return f == "auth-domain" }); err != nil {
+			t.Fatalf("unexpected error: %v", err)
+		}
+		if s2.AuthDomain != "login.example.com" {
+			t.Errorf("auth-domain = %q, want the flag to override the record", s2.AuthDomain)
+		}
+	})
 }
 
 // destroy resolves the agent to revoke the same way: the record's own uuid if it has
