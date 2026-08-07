@@ -197,23 +197,42 @@ func deploySteps() []deployStep {
 		{
 			name:    "schema pre-flight",
 			effects: effects(),
-			run:     (*Implementation).stepPreflightGate,
+			// The gate exists to stop a deploy that would "create a database it
+			// could never populate" — it renders the schema to prove the data
+			// side is viable before anything is provisioned. With --skip-schema
+			// there is no database being created or populated, so it is
+			// guarding nothing, and a transient failure in the render service
+			// would fail a deploy it has no stake in. (Observed: a server-side
+			// "Failed to update execution" killed a run that was never going to
+			// touch the database.)
+			skip: func(st *deployState) bool { return st.s.SkipSchema },
+			run:  (*Implementation).stepPreflightGate,
 		},
 		{
 			name:    "generate app",
 			effects: effects(effLocalFS),
-			skip:    func(st *deployState) bool { return st.dbOnly },
-			run:     (*Implementation).stepGenerate,
+			skip: func(st *deployState) bool {
+				// --release-only re-releases the image and chart the last deploy
+				// recorded, so there is nothing to regenerate.
+				return st.dbOnly || (isK8s(st) && st.s.ReleaseOnly)
+			},
+			run: (*Implementation).stepGenerate,
 		},
 		{
 			name:    "check cli release",
 			effects: effects(),
-			run:     (*Implementation).stepCheckCLIRelease,
+			// The k8s path never installs the nuzur CLI anywhere: no agent runs
+			// on the box, so no release has to exist for it.
+			skip: isK8s,
+			run:  (*Implementation).stepCheckCLIRelease,
 		},
 		{
 			name:    "issue provisioning token",
 			effects: effects(effCloud),
-			run:     (*Implementation).stepIssueToken,
+			// The token exists to pair an on-box agent headlessly. No agent, no
+			// token — and minting one would leave a credential nothing consumes.
+			skip: isK8s,
+			run:  (*Implementation).stepIssueToken,
 		},
 		{
 			name:       "record pending",
@@ -222,7 +241,7 @@ func deploySteps() []deployStep {
 			// Managed providers only, and only when a VM is actually about to be
 			// created: BYO-SSH and a reused box have no VM that could go missing.
 			skip: func(st *deployState) bool {
-				return st.provider == deploy.ProviderSSH || st.reuseBox
+				return !st.provider.CreatesInfrastructure() || st.reuseBox
 			},
 			run: (*Implementation).stepPendingRecord,
 		},
@@ -247,7 +266,7 @@ func deploySteps() []deployStep {
 			name:    "provider firewall",
 			effects: effects(effProvider),
 			skip: func(st *deployState) bool {
-				return st.provider == deploy.ProviderSSH || st.prov.InstanceID == ""
+				return !st.provider.CreatesInfrastructure() || st.prov.InstanceID == ""
 			},
 			run: (*Implementation).stepFirewall,
 		},
@@ -256,37 +275,130 @@ func deploySteps() []deployStep {
 			effects: effects(),
 			run:     (*Implementation).stepSSHPing,
 		},
+		// ── kubernetes ────────────────────────────────────────────────
+		// Resolve the release's names and prove the cluster is reachable
+		// BEFORE the chart is stamped, committed or built. Free, and it is
+		// the check most likely to fail on a first run.
+		{
+			name:    "resolve cluster",
+			effects: effects(),
+			skip:    notK8s,
+			run:     (*Implementation).stepK8sResolve,
+		},
+		{
+			// Offers to write the host's credentials file from the resolved
+			// connection. Before anything is generated or built, so a run that
+			// still needs the file says so at the start.
+			name:    "write host config",
+			effects: effects(effBox),
+			skip:    notK8s,
+			run:     (*Implementation).stepK8sWriteConfig,
+		},
+		{
+			name:    "stamp chart version",
+			effects: effects(effLocalFS),
+			skip: func(st *deployState) bool {
+				// --release-only re-releases what the last deploy recorded, so
+				// there is no new chart version to mint.
+				return notK8s(st) || st.s.ReleaseOnly
+			},
+			run: (*Implementation).stepK8sStampChart,
+		},
+		{
+			name:    "commit and push",
+			effects: effects(effLocalFS),
+			skip: func(st *deployState) bool {
+				return notK8s(st) || st.s.NoCommit || st.s.ReleaseOnly
+			},
+			run: (*Implementation).stepK8sCommitPush,
+		},
+		{
+			name:    "wait for ci",
+			effects: effects(),
+			skip: func(st *deployState) bool {
+				return notK8s(st) || st.s.NoWait || st.s.ReleaseOnly
+			},
+			run: (*Implementation).stepK8sWaitCI,
+		},
+		{
+			name:    "resolve image",
+			effects: effects(),
+			skip:    notK8s,
+			run:     (*Implementation).stepK8sResolveImage,
+		},
+
 		{
 			name:    "copy source",
 			effects: effects(effBox),
-			skip:    func(st *deployState) bool { return st.dbOnly },
+			skip:    func(st *deployState) bool { return st.dbOnly || isK8s(st) },
 			run:     (*Implementation).stepCopySource,
 		},
 		{
 			name:    "bootstrap",
 			effects: effects(effBox, effCloud),
-			run:     (*Implementation).stepBootstrap,
+			// NEVER for k8s. Beyond installing a runtime the cluster does not
+			// want, the bootstrap ends with `ufw --force enable`, whose
+			// default-deny policy would sever the node's API server (16443),
+			// kubelet (10250), etcd and the whole NodePort range — and the
+			// teardown never turns it back off.
+			skip: isK8s,
+			run:  (*Implementation).stepBootstrap,
 		},
 		{
 			name:       "wait for agent",
 			effects:    effects(effCloud, effRecord),
 			checkpoint: deploy.StepAgentPaired,
-			run:        (*Implementation).stepWaitAgent,
+			// No agent on the k8s path: the app's database is external and
+			// reached directly, so there is nothing for an on-box agent to
+			// proxy. The schema push goes through a nuzur team connection
+			// instead (--connection).
+			skip: isK8s,
+			run:  (*Implementation).stepWaitAgent,
 		},
 		{
 			name:    "publish catalog",
 			effects: effects(effCloud),
+			skip:    isK8s,
 			run:     (*Implementation).stepPublishCatalog,
+		},
+		// Sits here rather than where `bootstrap` does — the two are the
+		// equivalent step for their provider — so the checkpoint it writes ranks
+		// above `wait for agent`'s. The two never both run, so the position
+		// between them is free; strictly increasing ranks are not.
+		{
+			name:       "helm release",
+			effects:    effects(effBox, effCloud, effRecord),
+			checkpoint: deploy.StepReleased,
+			skip:       notK8s,
+			run:        (*Implementation).stepK8sRelease,
 		},
 		{
 			name:    "apply schema",
 			effects: effects(effBox, effCloud),
-			run:     (*Implementation).stepApplySchema,
+			// Skipped when asked to leave the database alone, and — for k8s —
+			// when there is nothing to target. A team connection is that
+			// provider's only route to the database, since there is no agent to
+			// push through; without one the local mode would address an agent
+			// that was never deployed and fail with an error about a box, on a
+			// provider that has no box.
+			skip: func(st *deployState) bool {
+				return st.s.SkipSchema || (isK8s(st) && !st.fromConnection)
+			},
+			run: (*Implementation).stepApplySchema,
 		},
 		{
 			name:    "read back front door",
 			effects: effects(),
+			skip:    isK8s,
 			run:     (*Implementation).stepReadbackURL,
+		},
+		{
+			// The k8s equivalent: the address comes from the Service or Ingress,
+			// not from a file the bootstrap wrote on the box.
+			name:    "read back cluster address",
+			effects: effects(),
+			skip:    notK8s,
+			run:     (*Implementation).stepK8sReadbackURL,
 		},
 		{
 			name:       "finalize record",
@@ -388,6 +500,21 @@ type deployState struct {
 	grpcTarget     string
 	dataManagerURL string
 	outcome        deployOutcome
+
+	// ── kubernetes ────────────────────────────────────────────────────────
+	// Only populated for ProviderK8s. The release is addressed by
+	// namespace+name; the chart is generated locally (codegen emits it into the
+	// workspace) and copied to the box, where helm runs.
+	tools        deploy.ClusterTools
+	appDir       string // the generated app dir: <workspace>/<identifier>, and the git repo
+	chartDir     string // local chart dir inside the app dir
+	chartVersion string
+	releaseName  string
+	namespace    string
+	imageRepo    string
+	imageRef     string // the exact repository:tag or repository@digest deployed
+	gitRoot      string // repo the workspace lives in (may be an ancestor of it)
+	commitSHA    string
 
 	// ── the interrupt cell ────────────────────────────────────────────────
 	// Read from the signal-handling goroutine while the deploy runs, so every
@@ -632,13 +759,21 @@ func (i *Implementation) stepReport(ctx context.Context, st *deployState) error 
 	// thing on screen contradicted the one yellow line above it, and a failed
 	// migration read as a clean deploy. Both halves are worth saying; saying only the
 	// good half is what misleads.
-	if st.outcome.schema == schemaStateApplied {
+	// notAttempted counts as complete: --skip-schema (or a k8s deploy with no
+	// team connection) means the schema step was never meant to run, so calling
+	// that "the schema was NOT applied" reports an instruction as a failure.
+	if st.outcome.schema == schemaStateApplied || st.outcome.schema == schemaStateNotAttempted {
 		outputtools.PrintlnColored("\nDeployment complete.", outputtools.Green)
 	} else {
 		outputtools.PrintlnColoredErr("\nDeployment finished, but the schema was NOT applied — see the summary below.", outputtools.Red)
 	}
 	fmt.Fprintf(outputtools.Stdout, "  deployment id: %s\n", st.dep.ID)
-	fmt.Fprintf(outputtools.Stdout, "  agent uuid:    %s\n", st.agentUUID)
+	// Only when there is one. The k8s path deploys no agent, and a blank value
+	// beside a label reads as something that failed to resolve rather than
+	// something that does not exist here.
+	if strings.TrimSpace(st.agentUUID) != "" {
+		fmt.Fprintf(outputtools.Stdout, "  agent uuid:    %s\n", st.agentUUID)
+	}
 	fmt.Fprintf(outputtools.Stdout, "  connection:    %s (%s)\n", st.connName, st.connUUID)
 	if st.externalDB {
 		fmt.Fprintf(outputtools.Stdout, "  database:      external %s at %s:%s/%s (not self-hosted; kept on destroy)\n", st.dbEngine, st.extHost, st.extPort, st.dbName)
@@ -680,12 +815,24 @@ func (i *Implementation) stepReport(ctx context.Context, st *deployState) error 
 	} else {
 		// What's deployed: this project's own Caddy front door (HTTPS via a domain,
 		// otherwise plain HTTP on its auto-assigned public port).
-		if st.useHTTPS {
-			outputtools.PrintlnColored("\nWhat's deployed (HTTPS via Caddy):", outputtools.Green)
-		} else {
-			outputtools.PrintlnColored("\nWhat's deployed (HTTP via Caddy):", outputtools.Green)
+		// Name the front door this provider actually uses. There is no Caddy on
+		// the k8s path — traffic arrives through the cluster's ingress — and
+		// telling someone to look at a reverse proxy that is not there is the
+		// kind of detail that sends them debugging the wrong machine.
+		frontDoor := "Caddy"
+		if isK8s(st) {
+			frontDoor = "the cluster ingress"
 		}
-		if boolValue(st.configValues, "grpc_server_enabled") {
+		scheme := "HTTP"
+		if st.useHTTPS {
+			scheme = "HTTPS"
+		}
+		outputtools.PrintlnColored(fmt.Sprintf("\nWhat's deployed (%s via %s):", scheme, frontDoor), outputtools.Green)
+		// grpcTarget is derived from the box's own ports; the k8s path routes
+		// gRPC through the ingress instead, so it can be empty. Printing the
+		// line anyway produced `grpcurl -plaintext  list` — a command with no
+		// target that cannot work and does not say why.
+		if boolValue(st.configValues, "grpc_server_enabled") && strings.TrimSpace(st.grpcTarget) != "" {
 			if st.useHTTPS {
 				fmt.Fprintf(outputtools.Stdout, "  gRPC API:  %s (TLS)\n", st.grpcTarget)
 				fmt.Fprintf(outputtools.Stdout, "             grpcurl %s list\n", st.grpcTarget)
@@ -702,16 +849,34 @@ func (i *Implementation) stepReport(ctx context.Context, st *deployState) error 
 		if st.jwtAuth {
 			fmt.Fprintf(outputtools.Stdout, "  Auth:      jwt — data endpoints need a Bearer token.\n")
 			fmt.Fprintf(outputtools.Stdout, "             sign in: POST %s/signin {\"email\",\"password\"} (then /refresh, /validate)\n", st.publicURL)
-			fmt.Fprintf(outputtools.Stdout, "             a signing key was generated on the box; sign-in needs a user row in your user entity.\n")
+			where := "on the box"
+			if isK8s(st) {
+				where = "on the cluster host, in the credentials file"
+			}
+			fmt.Fprintf(outputtools.Stdout, "             a signing key was generated %s; sign-in needs a user row in your user entity.\n", where)
 		}
 		fmt.Fprintf(outputtools.Stdout, "  Info page: %s/\n", st.publicURL)
-		if !st.useHTTPS {
+		if !st.useHTTPS && !isK8s(st) {
 			outputtools.PrintlnColoredErr("  (IP-only deploy over plain HTTP — pass --domain <name> for automatic HTTPS with a trusted cert.)", outputtools.Yellow)
+		} else if !st.useHTTPS && strings.TrimSpace(st.s.Domain) != "" {
+			// The hostname is served, but nothing has issued a certificate for
+			// it yet. Telling a user who DID pass --domain to pass --domain is
+			// the wrong advice — on this path TLS comes from the cluster's
+			// ingress and cert-manager, not from the deploy.
+			outputtools.PrintlnColoredErr(
+				"  (Serving plain HTTP for now — add a TLS block to the ingress values, or a cert-manager\n"+
+					"   cluster-issuer annotation, for HTTPS. The hostname itself is already routed.)",
+				outputtools.Yellow)
 		}
 	}
 
-	outputtools.PrintlnColored("\nManage your data:", outputtools.Green)
-	fmt.Fprintf(outputtools.Stdout, "  %s\n", st.dataManagerURL)
+	// Only when there is somewhere to send them. The k8s path registers no agent
+	// connection, so this URL is empty — and a "Manage your data:" heading over
+	// a blank line reads as something that failed to load.
+	if strings.TrimSpace(st.dataManagerURL) != "" {
+		outputtools.PrintlnColored("\nManage your data:", outputtools.Green)
+		fmt.Fprintf(outputtools.Stdout, "  %s\n", st.dataManagerURL)
+	}
 	if st.outcome.catalogPublished {
 		fmt.Fprintf(outputtools.Stdout, "  The connection is listed under \"Via agent\" — nuzur reaches it through the agent on this box,\n")
 		fmt.Fprintf(outputtools.Stdout, "  which dials out to nuzur. The database stays private; nothing is exposed to the internet.\n")
@@ -740,8 +905,13 @@ func (i *Implementation) stepReport(ctx context.Context, st *deployState) error 
 			fmt.Fprintf(outputtools.Stdout, "  Add custom endpoints: edit app/grpc.go (override/extend gRPC) or app/rest.go\n")
 			fmt.Fprintf(outputtools.Stdout, "  (custom REST routes); add RPCs in app/idl/proto/custom.proto then run app/idl/proto/gen.sh.\n")
 		}
-		fmt.Fprintf(outputtools.Stdout, "  Tip: run `git init` here (or commit) to track your changes and see what codegen\n")
-		fmt.Fprintf(outputtools.Stdout, "  refreshes each deploy — secrets are already covered by the generated .gitignore.\n")
+		// Pointless on the k8s path, which just committed and pushed this very
+		// directory — telling someone to `git init` a repo you have already
+		// pushed from reads as the deploy not knowing what it did.
+		if !isK8s(st) {
+			fmt.Fprintf(outputtools.Stdout, "  Tip: run `git init` here (or commit) to track your changes and see what codegen\n")
+			fmt.Fprintf(outputtools.Stdout, "  refreshes each deploy — secrets are already covered by the generated .gitignore.\n")
+		}
 	}
 
 	// Optionally register a raw --db-dsn database as a team connection so the whole
@@ -878,7 +1048,7 @@ func (i *Implementation) stepProvision(ctx context.Context, st *deployState) err
 		}
 		st.resourceName = st.box.Record.ProviderResourceName
 	default:
-		if st.provider != deploy.ProviderSSH {
+		if st.provider.CreatesInfrastructure() {
 			outputtools.PrintlnColoredErr("Creating the server on "+string(st.provider)+" (this can take a minute)...", outputtools.Blue)
 		}
 		st.prov, err = st.provisioner.Provision(ctx, spec)
@@ -1201,8 +1371,8 @@ func (i *Implementation) stepResolveAndConfigure(ctx context.Context, st *deploy
 	if err != nil {
 		return err
 	}
-	if st.provider == deploy.ProviderSSH && strings.TrimSpace(st.s.Host) == "" {
-		return fmt.Errorf("--host is required for the ssh provider")
+	if st.provider.UsesGivenHost() && strings.TrimSpace(st.s.Host) == "" {
+		return fmt.Errorf("--host is required for the %s provider", st.provider)
 	}
 	st.dbOnly = st.s.DBOnly
 
@@ -1379,6 +1549,21 @@ func (i *Implementation) stepResolveAndConfigure(ctx context.Context, st *deploy
 			outputtools.PrintlnColoredErr(fmt.Sprintf(
 				"Naming the generated app from --identifier: %s (the project's saved go-code-gen config said identifier=%s).",
 				strings.Join(renamed, ", "), stringValue(st.targets.lastConfig, "identifier", "")), outputtools.Blue)
+		}
+		// The k8s path releases a Helm chart built by a generated workflow, so
+		// both must be generated whatever the project's saved config says.
+		// Applied BEFORE the defaults pass, which only fills missing fields and
+		// would leave an explicit `helm: false` in place.
+		if st.provider == deploy.ProviderK8s {
+			if forced := applyK8sCodegenRequirements(provided, st.targets.lastConfig); len(forced) > 0 {
+				var reasons []string
+				for _, f := range forced {
+					reasons = append(reasons, fmt.Sprintf("%s (%s)", f, k8sRequiredCodegen[f]))
+				}
+				outputtools.PrintlnColoredErr(fmt.Sprintf(
+					"Turning on generator options the k8s provider requires: %s.",
+					strings.Join(reasons, "; ")), outputtools.Blue)
+			}
 		}
 		if applied := applyCodegenDefaults(st.targets.configEntity, provided, st.targets.lastConfig, codegenIdentifier); len(applied) > 0 {
 			lead := "No saved go-code-gen config for this project (first deploy)"

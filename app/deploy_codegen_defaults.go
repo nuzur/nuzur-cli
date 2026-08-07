@@ -3,6 +3,7 @@ package app
 import (
 	"fmt"
 	"path"
+	"sort"
 	"strings"
 
 	extensiongen "github.com/nuzur/extension-sdk/idl/gen"
@@ -29,6 +30,44 @@ const (
 	defaultCodegenGRPCPort = "6009"
 	defaultCodegenHTTPPort = "8080"
 )
+
+// k8sRequiredCodegen are the generator options the k8s path cannot work
+// without, and the reason each is required.
+//
+// These are REQUIREMENTS, not defaults: applyCodegenDefaults only fills fields
+// that are both required by the generator and missing, and none of these is
+// either — `helm` and `github_actions` default to false and a project's saved
+// config very likely already says so. Left at false there is simply nothing to
+// release: no chart to install, or no image to install with it.
+var k8sRequiredCodegen = map[string]string{
+	"helm":           "the k8s deploy installs the chart the generator emits",
+	"github_actions": "the image the chart runs is built by the generated workflow",
+	"dockerfile":     "the workflow builds from the generated Dockerfile",
+}
+
+// applyK8sCodegenRequirements forces those options on, returning the ones it had
+// to change so the deploy can say it overrode the project's saved config.
+func applyK8sCodegenRequirements(provided, lastConfig map[string]interface{}) []string {
+	if provided == nil {
+		return nil
+	}
+	var forced []string
+	for field := range k8sRequiredCodegen {
+		if boolValue(provided, field) {
+			continue
+		}
+		// Report only a real change: silent when the value was already true in
+		// the saved config and simply absent from this run's explicit values.
+		if _, set := provided[field]; !set && boolValue(lastConfig, field) {
+			provided[field] = true
+			continue
+		}
+		provided[field] = true
+		forced = append(forced, field)
+	}
+	sort.Strings(forced)
+	return forced
+}
 
 // deployCodegenDefaults is the fallback value per go-code-gen config field,
 // keyed by field identifier. identifier drives the generated root folder and go

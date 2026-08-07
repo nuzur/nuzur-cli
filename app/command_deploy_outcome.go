@@ -35,6 +35,16 @@ const (
 	// failure to retry — retrying changes nothing — so it gets its own message, its
 	// own color and its own revision text.
 	schemaStateBlocked
+	// schemaStateNotAttempted: the step never ran, because this deploy was told
+	// not to touch the database (--skip-schema) or has no route to one (the k8s
+	// provider without a team connection).
+	//
+	// Distinct from every state above because nothing went wrong. Without it the
+	// zero value is failedDuringApply, so a deploy that deliberately skipped the
+	// schema closed by telling the user their migration may have half-applied
+	// and to go audit the database — about a database it never opened a
+	// connection to. It also made a successful deploy exit non-zero.
+	schemaStateNotAttempted
 	// schemaStateFailedBeforeSQL: the apply failed BEFORE any SQL was sent —
 	// resolving the sql-push extension, reaching the database, or computing the diff.
 	//
@@ -57,6 +67,15 @@ const (
 // connection catalog went unnoticed until it surfaced as an unrelated UI error.
 type deployOutcome struct {
 	catalogPublished bool
+	// catalogNotApplicable marks a deploy with no connection catalog to publish
+	// at all — the k8s provider, which runs no agent, so there is nothing for
+	// one to proxy and nothing to register.
+	//
+	// Without it, "not published" and "there was never anything to publish" are
+	// the same false, and a working k8s deploy closed by telling the user their
+	// database would not appear in the data manager and to re-run to retry —
+	// retrying a step that does not exist on that path.
+	catalogNotApplicable bool
 	// schema is which of the four terminal states the schema step ended in. Not
 	// knowing (an apply that was never classified) reads as failedDuringApply — see
 	// schemaOutcomeState.
@@ -96,7 +115,7 @@ type deployOutcome struct {
 // point of failure.
 func (o deployOutcome) summary() string {
 	var parts []string
-	if !o.catalogPublished {
+	if !o.catalogPublished && !o.catalogNotApplicable {
 		parts = append(parts,
 			"The connection was NOT published to nuzur (see the error above), so this database will not appear "+
 				"in the data manager under \"Via agent\". The database and the agent are running on the box — "+
@@ -181,7 +200,10 @@ func (o deployOutcome) mismatchWarning() string {
 // the never-started one, where the database is intact but the migration still has
 // not happened.
 func (o deployOutcome) summaryColor() outputtools.OutputColor {
-	if o.schema != schemaStateApplied {
+	// notAttempted is not a problem: the deploy was told to leave the database
+	// alone, or had no route to one. Red here would paint a successful deploy as
+	// a failure over a step it was asked not to run.
+	if o.schema != schemaStateApplied && o.schema != schemaStateNotAttempted {
 		return outputtools.Red
 	}
 	return outputtools.Yellow
@@ -200,7 +222,7 @@ func plural(n int, noun string) string {
 // Empty when nothing was skipped, so a clean deploy still reports a clean revision.
 func (o deployOutcome) revisionMessage() string {
 	var parts []string
-	if !o.catalogPublished {
+	if !o.catalogPublished && !o.catalogNotApplicable {
 		parts = append(parts, "connection not published to nuzur")
 	}
 	switch o.schema {

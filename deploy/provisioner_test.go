@@ -67,6 +67,7 @@ func TestNewProvisioner(t *testing.T) {
 	}{
 		{ProviderSSH, "*deploy.SSHProvisioner", ""},
 		{"", "*deploy.SSHProvisioner", ""},
+		{ProviderK8s, "*deploy.K8sProvisioner", ""},
 		{ProviderDigitalOcean, "*deploy.DigitalOceanProvisioner", ""},
 		{ProviderHetzner, "*deploy.HetznerProvisioner", ""},
 		{ProviderLinode, "*deploy.LinodeProvisioner", ""},

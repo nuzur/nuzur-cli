@@ -10,6 +10,7 @@ import (
 func implementedProviders() []string {
 	return []string{
 		string(ProviderSSH),
+		string(ProviderK8s),
 		string(ProviderDigitalOcean),
 		string(ProviderHetzner),
 		string(ProviderLinode),
@@ -32,6 +33,8 @@ func NewProvisioner(provider Provider) (Provisioner, error) {
 	switch provider {
 	case ProviderSSH, "":
 		return NewSSHProvisioner(), nil
+	case ProviderK8s:
+		return NewK8sProvisioner(), nil
 	case ProviderDigitalOcean:
 		return NewDigitalOceanProvisioner(), nil
 	case ProviderHetzner:

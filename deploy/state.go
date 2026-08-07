@@ -30,6 +30,15 @@ type Deployment struct {
 	// with it set is a deploy that died in flight and may have leaked a VM.
 	Provisioning       bool     `json:"provisioning,omitempty"`
 	Region             string   `json:"region,omitempty"` // cloud region the VM lives in
+	// Namespace, ReleaseName, ChartVersion and ImageRef describe a Kubernetes
+	// deployment (Provider == ProviderK8s); empty for every other provider.
+	// Destroy needs the first two to uninstall the release, and --release-only
+	// reads the last two back so it can re-release without regenerating or
+	// waiting on CI.
+	Namespace    string `json:"namespace,omitempty"`
+	ReleaseName  string `json:"release_name,omitempty"`
+	ChartVersion string `json:"chart_version,omitempty"`
+	ImageRef     string `json:"image_ref,omitempty"`
 	Host               string   `json:"host"`
 	User               string   `json:"user"`
 	Port               int      `json:"port"`
@@ -114,6 +123,19 @@ const (
 	// nuzur. This is the checkpoint that makes "did the last run get far enough to
 	// be reused" a fact rather than a guess.
 	StepAgentPaired = "agent_paired"
+	// StepReleased: the Helm release is applied and its pods are up
+	// (ProviderK8s only). The record now names the release, the chart version
+	// and the exact image, which is what makes `--release-only` able to repeat a
+	// deploy without regenerating or rebuilding — and what stops the next run
+	// re-minting a chart version that has already been published.
+	//
+	// It is the k8s counterpart of StepAgentPaired — both mark "the workload
+	// this deploy exists to run is now running" — but it ranks ABOVE it rather
+	// than equal to it. The two are mutually exclusive (each provider skips the
+	// other's step), so no record ever carries both, and ranks have to be
+	// strictly increasing in pipeline order for "how far did the last run get"
+	// to be answerable by comparison alone.
+	StepReleased = "released"
 	// StepFinalized: the deploy completed its record — agent, front door, data
 	// manager link. A schema step may still have failed; that is reported
 	// separately and does not make the DEPLOYMENT unfinished.
@@ -127,7 +149,8 @@ var stepRanks = map[string]int{
 	StepInstanceCreated: 2,
 	StepBoxRecorded:     3,
 	StepAgentPaired:     4,
-	StepFinalized:       5,
+	StepReleased:        5, // the k8s counterpart of StepAgentPaired; see its comment
+	StepFinalized:       6,
 }
 
 // StepRank turns a checkpoint into a comparable position, so callers can ask

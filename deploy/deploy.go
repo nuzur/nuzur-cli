@@ -18,6 +18,16 @@ const (
 	// ProviderSSH is bring-your-own-server: the user supplies an existing host.
 	// It doubles as the universal fallback for any Linux box.
 	ProviderSSH Provider = "ssh"
+	// ProviderK8s deploys into an existing Kubernetes cluster as a Helm release,
+	// rather than installing a runtime on the box. It still reaches the cluster
+	// over SSH — helm and kubectl run ON the host (microk8s ships its own), so
+	// nothing needs a kubeconfig locally and the API server is never exposed.
+	//
+	// It shares almost nothing with the VM path beyond that transport: no Docker,
+	// no systemd unit, no Caddy, no on-box database, no agent, and emphatically
+	// no ufw (see the bootstrap's firewall section — enabling a default-deny
+	// policy on a cluster node cuts the API server, kubelet and every NodePort).
+	ProviderK8s Provider = "k8s"
 	// Managed providers create the VM for the user by shelling out to the
 	// provider's own (already-authenticated) CLI.
 	ProviderDigitalOcean Provider = "digitalocean"
@@ -29,6 +39,31 @@ const (
 	ProviderLinode       Provider = "linode"
 	ProviderScaleway     Provider = "scaleway"
 )
+
+// CreatesInfrastructure reports whether this provider creates provider-side
+// infrastructure — a VM that nuzur must name and record before creating it,
+// firewall afterwards, find again if a run is interrupted, and delete on
+// destroy.
+//
+// It is false for the providers where the user supplies the machine: BYO-SSH and
+// k8s (and the empty value, which defaults to BYO-SSH). Those share a long list
+// of consequences — no pending record, no provider firewall, no "Creating the
+// server…", no VM to delete, no managed-box reuse — and every one of them used
+// to be spelled out as `!= ProviderSSH` at the point of use. Adding a second
+// such provider meant finding all nine and getting each one right; a single
+// predicate means a third one only has to be named here.
+func (p Provider) CreatesInfrastructure() bool {
+	switch p {
+	case ProviderSSH, ProviderK8s, "":
+		return false
+	}
+	return true
+}
+
+// UsesGivenHost reports whether the target machine comes from --host rather than
+// from provisioning. The inverse of CreatesInfrastructure, named for the
+// question the targeting code actually asks.
+func (p Provider) UsesGivenHost() bool { return !p.CreatesInfrastructure() }
 
 // DBEngine is the database engine. Both MySQL and Postgres are supported as a
 // self-hosted local tier (installed + provisioned on the box) and as an external

@@ -205,7 +205,11 @@ func revisionShouldFail(err error) bool {
 // whereas a failure means a statement reached the database and errored, which is also
 // the only path on which a migration can land half-applied.
 func exitCodeForOutcome(o deployOutcome) error {
-	if o.schema != schemaStateApplied {
+	// notAttempted exits 0. The step did not run because this deploy was told
+	// not to touch the database (--skip-schema) or had no route to one — an
+	// instruction followed, not a failure. Exiting non-zero there tells every
+	// script and CI job wrapping the CLI that a working deploy failed.
+	if o.schema != schemaStateApplied && o.schema != schemaStateNotAttempted {
 		return cli.NewExitError("", 1)
 	}
 	return nil

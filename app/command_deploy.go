@@ -29,8 +29,8 @@ func (i *Implementation) DeployCommand() cli.Command {
 		Name:  "deploy",
 		Usage: i.localize.Localize("deploy_desc", "Deploy a project to a server: self-host its database and pair it back to nuzur"),
 		Flags: []cli.Flag{
-			cli.StringFlag{Name: "provider", Value: "ssh", Usage: "Where to deploy: ssh (bring-your-own-server), or a managed provider that creates the VM for you — digitalocean | hetzner | linode | gcp | azure | vultr | scaleway (aws coming). Managed providers shell out to your already-authenticated provider CLI."},
-			cli.StringFlag{Name: "host", Usage: "Target server IP/hostname (ssh provider)"},
+			cli.StringFlag{Name: "provider", Value: "ssh", Usage: "Where to deploy: ssh (bring-your-own-server), k8s (an existing Kubernetes cluster, as a Helm release — reached over SSH, so no kubeconfig is needed locally), or a managed provider that creates the VM for you — digitalocean | hetzner | linode | gcp | azure | vultr | scaleway (aws coming). Managed providers shell out to your already-authenticated provider CLI."},
+			cli.StringFlag{Name: "host", Usage: "Target server IP/hostname (ssh and k8s providers — for k8s, the machine that can reach your cluster)"},
 			cli.StringFlag{Name: "region", Usage: "Managed providers: region/location to create the VM in — OPTIONAL, each provider has a default (nyc3 DigitalOcean; nbg1 Hetzner; us-east Linode; ewr Vultr; eastus Azure; us-central1-a GCP; fr-par-1 Scaleway). For GCP and Scaleway this takes a ZONE."},
 			cli.StringFlag{Name: "size", Usage: "Managed providers: instance size/type (default: a ~2GB instance per provider — the app image is built on the box, which OOMs on 1GB)"},
 			cli.StringFlag{Name: "image", Usage: "Managed providers: OS image (default: Ubuntu 24.04 LTS). Vultr addresses images by numeric id — see `vultr-cli os list`"},
@@ -72,6 +72,22 @@ func (i *Implementation) DeployCommand() cli.Command {
 			cli.StringFlag{Name: "cli-install-cmd", Usage: "Command to install the nuzur CLI on the box (must leave `nuzur` on PATH). By default the box downloads the GitHub release PINNED to this CLI's own version and verifies it against the release checksums — use this for boxes that can't reach GitHub, or to pin a different version on purpose. To install the LATEST published release instead: --cli-install-cmd 'curl -fsSL https://nuzur.com/install.sh | NUZUR_INSTALL_DIR=/usr/local/bin sh'"},
 			cli.BoolFlag{Name: "sudo", Usage: "Run the bootstrap via sudo (auto-enabled for non-root SSH users; the box needs passwordless sudo)"},
 			cli.StringFlag{Name: "web-url", Value: constants.WEB_PROD_URL, Usage: "nuzur web app base URL (for the data-manager deep link)"},
+
+			// ── k8s provider ──────────────────────────────────────────────
+			cli.StringFlag{Name: "namespace", Usage: "k8s: namespace for the Helm release (default: the identifier). Created if missing."},
+			cli.StringFlag{Name: "release", Usage: "k8s: Helm release name (default: the identifier)"},
+			cli.StringFlag{Name: "helm-cmd", Usage: "k8s: helm command to run ON THE HOST, overriding detection. Detection probes `microk8s helm3`, `microk8s helm`, then `helm`, preferring microk8s — use this when the box runs microk8s but you want a different cluster."},
+			cli.StringFlag{Name: "kubectl-cmd", Usage: "k8s: kubectl command to run ON THE HOST, overriding detection (see --helm-cmd)"},
+			cli.StringFlag{Name: "image-repo", Usage: "k8s: container image repository CI pushes to, e.g. ghcr.io/<owner>/<repo>. Defaults to what the generated workflow publishes."},
+			cli.StringFlag{Name: "image-tag", Usage: "k8s: deploy this exact tag instead of the tag built from the pushed commit"},
+			cli.BoolFlag{Name: "pin-digest", Usage: "k8s: resolve the image to an immutable sha256 digest and pin that, so the release can be rolled back exactly. Flag-only."},
+			cli.BoolFlag{Name: "skip-schema", Usage: "Do not apply the schema this run — deploy the app and leave the database untouched. Use when the schema is already applied, or when a plan shows only no-op churn you do not want re-run. Pairs with --connection, which deploy still uses to write the host's credentials file. Flag-only."},
+			cli.StringFlag{Name: "write-config", Usage: "k8s: whether deploy may create the host's credentials file (/etc/config/<identifier>/prod.yaml) from the --connection you passed — full | no-password | skip. Writing it means this CLI reads your database password and sends it to the host over SSH; by default it asks, and skips when non-interactive. An existing file is never overwritten. Flag-only."},
+			cli.StringFlag{Name: "auth-domain", Usage: "k8s: hostname for the JWT auth server, which runs as a second deployment of the same image exposing only its HTTP endpoints (e.g. auth.example.com, against --domain api.example.com). Only meaningful for a project with JWT auth."},
+			cli.StringFlag{Name: "chart-values", Usage: "k8s: path to an extra Helm values file, applied last (after the values deploy generates)"},
+			cli.BoolFlag{Name: "no-commit", Usage: "k8s: do not commit or push the generated code — use the repo as it stands. Flag-only."},
+			cli.BoolFlag{Name: "no-wait", Usage: "k8s: do not wait for the CI build; release whatever image is already published. Flag-only."},
+			cli.BoolFlag{Name: "release-only", Usage: "k8s: skip generation, commit and CI entirely and just run the Helm release, reusing the image and chart version from the last deploy. Flag-only."},
 		},
 		Subcommands: []cli.Command{i.DeployListCommand()},
 		Action: func(c *cli.Context) error {
@@ -495,7 +511,23 @@ func (i *Implementation) DestroyCommand() cli.Command {
 			// was ever bootstrapped: there is no service, container, database or agent
 			// on it to tear down, and its Host may not even be known. Skip straight to
 			// deleting the VM.
-			if !c.Bool("skip-server") && !dep.Provisioning {
+			// A k8s deployment installed no runtime on the box, so there is no
+			// service, container, database or agent for the teardown script to
+			// remove — only a Helm release, which comes off with helm.
+			//
+			// The namespace is deliberately left in place: this chart may be one
+			// of several things the user runs in it, and deleting it would take
+			// their other releases with it.
+			if !c.Bool("skip-server") && !dep.Provisioning && dep.Provider == deploy.ProviderK8s {
+				if err := i.uninstallK8sRelease(ctx, c, dep); err != nil {
+					outcome.Server = teardownFailed
+					outputtools.PrintlnColoredErr(fmt.Sprintf(
+						"warning: %v — cleaning up nuzur state anyway. Re-run `nuzur-cli destroy %s` once the cluster is reachable, or use --skip-server.",
+						err, id), outputtools.Yellow)
+				} else {
+					outcome.Server = teardownDone
+				}
+			} else if !c.Bool("skip-server") && !dep.Provisioning {
 				dbName := sanitizeDBName(dep.Identifier)
 				// Never drop an EXTERNAL (--db-dsn) database — it's the user's own
 				// managed/remote DB, not something we provisioned.
@@ -616,11 +648,11 @@ func (i *Implementation) DestroyCommand() cli.Command {
 			// on-box teardown would have. Gating the delete on it made the flag you'd
 			// reach for on a broken box the one that silently leaks it. --keep-vm is
 			// the way to preserve a VM.
-			if isLast && c.Bool("keep-vm") && dep.Provider != deploy.ProviderSSH && dep.Provider != "" {
+			if isLast && c.Bool("keep-vm") && dep.Provider.CreatesInfrastructure() {
 				outcome.VM = vmKept
 			}
 			if isLast && !c.Bool("keep-vm") &&
-				dep.Provider != deploy.ProviderSSH && dep.Provider != "" &&
+				dep.Provider.CreatesInfrastructure() &&
 				(dep.ProviderInstanceID != "" || dep.ProviderResourceName != "") {
 				if provisioner, perr := i.provisioner(dep.Provider); perr != nil {
 					outcome.VM = vmDeleteFailed
@@ -749,10 +781,12 @@ func findSourceRoot(root string) (string, error) {
 // managed provider provisioned its own VM, and those values are authoritative.
 // prior is matched on host+identifier, so it is the same box by construction.
 func carryForwardProvisioning(dep, prior *deploy.Deployment, provider deploy.Provider) {
-	if prior == nil || provider != deploy.ProviderSSH {
+	// Only the given-host-over-managed direction. A re-deploy naming a managed
+	// provider provisioned its own VM, and those values are authoritative.
+	if prior == nil || provider.CreatesInfrastructure() {
 		return
 	}
-	if prior.Provider == "" || prior.Provider == deploy.ProviderSSH {
+	if !prior.Provider.CreatesInfrastructure() {
 		return
 	}
 	if prior.ProviderInstanceID == "" && prior.ProviderResourceName == "" {

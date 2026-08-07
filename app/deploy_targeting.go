@@ -39,7 +39,19 @@ func pickPriorDeployment(deps []deploy.Deployment, host, identifier string) *dep
 		if d.Host != host || d.Identifier != identifier {
 			continue
 		}
-		usable := d.LocalAgentUUID != "" ||
+		// "Got far enough to continue from" is per-provider. The agent test below
+		// is the VM one: a box is worth adopting once it has an agent, or once
+		// the run reached the point of pairing.
+		//
+		// The k8s path never pairs an agent and never creates a box, so that test
+		// can never pass for a run that died before its release — and every such
+		// run minted a NEW record instead of writing back to the one for the same
+		// cluster and identifier. Five records accumulated for one app in a single
+		// afternoon, which also makes `--deployment` ambiguous. There is nothing
+		// stranded to be careful about here, so any record for the same target is
+		// a legitimate one to continue.
+		usable := d.Provider == deploy.ProviderK8s ||
+			d.LocalAgentUUID != "" ||
 			deploy.StepRank(d.LastCompletedStep) >= deploy.StepRank(deploy.StepAgentPaired)
 		if !usable {
 			continue
@@ -175,7 +187,7 @@ func pickManagedBox(deps []deploy.Deployment, projectUUID, identifier string) *d
 		if d.ProjectUUID != "" && projectUUID != "" && d.ProjectUUID != projectUUID {
 			continue
 		}
-		if d.Provider == "" || d.Provider == deploy.ProviderSSH {
+		if !d.Provider.CreatesInfrastructure() {
 			continue
 		}
 		if match == nil || d.CreatedAt.After(match.CreatedAt) {
@@ -218,7 +230,7 @@ func pickManagedBox(deps []deploy.Deployment, projectUUID, identifier string) *d
 // record with nothing recorded produces no sentence, so its message is what it
 // always was.
 func decideDeployBox(in boxDecisionInput) (boxDecision, error) {
-	if in.Provider == "" || in.Provider == deploy.ProviderSSH {
+	if in.Provider.UsesGivenHost() {
 		return boxDecision{Action: boxUseGivenHost, Host: in.HostFlag}, nil
 	}
 

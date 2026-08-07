@@ -67,6 +67,19 @@ type DeployConfig struct {
 	Sudo          *bool   `json:"sudo,omitempty"`
 	WebURL        *string `json:"web_url,omitempty"`
 
+	// Kubernetes (--provider k8s). These describe WHERE the release goes, so
+	// they belong in a committed config. The run-shaping flags (--no-commit,
+	// --no-wait, --release-only, --pin-digest) deliberately do not: they say
+	// what to skip THIS run.
+	Namespace   *string `json:"namespace,omitempty"`
+	Release     *string `json:"release,omitempty"`
+	HelmCmd     *string `json:"helm_cmd,omitempty"`
+	KubectlCmd  *string `json:"kubectl_cmd,omitempty"`
+	ImageRepo   *string `json:"image_repo,omitempty"`
+	ImageTag    *string `json:"image_tag,omitempty"`
+	AuthDomain  *string `json:"auth_domain,omitempty"`
+	ChartValues *string `json:"chart_values,omitempty"`
+
 	Codegen map[string]interface{} `json:"codegen,omitempty"`
 }
 
@@ -178,6 +191,52 @@ type deploySettings struct {
 	// where nobody would ever look for it again.
 	NewVM bool
 
+	// ── kubernetes (--provider k8s) ───────────────────────────────────────
+	// Namespace and Release address the Helm release. HelmCmd/KubectlCmd
+	// override the on-host tooling probe (see deploy.DetectClusterTools) for a
+	// box that runs microk8s but where this deploy targets another cluster.
+	Namespace   string
+	Release     string
+	HelmCmd     string
+	KubectlCmd  string
+	ImageRepo   string
+	ImageTag    string
+	AuthDomain  string
+	ChartValues string
+
+	// WriteConfig says how much of the host's credentials file deploy may write
+	// from the resolved team connection: "full", "no-password", "skip", or ""
+	// to ask (and skip when non-interactive).
+	//
+	// Flag-only, like AllowDestructive and for the same kind of reason: it
+	// decides whether a database password is read by this CLI and sent over the
+	// wire. That has to be a choice made for this run, not one inherited from a
+	// JSON file somebody committed months ago.
+	WriteConfig string
+
+	// SkipSchema leaves the database alone for this run.
+	//
+	// It exists because --connection does two jobs: it is the schema push's
+	// target AND the only source deploy can write the host's credentials file
+	// from. Without this flag, declining the first means giving up the second —
+	// which left "my schema is already applied, just write my config and
+	// deploy" with no way to say so.
+	//
+	// Flag-only: "do not touch my database this run" is a statement about this
+	// run, not a property of a project.
+	SkipSchema bool
+
+	// PinDigest resolves the image to an immutable sha256 digest instead of a
+	// tag, so a rollback is exact.
+	PinDigest bool
+
+	// NoCommit / NoWait / ReleaseOnly break the one-command loop apart:
+	// generate+commit+wait-for-CI+release. Flag-only — they describe what THIS
+	// run should skip, not a property of the project.
+	NoCommit    bool
+	NoWait      bool
+	ReleaseOnly bool
+
 	// Codegen is the go-code-gen config map: the deploy-config's `codegen` block
 	// as the base, overlaid by a --gen-config file when given.
 	Codegen map[string]interface{}
@@ -237,9 +296,24 @@ func resolveDeploySettings(c *cli.Context) (*deploySettings, error) {
 		Sudo:          boolSetting(c, "sudo", cfg.Sudo),
 		WebURL:        strSetting(c, "web-url", cfg.WebURL, constants.WEB_PROD_URL),
 
+		Namespace:   strSetting(c, "namespace", cfg.Namespace, ""),
+		Release:     strSetting(c, "release", cfg.Release, ""),
+		HelmCmd:     strSetting(c, "helm-cmd", cfg.HelmCmd, ""),
+		KubectlCmd:  strSetting(c, "kubectl-cmd", cfg.KubectlCmd, ""),
+		ImageRepo:   strSetting(c, "image-repo", cfg.ImageRepo, ""),
+		ImageTag:    strSetting(c, "image-tag", cfg.ImageTag, ""),
+		AuthDomain:  strSetting(c, "auth-domain", cfg.AuthDomain, ""),
+		ChartValues: strSetting(c, "chart-values", cfg.ChartValues, ""),
+
 		// Flag-only (fileVal nil), for the reason on the struct fields.
 		AllowDestructive: boolSetting(c, "allow-destructive", nil),
 		NewVM:            boolSetting(c, "new-vm", nil),
+		WriteConfig:      strSetting(c, "write-config", nil, ""),
+		SkipSchema:       boolSetting(c, "skip-schema", nil),
+		PinDigest:        boolSetting(c, "pin-digest", nil),
+		NoCommit:         boolSetting(c, "no-commit", nil),
+		NoWait:           boolSetting(c, "no-wait", nil),
+		ReleaseOnly:      boolSetting(c, "release-only", nil),
 	}
 
 	// Codegen: start from the deploy-config's nested `codegen` block, then overlay

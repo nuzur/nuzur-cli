@@ -42,6 +42,19 @@ var stepsThatLegitimatelyRunLateWithoutEffects = map[string]string{
 		"for a box that already existed runs in `decide box`, before anything is spent",
 	"read back front door": "reads what the bootstrap wrote, so it cannot precede it",
 	"report":               "terminal output and the exit code; it is the last step by definition",
+
+	// The k8s steps. `provision` is what this test measures lateness from, and
+	// for ProviderK8s it is a no-op: K8sProvisioner creates nothing and bills
+	// nothing, because the user already owns the cluster. Each of these still
+	// has a real reason it cannot move above it.
+	"resolve cluster": "needs the SSH runner, which does not exist until `ssh ping` — the same " +
+		"constraint that exempts `ssh ping` itself. It is deliberately the FIRST k8s step so " +
+		"an unreachable cluster is refused before anything is generated, committed or built",
+	"wait for ci": "waits on the build for a specific commit, which does not exist until " +
+		"`commit and push` has made one",
+	"resolve image": "names the image built for that commit, so it cannot precede the commit",
+	"read back cluster address": "reads the Service or Ingress the release created, so it " +
+		"cannot precede it (the k8s counterpart of `read back front door`)",
 }
 
 // A pure step after the money has started is a check in the wrong place.
@@ -100,6 +113,11 @@ var stepsDeliberatelyWithoutCheckpoint = map[string]string{
 	"provider firewall": "best-effort: the box's own ufw is the authoritative gate, and the rules " +
 		"are re-applied by the next deploy of the same box",
 	"copy source": "scratch under /tmp on the box, re-copied by every run that needs it",
+	"write host config": "writes /etc/config/<identifier>/prod.yaml via a temp file and mv, so an " +
+		"interrupt leaves either no file or a complete one — never a half-written config the app " +
+		"would read and fail on obscurely. The next run sees the file exists and leaves it alone, " +
+		"which is also what it does for a file the operator wrote by hand: this step never " +
+		"overwrites, so there is no prior state a checkpoint would protect",
 	"bootstrap": "idempotent by design and re-run in full by the next deploy; the box's existence " +
 		"is already recorded by `record box`, which is what destroy needs",
 	"publish catalog": "best-effort, and re-published as the UNION on the next deploy of any " +
@@ -205,6 +223,7 @@ var checkpointConstNames = map[string]string{
 	deploy.StepInstanceCreated: "StepInstanceCreated",
 	deploy.StepBoxRecorded:     "StepBoxRecorded",
 	deploy.StepAgentPaired:     "StepAgentPaired",
+	deploy.StepReleased:        "StepReleased",
 	deploy.StepFinalized:       "StepFinalized",
 }
 
