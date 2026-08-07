@@ -465,6 +465,19 @@ func applyDeploymentSelector(s *deploySettings, rec *deploy.Deployment, isSet fu
 	// Ingress. See Deployment.AuthDomain.
 	take("auth-domain", "auth-domain", rec.AuthDomain, func() { s.AuthDomain = rec.AuthDomain })
 	take("grpc-domain", "grpc-domain", rec.GRPCDomain, func() { s.GRPCDomain = rec.GRPCDomain })
+	// The image REPOSITORY, not the whole reference: the tag belongs to this
+	// deploy (it is derived from the commit being released), while the registry
+	// and repository are a property of the project that does not change between
+	// releases. Recorded as one string, so it is split back out here.
+	//
+	// Without this a re-deploy of a recorded deployment failed at `resolve image`
+	// with "cannot tell which image to deploy", even though the record held the
+	// exact image the last release ran — every other selector on the record is
+	// adopted, and this one being missed made the record look incomplete when it
+	// was not.
+	if repo := imageRepoFromRef(rec.ImageRef); repo != "" {
+		take("image-repo", "image-repo", repo, func() { s.ImageRepo = repo })
+	}
 	take("source-dir", "source-dir", rec.WorkspaceDir, func() { s.SourceDir = rec.WorkspaceDir })
 	if !isSet("port") && rec.Port != 0 {
 		s.Port = rec.Port

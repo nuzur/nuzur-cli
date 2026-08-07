@@ -812,7 +812,8 @@ func writeImageValues(b *strings.Builder, indent, imageRef string) {
 		fmt.Fprintf(b, "%s  tag: \"\"\n", indent)
 		return
 	}
-	repo, tag, _ := strings.Cut(imageRef, ":")
+	repo := imageRepoFromRef(imageRef)
+	tag := strings.TrimPrefix(strings.TrimPrefix(imageRef, repo), ":")
 	fmt.Fprintf(b, "%s  repository: %q\n", indent, repo)
 	fmt.Fprintf(b, "%s  tag: %q\n", indent, tag)
 	fmt.Fprintf(b, "%s  digest: \"\"\n", indent)
@@ -864,4 +865,25 @@ func shortSHA(sha string) string {
 		return sha[:7]
 	}
 	return sha
+}
+
+// imageRepoFromRef returns the repository part of a container image reference,
+// i.e. everything before the tag or digest.
+//
+// Splitting on the first ":" is wrong and quietly so: a registry may carry a
+// port, and "registry.local:5000/app" would yield the repository
+// "registry.local" and the tag "5000/app". The tag separator is the LAST colon,
+// and only when no "/" follows it — otherwise that colon is the port and the
+// reference has no tag at all.
+func imageRepoFromRef(ref string) string {
+	ref = strings.TrimSpace(ref)
+	// A digest wins: "repo@sha256:..." has a colon inside the digest.
+	if repo, _, ok := strings.Cut(ref, "@"); ok {
+		return repo
+	}
+	i := strings.LastIndex(ref, ":")
+	if i < 0 || strings.Contains(ref[i+1:], "/") {
+		return ref
+	}
+	return ref[:i]
 }

@@ -367,6 +367,53 @@ func TestApplyDeploymentSelector(t *testing.T) {
 			t.Errorf("auth-domain = %q, want the flag to override the record", s2.AuthDomain)
 		}
 	})
+
+	// The image repository is adopted too, from the recorded image REFERENCE.
+	//
+	// Every other selector on the record was adopted and this one was not, so a
+	// re-deploy of a recorded deployment died at `resolve image` with "cannot
+	// tell which image to deploy" — while the record held the exact image the
+	// last release ran. The record looked incomplete when it was not.
+	t.Run("the image repository is adopted from the recorded reference", func(t *testing.T) {
+		withImage := rec
+		withImage.ImageRef = "ghcr.io/mklfarha/aburrides/aburrides:sha-2bea65d"
+
+		s := &deploySettings{Provider: "ssh", User: "root", Port: 22, DB: "mysql"}
+		adopted, err := applyDeploymentSelector(s, &withImage, none)
+		if err != nil {
+			t.Fatalf("unexpected error: %v", err)
+		}
+		// The REPOSITORY only. The tag belongs to this deploy — it is derived
+		// from the commit being released — so carrying it forward would pin the
+		// previous release's image on every subsequent run.
+		if s.ImageRepo != "ghcr.io/mklfarha/aburrides/aburrides" {
+			t.Errorf("image-repo = %q, want the repository without the tag", s.ImageRepo)
+		}
+		if s.ImageTag != "" {
+			t.Errorf("image-tag = %q, want the tag NOT carried forward", s.ImageTag)
+		}
+		if !strings.Contains(strings.Join(adopted, " "), "image-repo=ghcr.io/mklfarha/aburrides/aburrides") {
+			t.Errorf("adopted = %v, an adopted repository has to be reported like any other targeting", adopted)
+		}
+
+		// An explicit flag still wins, so the image can be moved.
+		s2 := &deploySettings{ImageRepo: "ghcr.io/other/app"}
+		if _, err := applyDeploymentSelector(s2, &withImage, func(f string) bool { return f == "image-repo" }); err != nil {
+			t.Fatalf("unexpected error: %v", err)
+		}
+		if s2.ImageRepo != "ghcr.io/other/app" {
+			t.Errorf("image-repo = %q, want the flag to override the record", s2.ImageRepo)
+		}
+
+		// A record with no image yet (a deploy that never got that far) adopts
+		// nothing rather than an empty repository.
+		s3 := &deploySettings{Provider: "ssh", User: "root", Port: 22, DB: "mysql"}
+		if adopted, err := applyDeploymentSelector(s3, &rec, none); err != nil {
+			t.Fatal(err)
+		} else if strings.Contains(strings.Join(adopted, " "), "image-repo") {
+			t.Errorf("adopted = %v, want no image-repo from a record that has none", adopted)
+		}
+	})
 }
 
 // destroy resolves the agent to revoke the same way: the record's own uuid if it has

@@ -921,3 +921,40 @@ func TestValuesLayering(t *testing.T) {
 		}
 	})
 }
+
+// TestImageRepoFromRef: splitting a reference on the FIRST colon is wrong when
+// the registry carries a port, and wrong quietly — "registry.local:5000/app"
+// would yield the repository "registry.local".
+func TestImageRepoFromRef(t *testing.T) {
+	for _, tc := range []struct{ ref, want string }{
+		{"ghcr.io/acme/app:sha-abc123", "ghcr.io/acme/app"},
+		{"ghcr.io/acme/app@sha256:deadbeef", "ghcr.io/acme/app"},
+		{"ghcr.io/acme/app", "ghcr.io/acme/app"},
+		// A port and no tag: the colon is part of the host, not a separator.
+		{"registry.local:5000/acme/app", "registry.local:5000/acme/app"},
+		// A port AND a tag: only the last colon separates.
+		{"registry.local:5000/acme/app:v1.2.3", "registry.local:5000/acme/app"},
+		{"registry.local:5000/acme/app@sha256:deadbeef", "registry.local:5000/acme/app"},
+		{"  ghcr.io/acme/app:tag  ", "ghcr.io/acme/app"},
+		{"", ""},
+	} {
+		if got := imageRepoFromRef(tc.ref); got != tc.want {
+			t.Errorf("imageRepoFromRef(%q) = %q, want %q", tc.ref, got, tc.want)
+		}
+	}
+}
+
+// TestWriteImageValuesRoundTripsAPortedRegistry pins the other half: the values
+// file must name the same repository the parser found, or helm would pull from
+// a registry nobody configured.
+func TestWriteImageValuesRoundTripsAPortedRegistry(t *testing.T) {
+	var b strings.Builder
+	writeImageValues(&b, "", "registry.local:5000/acme/app:v1.2.3")
+	out := b.String()
+	if !strings.Contains(out, `repository: "registry.local:5000/acme/app"`) {
+		t.Errorf("repository lost the port:\n%s", out)
+	}
+	if !strings.Contains(out, `tag: "v1.2.3"`) {
+		t.Errorf("tag not extracted:\n%s", out)
+	}
+}
