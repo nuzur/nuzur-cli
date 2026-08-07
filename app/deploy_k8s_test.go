@@ -2,6 +2,9 @@ package app
 
 import (
 	"context"
+	"fmt"
+	"os"
+	"path/filepath"
 	"sort"
 	"strings"
 	"testing"
@@ -769,4 +772,152 @@ func TestK8sValuesServeGRPCOnItsOwnHost(t *testing.T) {
 	if strings.Contains(k8sValuesYAML(bare), "grpcIngress:") {
 		t.Errorf("no --grpc-domain must write no grpcIngress block:\n%s", k8sValuesYAML(bare))
 	}
+}
+
+// valuesRecorder is a host that lets a release run to completion and records
+// what was written where, so the values LAYERING can be asserted. The order of
+// -f files is the whole contract: helm applies them left to right and the last
+// writer of a key wins.
+type valuesRecorder struct {
+	existing map[string]bool   // paths `test -f` should report as present
+	written  map[string]string // path -> content, from writeFileCmd heredocs
+	upgrade  string            // the helm upgrade command line
+}
+
+func newValuesRecorder() *valuesRecorder {
+	return &valuesRecorder{existing: map[string]bool{}, written: map[string]string{}}
+}
+
+func (c *valuesRecorder) Ping(ctx context.Context) error                     { return nil }
+func (c *valuesRecorder) SetSudo(bool)                                       {}
+func (c *valuesRecorder) RunScript(ctx context.Context, l, s string) error   { return nil }
+func (c *valuesRecorder) CopyDir(ctx context.Context, from, to string) error { return nil }
+
+func (c *valuesRecorder) RunCommand(ctx context.Context, cmd string) error {
+	if strings.Contains(cmd, "helm") && strings.Contains(cmd, "upgrade") {
+		c.upgrade = cmd
+	}
+	// writeFileCmd: `mkdir -p <dir> && cat > <path> <<'NUZUR_EOF'\n<body>\nNUZUR_EOF`
+	if i := strings.Index(cmd, "cat > "); i >= 0 {
+		rest := cmd[i+len("cat > "):]
+		path, body, found := strings.Cut(rest, " <<'NUZUR_EOF'\n")
+		if found {
+			c.written[path] = strings.TrimSuffix(body, "\nNUZUR_EOF")
+			c.existing[path] = true
+		}
+	}
+	return nil
+}
+
+func (c *valuesRecorder) Capture(ctx context.Context, cmd string) (string, error) {
+	if strings.Contains(cmd, "get ingress") {
+		return "", nil // no live ingress, so the removal guard has nothing to protect
+	}
+	if strings.Contains(cmd, "test -f") {
+		for path := range c.existing {
+			if strings.Contains(cmd, path) {
+				return "found\n", nil
+			}
+		}
+		return "", fmt.Errorf("not found")
+	}
+	return "", nil
+}
+
+// valuesReleaseState is a k8s deploy ready to run stepK8sRelease.
+func valuesReleaseState(t *testing.T) (*deployState, *valuesRecorder) {
+	t.Helper()
+	st := k8sState()
+	st.identifier, st.releaseName, st.namespace = "myapp", "myapp", "myapp"
+	st.imageRef = "ghcr.io/acme/myapp:sha-abc"
+	st.chartDir = t.TempDir()
+	st.tools = deploy.ClusterTools{Helm: "helm", Kubectl: "kubectl"}
+	rec := newValuesRecorder()
+	st.runner = rec
+	return st, rec
+}
+
+// valueFileOrder pulls the --values arguments out of the helm upgrade command,
+// in order — that order IS the precedence helm applies.
+func valueFileOrder(cmd string) []string {
+	var out []string
+	fields := strings.Fields(cmd)
+	for i, f := range fields {
+		if f == "--values" && i+1 < len(fields) {
+			out = append(out, strings.Trim(fields[i+1], "'\""))
+		}
+	}
+	return out
+}
+
+// TestValuesLayering pins the precedence decision.
+//
+// values-custom.yaml is the one chart file regeneration preserves, which makes
+// it the one most likely to go stale — so it is applied BELOW the values this
+// deploy computes. An image tag left in it months ago must not override the
+// image this release resolved, or the deploy reports one image while the
+// cluster runs another.
+func TestValuesLayering(t *testing.T) {
+	t.Run("overlay applies below deploy's values", func(t *testing.T) {
+		st, rec := valuesReleaseState(t)
+		overlay := deploy.RemoteChartDir(st.releaseName) + "/values-custom.yaml"
+		rec.existing[overlay] = true
+
+		if err := (&Implementation{}).stepK8sRelease(context.Background(), st); err != nil {
+			t.Fatalf("release: %v", err)
+		}
+
+		order := valueFileOrder(rec.upgrade)
+		if len(order) != 2 {
+			t.Fatalf("want 2 values files, got %d: %v\n%s", len(order), order, rec.upgrade)
+		}
+		if !strings.HasSuffix(order[0], "values-custom.yaml") {
+			t.Errorf("the overlay must come FIRST so deploy's values win: %v", order)
+		}
+		if order[1] != deploy.RemoteValuesPath(st.releaseName) {
+			t.Errorf("deploy's values must come after the overlay: %v", order)
+		}
+	})
+
+	t.Run("absent overlay is skipped, not passed", func(t *testing.T) {
+		st, rec := valuesReleaseState(t)
+		// Every chart generated before values-custom.yaml existed lacks it, and
+		// helm treats a -f for a missing file as a hard error.
+		if err := (&Implementation{}).stepK8sRelease(context.Background(), st); err != nil {
+			t.Fatalf("release: %v", err)
+		}
+		order := valueFileOrder(rec.upgrade)
+		for _, f := range order {
+			if strings.Contains(f, "values-custom") {
+				t.Errorf("a missing overlay must not be passed to helm: %v", order)
+			}
+		}
+		if len(order) != 1 {
+			t.Errorf("want only deploy's values, got %v", order)
+		}
+	})
+
+	t.Run("--chart-values ships content and applies last", func(t *testing.T) {
+		st, rec := valuesReleaseState(t)
+		userFile := filepath.Join(t.TempDir(), "mine.yaml")
+		if err := os.WriteFile(userFile, []byte("replicaCount: 7\n"), 0644); err != nil {
+			t.Fatal(err)
+		}
+		st.s.ChartValues = userFile
+
+		if err := (&Implementation{}).stepK8sRelease(context.Background(), st); err != nil {
+			// The bug this covers: CopyDir tars a DIRECTORY, so pointing it at the
+			// single file the flag documents failed the deploy every time.
+			t.Fatalf("--chart-values must not fail the release: %v", err)
+		}
+
+		order := valueFileOrder(rec.upgrade)
+		last := order[len(order)-1]
+		if !strings.HasSuffix(last, "-user-values.yaml") {
+			t.Errorf("--chart-values must be applied LAST so it overrides: %v", order)
+		}
+		if got := rec.written[last]; got != "replicaCount: 7" {
+			t.Errorf("the file's CONTENT must reach the host, got %q", got)
+		}
+	})
 }

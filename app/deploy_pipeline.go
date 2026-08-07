@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"net/url"
 	"os"
+	"path/filepath"
 	"strings"
 	"sync"
 	"time"
@@ -1916,6 +1917,20 @@ func (i *Implementation) stepGenerate(ctx context.Context, st *deployState) erro
 	if err != nil {
 		return err
 	}
+
+	// Refuse before anything is written or saved, if the chart about to be
+	// regenerated was not generated in the first place. Placed here rather than
+	// beside applyK8sCodegenRequirements because it must cover a `helm: true`
+	// arriving from anywhere, not only the k8s provider's force-on — and because
+	// the workspace is only resolved now.
+	if boolValue(st.configValues, "helm") {
+		if appDir, err := findSourceRoot(st.workspaceDir); err == nil {
+			if err := checkHandMaintainedChart(filepath.Join(appDir, ".helm", st.identifier)); err != nil {
+				return err
+			}
+		}
+	}
+
 	outputtools.PrintlnColoredErr("Generating application code into "+st.workspaceDir+" ...", outputtools.Blue)
 	if _, err := st.targets.er.Run(extensionrun.RunParams{
 		Extension:          st.targets.extension,

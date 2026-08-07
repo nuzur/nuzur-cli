@@ -563,11 +563,43 @@ func (i *Implementation) stepK8sRelease(ctx context.Context, st *deployState) er
 		return err
 	}
 
-	valueFiles := []string{remoteValues}
+	// Layer order, lowest first:
+	//
+	//	<chart>/values.yaml        generated defaults (implicit, helm reads it)
+	//	<chart>/values-custom.yaml the USER's, never overwritten by regeneration
+	//	remoteValues               this deploy's image ref and resolved hostnames
+	//	--chart-values             an explicit per-run override
+	//
+	// The overlay sits BELOW deploy's values deliberately. It is the one chart
+	// file regeneration preserves, so it is also the one most likely to go stale:
+	// an image tag or hostname left in it months ago would otherwise silently
+	// override what this release resolved, and the deploy would report an image
+	// the cluster is not running. Everything deploy does NOT write — replicas,
+	// autoscaling, resources, TLS, annotations — is the user's, and helm merges
+	// maps key by key, so a tls block there combines with the hosts written here.
+	var valueFiles []string
+	remoteOverlay := remoteChart + "/values-custom.yaml"
+	if hasRemoteFile(ctx, st, remoteOverlay) {
+		valueFiles = append(valueFiles, remoteOverlay)
+		outputtools.PrintlnColoredErr(
+			"Applying values-custom.yaml from the chart (your overlay; deploy's image and hostnames still win).",
+			outputtools.Blue)
+	}
+	valueFiles = append(valueFiles, remoteValues)
+
 	if extra := strings.TrimSpace(st.s.ChartValues); extra != "" {
 		// Applied last so an operator can override anything deploy decided.
+		//
+		// Shipped as CONTENT, not copied: CopyDir tars a directory
+		// (`tar czf - -C <dir> .`), so pointing it at the single file this flag
+		// documents failed every time — tar cannot chdir into a regular file, and
+		// the remote side made a DIRECTORY where helm expected a values file.
+		body, err := os.ReadFile(extra)
+		if err != nil {
+			return fmt.Errorf("reading --chart-values %s: %w", extra, err)
+		}
 		remoteExtra := remoteChart + "-user-values.yaml"
-		if err := st.runner.CopyDir(ctx, extra, remoteExtra); err != nil {
+		if err := st.runner.RunCommand(ctx, writeFileCmd(remoteExtra, string(body))); err != nil {
 			return fmt.Errorf("copying --chart-values %s: %w", extra, err)
 		}
 		valueFiles = append(valueFiles, remoteExtra)
@@ -810,6 +842,17 @@ func writeIngressValues(b *strings.Builder, indent, host, key string) {
 
 // writeFileCmd writes content to a path on the host via a quoted heredoc, so
 // the remote shell performs no expansion on the body.
+// hasRemoteFile reports whether a path exists on the host as a regular file.
+//
+// Used to decide whether the chart carries a values-custom.yaml: every chart
+// generated before that file existed does not, and passing helm a `-f` for a
+// missing file is a hard error, so absence has to mean "skip" rather than
+// "fail".
+func hasRemoteFile(ctx context.Context, st *deployState, path string) bool {
+	_, err := st.runner.Capture(ctx, "test -f "+shellQuoteArg(path)+" && echo found")
+	return err == nil
+}
+
 func writeFileCmd(path, content string) string {
 	const delim = "NUZUR_EOF"
 	return fmt.Sprintf("mkdir -p %s && cat > %s <<'%s'\n%s\n%s",
