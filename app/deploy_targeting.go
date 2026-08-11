@@ -431,19 +431,6 @@ func applyDeploymentSelector(s *deploySettings, rec *deploy.Deployment, isSet fu
 	if rec == nil {
 		return nil, nil
 	}
-	// An external database (--db-dsn / --connection) is not recoverable from the
-	// record: it stores that the database was external, never the DSN or the
-	// connection uuid. Adopting the rest and silently self-hosting a NEW database on
-	// the box is the one outcome here that would destroy something.
-	if rec.ExternalDB && !isSet("db-dsn") && !isSet("connection") &&
-		strings.TrimSpace(s.DBDSN) == "" && strings.TrimSpace(s.Connection) == "" {
-		return nil, fmt.Errorf(
-			"deployment %s runs against an EXTERNAL database, and the record does not store its credentials "+
-				"(only that it is external) — re-run with the same --db-dsn or --connection you deployed it with. "+
-				"Without one, this deploy would self-host a new, empty database on the box instead",
-			rec.ID)
-	}
-
 	var adopted []string
 	take := func(flag, name, from string, assign func()) {
 		if isSet(flag) || strings.TrimSpace(from) == "" {
@@ -479,6 +466,40 @@ func applyDeploymentSelector(s *deploySettings, rec *deploy.Deployment, isSet fu
 		take("image-repo", "image-repo", repo, func() { s.ImageRepo = repo })
 	}
 	take("source-dir", "source-dir", rec.WorkspaceDir, func() { s.SourceDir = rec.WorkspaceDir })
+	// The project VERSION this deployment last shipped.
+	//
+	// Every other selector on the record is adopted, and this one was not, so a
+	// re-deploy of a fully recorded deployment refused to start at all: "a project
+	// version is required in non-interactive mode; pass --version <identifier|uuid>"
+	// — about a record that names the version on the line above the one being read.
+	//
+	// Adopting it is also the right default rather than merely a convenient one: a
+	// re-deploy means "ship this deployment again", and silently moving it to
+	// whatever version is newest is a bigger decision than the command expressed.
+	// --version still overrides, which is how you move it forward.
+	take("version", "version", rec.ProjectVersionUUID, func() { s.Version = rec.ProjectVersionUUID })
+	// The team connection this deployment runs against. A uuid, not a credential:
+	// it resolves server-side against the user's own teams, so adopting it is the
+	// same kind of act as adopting the host.
+	take("connection", "connection", rec.TeamConnUUID, func() { s.Connection = rec.TeamConnUUID })
+
+	// An external database that this run still cannot reach is the one refusal
+	// worth making: adopting everything else and silently self-hosting a NEW,
+	// empty database on the box is the outcome here that destroys something.
+	//
+	// Checked AFTER adoption, not before. The record now stores which team
+	// connection it was deployed against, so for most external deployments the
+	// line above has already answered the question — and refusing first turned a
+	// re-deploy that the record could fully describe into a dead end whose only
+	// instruction was "remember what you typed last time".
+	if rec.ExternalDB && strings.TrimSpace(s.DBDSN) == "" && strings.TrimSpace(s.Connection) == "" {
+		return nil, fmt.Errorf(
+			"deployment %s runs against an EXTERNAL database and neither this run nor its record says how to reach it "+
+				"(the record stores that the database is external, and never its credentials) — re-run with the "+
+				"--db-dsn or --connection you deployed it with. Without one, this deploy would self-host a new, "+
+				"empty database on the box instead",
+			rec.ID)
+	}
 	if !isSet("port") && rec.Port != 0 {
 		s.Port = rec.Port
 		adopted = append(adopted, fmt.Sprintf("port=%d", rec.Port))

@@ -37,6 +37,8 @@ OUT [32m
 OUT Your app source:[0m
 OUT   <TMP>/work/nuzur-sfapi/sfapi
 OUT   Re-run the same deploy to ship changes from here.
+OUT   Deploy config: .nuzur/last-deploy.json — commit it; `nuzur-cli deploy --deploy-config .nuzur/last-deploy.json` repeats this deploy.
+OUT   (Rather not have the server address in git? add .nuzur/ to .gitignore.)
 OUT   Tip: run `git init` here (or commit) to track your changes and see what codegen
 OUT   refreshes each deploy — secrets are already covered by the generated .gitignore.
 EXIT 0

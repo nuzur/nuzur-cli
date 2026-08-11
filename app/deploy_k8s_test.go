@@ -958,3 +958,62 @@ func TestWriteImageValuesRoundTripsAPortedRegistry(t *testing.T) {
 		t.Errorf("tag not extracted:\n%s", out)
 	}
 }
+
+// A record must not lose the workspace it already knows because THIS run had not
+// worked out where it is yet.
+//
+// stepRecordBox writes the record for every provider (stepPendingRecord is skipped
+// wherever the provider creates no infrastructure, which includes k8s). It used to
+// assign the workspace unconditionally — and on the k8s path an empty value is the
+// normal case, not an error: `generate app` is skipped by --release-only and the
+// cluster resolve runs later, so nothing has resolved a workspace by this point.
+// The write therefore ERASED the path the record already held.
+//
+// The next run then falls back to ./nuzur-<identifier> relative to the current
+// directory and dies with "locating the generated app under …", for a deployment
+// whose workspace was never in doubt. Seen for real on a --release-only re-deploy
+// of aburrides, which had to be given --source-dir by hand.
+func TestRecordBoxKeepsAWorkspaceThisRunHasNotResolved(t *testing.T) {
+	const known = "/Users/someone/src/nuzur-aburrides"
+
+	seed := func(t *testing.T) *deploy.Deployment {
+		t.Helper()
+		rec := &deploy.Deployment{
+			ID: "aburrides-73aa7738", Provider: deploy.ProviderK8s,
+			Host: "10.0.0.1", User: "root", Port: 22, Identifier: "aburrides",
+			WorkspaceDir: known,
+		}
+		if err := deploy.SaveDeployment(rec); err != nil {
+			t.Fatalf("seeding the record: %v", err)
+		}
+		t.Cleanup(func() { _ = deploy.DeleteDeployment(rec.ID) })
+		return rec
+	}
+
+	t.Run("an unresolved workspace leaves the recorded one alone", func(t *testing.T) {
+		rec := seed(t)
+		got, err := deploy.MutateDeployment(rec.ID, func(r *deploy.Deployment) {
+			recordBoxWorkspace(r, "") // what stepRecordBox does with nothing resolved
+		})
+		if err != nil {
+			t.Fatalf("mutate: %v", err)
+		}
+		if got.WorkspaceDir != known {
+			t.Errorf("workspace = %q, want the recorded %q — the record erased its own path", got.WorkspaceDir, known)
+		}
+	})
+
+	t.Run("a resolved workspace still updates it", func(t *testing.T) {
+		rec := seed(t)
+		const moved = "/Users/someone/src/elsewhere"
+		got, err := deploy.MutateDeployment(rec.ID, func(r *deploy.Deployment) {
+			recordBoxWorkspace(r, moved)
+		})
+		if err != nil {
+			t.Fatalf("mutate: %v", err)
+		}
+		if got.WorkspaceDir != moved {
+			t.Errorf("workspace = %q, want the newly resolved %q", got.WorkspaceDir, moved)
+		}
+	})
+}

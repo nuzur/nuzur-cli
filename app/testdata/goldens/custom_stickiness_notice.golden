@@ -38,6 +38,8 @@ OUT [32m
 OUT Your app source:[0m
 OUT   <TMP>/work/nuzur-sfapi/sfapi
 OUT   Re-run the same deploy to ship changes from here.
+OUT   Deploy config: .nuzur/last-deploy.json — commit it; `nuzur-cli deploy --deploy-config .nuzur/last-deploy.json` repeats this deploy.
+OUT   (Rather not have the server address in git? add .nuzur/ to .gitignore.)
 OUT   Add custom endpoints: edit app/grpc.go (override/extend gRPC) or app/rest.go
 OUT   (custom REST routes); add RPCs in app/idl/proto/custom.proto then run app/idl/proto/gen.sh.
 OUT   Tip: run `git init` here (or commit) to track your changes and see what codegen

@@ -2,6 +2,7 @@ package app
 
 import (
 	"errors"
+	"slices"
 	"strings"
 	"testing"
 	"time"
@@ -264,6 +265,7 @@ func TestApplyDeploymentSelector(t *testing.T) {
 		Host: "64.225.62.77", User: "root", Port: 22,
 		Identifier: "r6box", ProjectUUID: "0ecca0c4", DBEngine: deploy.DBMySQL,
 		WorkspaceDir: "/src/nuzur-r6box", Domain: "app.example.com",
+		ProjectVersionUUID: "1a93992a-248b-4ebb-8ca7-9fa4e91fe75a",
 	}
 	none := func(string) bool { return false }
 
@@ -920,4 +922,134 @@ func TestReusedBoxUnreachableError(t *testing.T) {
 			t.Errorf("unreachable message missing %q:\n%s", want, err.Error())
 		}
 	}
+}
+
+// The project version is on the record like everything else, and not adopting it
+// made a re-deploy of a fully recorded deployment refuse to start:
+//
+//	a project version is required in non-interactive mode; pass --version <identifier|uuid>
+//
+// about a record that names the version. Every other selector was adopted, so the
+// record looked incomplete when it was not — the same shape as the --image-repo
+// gap, hit on a real re-deploy of aburrides.
+func TestApplyDeploymentSelectorAdoptsTheProjectVersion(t *testing.T) {
+	rec := deploy.Deployment{
+		ID: "r6box-c3d31228", Provider: deploy.ProviderK8s,
+		Host: "64.225.62.77", User: "root", Port: 22,
+		Identifier: "r6box", ProjectUUID: "0ecca0c4", DBEngine: deploy.DBMySQL,
+		ProjectVersionUUID: "1a93992a-248b-4ebb-8ca7-9fa4e91fe75a",
+	}
+	none := func(string) bool { return false }
+
+	t.Run("adopted when the run does not state one", func(t *testing.T) {
+		s := &deploySettings{}
+		adopted, err := applyDeploymentSelector(s, &rec, none)
+		if err != nil {
+			t.Fatalf("selector: %v", err)
+		}
+		if s.Version != rec.ProjectVersionUUID {
+			t.Errorf("version = %q, want the recorded %q", s.Version, rec.ProjectVersionUUID)
+		}
+		if !slices.Contains(adopted, "version="+rec.ProjectVersionUUID) {
+			t.Errorf("adoption not reported: %v", adopted)
+		}
+	})
+
+	t.Run("--version still wins, which is how you move a deployment forward", func(t *testing.T) {
+		s := &deploySettings{Version: "v2"}
+		if _, err := applyDeploymentSelector(s, &rec, func(f string) bool { return f == "version" }); err != nil {
+			t.Fatalf("selector: %v", err)
+		}
+		if s.Version != "v2" {
+			t.Errorf("version = %q, want the flag's v2", s.Version)
+		}
+	})
+
+	t.Run("a record with no version adopts nothing", func(t *testing.T) {
+		bare := rec
+		bare.ProjectVersionUUID = ""
+		s := &deploySettings{}
+		adopted, err := applyDeploymentSelector(s, &bare, none)
+		if err != nil {
+			t.Fatalf("selector: %v", err)
+		}
+		if s.Version != "" {
+			t.Errorf("version = %q, want empty", s.Version)
+		}
+		for _, a := range adopted {
+			if strings.HasPrefix(a, "version=") {
+				t.Errorf("reported %q for a record with no version", a)
+			}
+		}
+	})
+}
+
+// An external-database deployment must be re-deployable from its record alone.
+//
+// The record deliberately stores no credentials, so it used to refuse outright:
+// "re-run with the same --db-dsn or --connection you deployed it with" — only
+// actionable if you remember. It now records the TEAM connection (a uuid, not a
+// secret, resolved server-side), which is enough, and the refusal is checked after
+// adoption so it only fires when nothing can reach the database.
+//
+// Note ConnUUID is NOT that connection: it is an identity the CLI mints for itself
+// and names nothing findable in nuzur, which is why it can never stand in here.
+func TestApplyDeploymentSelectorAdoptsTheTeamConnection(t *testing.T) {
+	base := deploy.Deployment{
+		ID: "aburrides-73aa7738", Provider: deploy.ProviderK8s,
+		Host: "10.0.0.1", User: "root", Port: 22, Identifier: "aburrides",
+		ProjectUUID: "3028c1ae", ProjectVersionUUID: "1a93992a",
+		DBEngine: deploy.DBMySQL, ExternalDB: true,
+		ConnUUID:     "fb187033-6f26-4e71-94aa-a43d2643c8d4",
+		TeamConnUUID: "98b8d037-cfbf-4bf4-b478-5fd16f22a6f5",
+	}
+	none := func(string) bool { return false }
+
+	t.Run("the recorded team connection is adopted, and the deploy proceeds", func(t *testing.T) {
+		s := &deploySettings{}
+		adopted, err := applyDeploymentSelector(s, &base, none)
+		if err != nil {
+			t.Fatalf("refused a deployment whose record says how to reach its database: %v", err)
+		}
+		if s.Connection != base.TeamConnUUID {
+			t.Errorf("connection = %q, want the recorded %q", s.Connection, base.TeamConnUUID)
+		}
+		if !slices.Contains(adopted, "connection="+base.TeamConnUUID) {
+			t.Errorf("adoption not reported: %v", adopted)
+		}
+	})
+
+	t.Run("--connection still wins", func(t *testing.T) {
+		s := &deploySettings{Connection: "other"}
+		if _, err := applyDeploymentSelector(s, &base, func(f string) bool { return f == "connection" }); err != nil {
+			t.Fatalf("selector: %v", err)
+		}
+		if s.Connection != "other" {
+			t.Errorf("connection = %q, want the flag's value", s.Connection)
+		}
+	})
+
+	t.Run("with nothing recorded it still refuses rather than self-hosting", func(t *testing.T) {
+		bare := base
+		bare.TeamConnUUID = ""
+		_, err := applyDeploymentSelector(&deploySettings{}, &bare, none)
+		if err == nil {
+			t.Fatal("accepted an external deployment with no way to reach its database")
+		}
+		if !strings.Contains(err.Error(), "self-host a new, empty database") {
+			t.Errorf("error does not name the destructive outcome: %v", err)
+		}
+	})
+
+	t.Run("the CLI's own minted uuid is never mistaken for the connection", func(t *testing.T) {
+		bare := base
+		bare.TeamConnUUID = ""
+		s := &deploySettings{Connection: "explicit"}
+		if _, err := applyDeploymentSelector(s, &bare, func(f string) bool { return f == "connection" }); err != nil {
+			t.Fatalf("selector: %v", err)
+		}
+		if s.Connection == bare.ConnUUID {
+			t.Error("adopted ConnUUID as the team connection; it names nothing in nuzur")
+		}
+	})
 }

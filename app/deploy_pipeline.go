@@ -408,6 +408,14 @@ func deploySteps() []deployStep {
 			run:        (*Implementation).stepFinalizeRecord,
 		},
 		{
+			// After the record is finalized, so the file only ever describes a
+			// deploy that actually shipped. Needs no checkpoint: effLocalFS is a
+			// workspace on this machine the user can see, and re-running rewrites it.
+			name:    "record deploy config",
+			effects: effects(effLocalFS),
+			run:     (*Implementation).stepWriteDeployLock,
+		},
+		{
 			name:    "finalize revision",
 			effects: effects(effCloud),
 			run:     (*Implementation).stepFinalizeRevision,
@@ -506,16 +514,19 @@ type deployState struct {
 	// Only populated for ProviderK8s. The release is addressed by
 	// namespace+name; the chart is generated locally (codegen emits it into the
 	// workspace) and copied to the box, where helm runs.
-	tools        deploy.ClusterTools
-	appDir       string // the generated app dir: <workspace>/<identifier>, and the git repo
-	chartDir     string // local chart dir inside the app dir
-	chartVersion string
-	releaseName  string
-	namespace    string
-	imageRepo    string
-	imageRef     string // the exact repository:tag or repository@digest deployed
-	gitRoot      string // repo the workspace lives in (may be an ancestor of it)
-	commitSHA    string
+	tools  deploy.ClusterTools
+	appDir string // the generated app dir: <workspace>/<identifier>, and the git repo
+	// deployLockPath is where stepWriteDeployLock put the lockfile, or "" if it
+	// wrote none; the report reads it back.
+	deployLockPath string
+	chartDir       string // local chart dir inside the app dir
+	chartVersion   string
+	releaseName    string
+	namespace      string
+	imageRepo      string
+	imageRef       string // the exact repository:tag or repository@digest deployed
+	gitRoot        string // repo the workspace lives in (may be an ancestor of it)
+	commitSHA      string
 
 	// ── the interrupt cell ────────────────────────────────────────────────
 	// Read from the signal-handling goroutine while the deploy runs, so every
@@ -709,6 +720,23 @@ func (i *Implementation) stepFinalizeRecord(ctx context.Context, st *deployState
 		rec.APIURL = st.publicURL
 		rec.PublicURL = st.publicURL
 		rec.DataManagerURL = st.dataManagerURL
+		// The workspace, recorded HERE because this is the first point on every
+		// path where it is actually known. stepRecordBox runs before the cluster
+		// resolve, and stepPendingRecord — the only other writer — is skipped for
+		// providers that create no infrastructure. So on the k8s path the workspace
+		// was never recorded at all, however many times the deploy succeeded, and
+		// every re-deploy had to be handed --source-dir by hand.
+		recordBoxWorkspace(rec, st.workspaceDir)
+		// The TEAM connection this deploy ran against (--connection), which is not
+		// the same thing as ConnUUID: that one is an identity the CLI mints for
+		// itself (uuid.NewV4, named <identifier>-db) and is meaningless to anyone
+		// looking for a connection in nuzur. Without this the record knows the
+		// database is external but not which connection reaches it, so the guard in
+		// applyDeploymentSelector can only tell the user to remember — which is
+		// exactly the dead end a re-deploy of aburrides hit.
+		if st.connFlag != "" {
+			rec.TeamConnUUID = st.connFlag
+		}
 		rec.LastCompletedStep = deploy.StepFinalized
 		st.noteCheckpoint(deploy.StepFinalized)
 		// This deployment is now in a good state, whatever the last run of it
@@ -925,6 +953,11 @@ func (i *Implementation) stepReport(ctx context.Context, st *deployState) error 
 		outputtools.PrintlnColored("\nYour app source:", outputtools.Green)
 		fmt.Fprintf(outputtools.Stdout, "  %s\n", appDir)
 		fmt.Fprintf(outputtools.Stdout, "  Re-run the same deploy to ship changes from here.\n")
+		// How to deploy this again from anywhere — a different machine, a teammate,
+		// CI — without knowing any of the flags this run was given.
+		if advice := deployLockAdvice(st.deployLockPath); advice != "" {
+			fmt.Fprintf(outputtools.Stdout, "%s\n", advice)
+		}
 		// Resolved, not the flag: the tip is about the code that was just generated.
 		if boolValue(st.configValues, "custom_enabled") {
 			fmt.Fprintf(outputtools.Stdout, "  Add custom endpoints: edit app/grpc.go (override/extend gRPC) or app/rest.go\n")
@@ -1093,6 +1126,28 @@ func (i *Implementation) stepProvision(ctx context.Context, st *deployState) err
 
 // stepRecordBox (6b) records the deployment as soon as the box exists, so an
 // interrupt from here on leaves something `nuzur-cli destroy` can clean up.
+// recordBoxWorkspace writes the resolved workspace onto the record, and only when
+// this run actually resolved one.
+//
+// An empty value here never means "this deployment has no workspace" — it means
+// this run had not worked out where it is yet, and on the k8s path that is the
+// NORMAL case rather than an error: stepPendingRecord is skipped wherever the
+// provider creates no infrastructure, `generate app` is skipped by --release-only,
+// and the cluster resolve runs after the box is recorded.
+//
+// Assigning unconditionally therefore ERASED the path the record already held. The
+// next run then falls back to ./nuzur-<identifier> relative to wherever it happens
+// to be invoked from and dies with "locating the generated app under …", for a
+// deployment whose workspace was never in doubt. Same hazard as the LocalAgentUUID
+// carry-forward, and the same fix: a field the run cannot speak to is a field the
+// run must not overwrite.
+func recordBoxWorkspace(rec *deploy.Deployment, resolved string) {
+	if resolved == "" {
+		return
+	}
+	rec.WorkspaceDir = resolved
+}
+
 func (i *Implementation) stepRecordBox(ctx context.Context, st *deployState) error {
 	var err error
 	// 6b. Record the deployment AS SOON AS THE BOX EXISTS — before the long
@@ -1135,7 +1190,7 @@ func (i *Implementation) stepRecordBox(ctx context.Context, st *deployState) err
 		rec.ConnUUID = st.connUUID
 		rec.DBEngine = st.dbEngine
 		rec.ExternalDB = st.externalDB
-		rec.WorkspaceDir = st.workspaceDir
+		recordBoxWorkspace(rec, st.workspaceDir)
 		rec.Domain = st.s.Domain
 		// The other two hostnames of this deployment, written in the same breath
 		// as the first. They are what the NEXT run adopts when it does not state

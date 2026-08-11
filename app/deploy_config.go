@@ -263,6 +263,17 @@ func resolveDeploySettings(c *cli.Context) (*deploySettings, error) {
 	if err != nil {
 		return nil, err
 	}
+	// A lockfile knows where its own workspace is, by sitting in it.
+	//
+	// source_dir is deliberately stripped from the committed file — an absolute
+	// path from whoever last deployed is wrong everywhere else. But without it a
+	// fresh clone falls back to ./nuzur-<identifier> relative to the current
+	// directory, which is not the workspace: the file lives in the APP dir, and
+	// the workspace is its parent. So the one machine-specific field the file
+	// cannot carry is recovered from where the file was found, which is correct on
+	// any machine. This is what lets a deploy be replayed with no other context
+	// than the repository.
+	inferWorkspaceFromLockfile(cfg, c.String("deploy-config"))
 
 	s := &deploySettings{
 		Provider:   strSetting(c, "provider", cfg.Provider, "ssh"),
@@ -510,6 +521,27 @@ func (s *deploySettings) toDeployConfig() *DeployConfig {
 		CLIInstallCmd: sp(s.CLIInstallCmd),
 		Sudo:          bp(s.Sudo),
 		WebURL:        sp(s.WebURL),
+
+		// The k8s half of the settings, which this used to omit entirely — nine
+		// fields that exist on DeployConfig and were never written to it.
+		//
+		// That made every snapshot of a k8s deploy unrunnable, and quietly: the
+		// config looked complete. Replaying one died at `resolve image` with "cannot
+		// tell which image to deploy" because image_repo was gone, and — the part
+		// that does damage rather than merely failing — it carried `domain` while
+		// dropping `auth_domain` and `grpc_domain`. A run that resolves fewer
+		// hostnames than the release serves writes no ingress block for the missing
+		// ones, the chart defaults to `ingress.enabled: false`, and helm DELETES the
+		// live Ingress. See Deployment.AuthDomain for the same hazard on the record.
+		Namespace:   sp(s.Namespace),
+		Release:     sp(s.Release),
+		HelmCmd:     sp(s.HelmCmd),
+		KubectlCmd:  sp(s.KubectlCmd),
+		ImageRepo:   sp(s.ImageRepo),
+		ImageTag:    sp(s.ImageTag),
+		AuthDomain:  sp(s.AuthDomain),
+		GRPCDomain:  sp(s.GRPCDomain),
+		ChartValues: sp(s.ChartValues),
 	}
 	if len(s.Codegen) > 0 {
 		cfg.Codegen = s.Codegen

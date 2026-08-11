@@ -35,20 +35,34 @@ type Deployment struct {
 	// Destroy needs the first two to uninstall the release, and --release-only
 	// reads the last two back so it can re-release without regenerating or
 	// waiting on CI.
-	Namespace          string   `json:"namespace,omitempty"`
-	ReleaseName        string   `json:"release_name,omitempty"`
-	ChartVersion       string   `json:"chart_version,omitempty"`
-	ImageRef           string   `json:"image_ref,omitempty"`
-	Host               string   `json:"host"`
-	User               string   `json:"user"`
-	Port               int      `json:"port"`
-	Identifier         string   `json:"identifier"`
-	ProjectUUID        string   `json:"project_uuid"`
-	ProjectVersionUUID string   `json:"project_version_uuid"`
-	LocalAgentUUID     string   `json:"local_agent_uuid"`
-	ConnUUID           string   `json:"conn_uuid,omitempty"`
-	DBEngine           DBEngine `json:"db_engine"`
-	ExternalDB         bool     `json:"external_db,omitempty"` // --db-dsn: an existing DB, not self-hosted (never dropped on destroy)
+	Namespace          string `json:"namespace,omitempty"`
+	ReleaseName        string `json:"release_name,omitempty"`
+	ChartVersion       string `json:"chart_version,omitempty"`
+	ImageRef           string `json:"image_ref,omitempty"`
+	Host               string `json:"host"`
+	User               string `json:"user"`
+	Port               int    `json:"port"`
+	Identifier         string `json:"identifier"`
+	ProjectUUID        string `json:"project_uuid"`
+	ProjectVersionUUID string `json:"project_version_uuid"`
+	LocalAgentUUID     string `json:"local_agent_uuid"`
+	ConnUUID           string `json:"conn_uuid,omitempty"`
+	// TeamConnUUID is the nuzur TEAM connection this deployment was deployed
+	// against (--connection), and it is NOT ConnUUID. That one is an identity the
+	// CLI mints for itself (uuid.NewV4, named <identifier>-db) to register the
+	// database with the agent; it names nothing a user can find in nuzur, which is
+	// why hunting for it in team settings turns up nothing.
+	//
+	// Recording this is what makes an external-database deployment re-deployable.
+	// The record deliberately never stores credentials, so ExternalDB used to leave
+	// the next run with a refusal and no way forward — "re-run with the same
+	// --db-dsn or --connection you deployed it with" — which is only actionable if
+	// you happen to remember. A team connection uuid is not a secret: it resolves
+	// server-side against the user's own teams, so storing it costs nothing and
+	// turns that dead end into an adoption.
+	TeamConnUUID string   `json:"team_conn_uuid,omitempty"`
+	DBEngine     DBEngine `json:"db_engine"`
+	ExternalDB   bool     `json:"external_db,omitempty"` // --db-dsn: an existing DB, not self-hosted (never dropped on destroy)
 	// WorkspaceDir is the persistent app-source WORKSPACE ROOT (e.g.
 	// ./nuzur-<identifier>), the directory resolveWorkspace reuses on a
 	// re-deploy. Distinct from Spec.SourceDir, which is the app directory
