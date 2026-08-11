@@ -38,6 +38,28 @@ brew install nuzur/tap/nuzur-cli
 Signed archives for every platform, and everything else, are at
 <https://nuzur.com/cli>.
 
+## Keep it current
+
+```bash
+nuzur-cli update           # upgrade in place
+nuzur-cli update --check   # just report whether a newer release exists
+```
+
+Worth doing before any deploy. Parts of the pipeline are resolved server-side at
+run time — the SQL generator that renders your DDL is fetched at its latest
+published version on every deploy — so an old binary quietly pairs old client
+behavior with a current server, and the things that live *in* the binary (newer
+flags, the `--plan` drift check, bug fixes) are simply absent rather than
+reported as missing. A deploy now prints a one-line notice when a newer release
+exists; the check is best-effort and never delays or fails the deploy.
+
+`update` will not overwrite a binary Homebrew or Scoop owns — it prints that
+manager's upgrade command instead, since replacing the file behind the manager's
+back leaves its metadata wrong and the next `brew upgrade` reverts you. Downloads
+are checksum-verified against the release's own manifest, exactly as `install.sh`
+does, and the binary is swapped atomically: a failed update leaves the old one in
+place.
+
 ## See what a deploy will do before it does it
 
 `nuzur-cli deploy` is declarative: it reconciles your database to the published
@@ -62,6 +84,58 @@ applies nothing at all, until you pass `--allow-destructive`.
 
 `--plan` also accepts a draft version, so you can check a reconciling fix before
 sending it for review. Deploy itself still requires an approved or published one.
+
+### `--plan` is also the drift check
+
+"Does the deployed database still match this published version?" is the same
+question, so there is no separate `schema diff` command — ask it with:
+
+```bash
+nuzur-cli deploy --plan --version <identifier-or-uuid> --connection <uuid>
+```
+
+Read the output as a drift report: an empty plan means no drift, `CREATE`/`ADD`
+means the database is behind the model, and `DROP` means the database holds
+something the model doesn't. Target it with `--deployment <id>`, `--connection
+<uuid>`, `--host`, or `--local-agent`/`--local-agent-connection` on a machine
+with no record of the box.
+
+Don't write your own drift checker that regenerates its "expected" schema from
+the live database — that compares live against a copy of live and can never
+detect a model-vs-database mismatch, which is the mismatch that matters.
+
+**On MySQL, expect noise.** nuzur cannot read a MySQL schema directly, so the
+"existing" side of the diff is reconstructed by introspecting the database and
+re-rendering it as DDL. Widths and types come back normalized, so a MySQL plan
+often carries `MODIFY`/`CHANGE COLUMN` statements that change nothing and
+reappear every time. The `CREATE`s and `DROP`s are real; treat a bare column
+redefinition as suspect.
+
+## Database-only deploys (`--db-only`)
+
+`--db-only` gives you a nuzur-managed database and no application: it installs
+the engine, pairs the agent, registers the connection and applies the schema, but
+generates no API and no app. Right when you already run your own service against
+the database and just want nuzur to own the schema.
+
+What that costs is easy to miss, because several guarantees people read as
+properties of *the model* are actually enforced by the **generated API layer**,
+which `--db-only` never deploys. Not deployed, therefore not enforced:
+
+- **`generated: true` timestamp population.** `created_at`/`updated_at` are
+  filled in by the generated server. With your own writer, `updated_at` holds
+  whatever that writer put there — for many people that means "loaded at", not
+  "modified at".
+- **The `version` optimistic-concurrency token.** Nothing increments it and
+  nothing rejects a stale write.
+- **Model-level validation** — `min_size`, `max_size`, `regex_validation`,
+  `min_value`, `max_value`. These are checks the generated code performs, as
+  distinct from the constraints that live in the DDL.
+
+The database still enforces everything in the schema itself: column types, NOT
+NULL, defaults, and unique/foreign-key/index constraints. A normal deploy (the
+same command without `--db-only`) reuses the database, agent, schema and data and
+adds the API.
 
 ## Connect a database on a server (headless)
 

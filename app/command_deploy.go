@@ -43,7 +43,7 @@ func (i *Implementation) DeployCommand() cli.Command {
 			cli.StringFlag{Name: "project, p", Usage: "Project name or UUID"},
 			cli.StringFlag{Name: "version", Usage: "Project version identifier or UUID (default: latest)"},
 			cli.StringFlag{Name: "identifier", Usage: "Deployment identifier (names the DB/service/config on the box, the workspace, and the generated root folder/go module — when passed it overrides the identifier in the project's saved go-code-gen config; default: from that saved config, else the project name)"},
-			cli.BoolFlag{Name: "db-only", Usage: "Database-only: install the DB engine (--db), pair the agent, register the connection, and apply the schema — but do NOT generate/build/run the app or Caddy. Manage the DB entirely through nuzur."},
+			cli.BoolFlag{Name: "db-only", Usage: "Database-only: install the DB engine (--db), pair the agent, register the connection, and apply the schema — but do NOT generate/build/run the app or Caddy. Manage the DB entirely through nuzur. NOT DEPLOYED, THEREFORE NOT ENFORCED: `generated: true` timestamp population (created_at/updated_at are filled in by the generated server, so with your own writer updated_at only holds what you put there), the `version` optimistic-concurrency token (nothing increments it or rejects a stale write), and model-level validation (min_size/max_size/regex_validation/min_value/max_value). The database still enforces everything in the DDL: types, NOT NULL, defaults, unique/FK/index constraints."},
 			cli.StringFlag{Name: "db-dsn", Usage: "Use an EXISTING database instead of self-hosting one. MySQL DSN (user:pass@tcp(host:port)/db?params) or Postgres URL (postgres://user:pass@host:port/db?sslmode=require). The app + agent connect to it; MySQL install/creation is skipped."},
 			cli.StringFlag{Name: "connection", Usage: "Deploy against an EXISTING nuzur team connection (by UUID) instead of --db-dsn. The DSN is resolved server-side from the connection's stored credentials — no plaintext secret on the command line. Mutually exclusive with --db-dsn."},
 			cli.BoolFlag{Name: "save-connection", Usage: "After an external (--db-dsn) deploy, register the database as a team connection so your team can use the data manager on it. Requires a team admin. (Non-interactive opt-in; a TTY otherwise prompts.)"},
@@ -263,6 +263,17 @@ func (i *Implementation) runDeploy(c *cli.Context) (rerr error) {
 	}
 	if c.Bool("json") {
 		return fmt.Errorf("--json only applies to --plan; a deploy has no JSON output")
+	}
+
+	// Is this CLI current? Asked here — after the dry-run exits, before anything
+	// is generated or provisioned — because a deploy is exactly where a stale CLI
+	// costs the user: the parts of the pipeline resolved server-side move on
+	// without them while the parts baked into the binary silently do not.
+	//
+	// Best-effort to a fault: two seconds, no error path, no prompt. Nothing about
+	// a courtesy version check may delay or fail a real deploy.
+	if notice := i.noticeIfCLIOutdated(); notice != "" {
+		outputtools.PrintlnColoredErr(notice, outputtools.Yellow)
 	}
 
 	ctx := context.Background()

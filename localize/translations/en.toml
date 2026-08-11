@@ -78,3 +78,6 @@ other = "Yes"
 
 [no]
 other = "No"
+
+[update_desc]
+other = "Update nuzur-cli to the latest released version"

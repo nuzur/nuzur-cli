@@ -1311,9 +1311,17 @@ func TestGoldenReleaseAsset404(t *testing.T) {
 	// It asked about the URL the bootstrap would actually fetch — the single-source
 	// claim deploy.CLIReleaseAssetURL exists for, checked here end to end rather
 	// than only against the template.
-	want := "HEAD " + deploy.CLIReleaseAssetURL(constants.CLI_VERSION, deploy.CLIReleaseOSLinux, deploy.CLIReleaseArchX8664)
-	if reqs := g.http.Requests(); len(reqs) != 1 || reqs[0] != want {
-		t.Errorf("probe requests = %v, want exactly [%q]", reqs, want)
+	//
+	// Two outbound requests, in this order: the best-effort "is this CLI current?"
+	// notice (selfupdate.go), then the probe. The notice comes first and is
+	// allowed to fail — here it does, since this scenario answers 404 to
+	// everything — which is exactly why the probe's own refusal still lands.
+	want := []string{
+		"GET " + CLILatestReleaseAPIURL,
+		"HEAD " + deploy.CLIReleaseAssetURL(constants.CLI_VERSION, deploy.CLIReleaseOSLinux, deploy.CLIReleaseArchX8664),
+	}
+	if reqs := g.http.Requests(); !slices.Equal(reqs, want) {
+		t.Errorf("probe requests = %v, want exactly %v", reqs, want)
 	}
 }
 

@@ -172,6 +172,11 @@ const CLIReleaseArchX8664 = "x86_64"
 // for Darwin as well, so the OS stopped being a constant of the URL itself.
 const CLIReleaseOSLinux = "Linux"
 
+// CLIReleaseOSDarwin is the goreleaser OS segment for macOS assets. No box ever
+// asks for it — a deploy target is Linux — but the CLI updating ITSELF runs on
+// whatever the developer uses, which is mostly this.
+const CLIReleaseOSDarwin = "Darwin"
+
 // CLIReleaseAssetURL is the GitHub release asset a machine downloads the nuzur
 // CLI from, for one version, one OS and one architecture.
 //
