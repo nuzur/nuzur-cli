@@ -352,12 +352,23 @@ func applyGeneratedArchive(data []byte, outputPath string) ([]string, []string, 
 		fmt.Fprintf(os.Stderr, "Warning: could not read previous generation manifest: %v\n", err)
 	}
 
+	// The archive's go.mod overwrites the workspace's (see generatorManagedFiles),
+	// so the directives only the local copy can know are snapshotted while it is
+	// still there and re-applied below. See gomod.go for what and why.
+	localEdits := snapshotLocalModuleEdits(outputPath)
+
 	written, err := extractZip(data, outputPath)
 	if err != nil {
 		return nil, nil, err
 	}
 
 	removed := cleanupOrphanedGeneratedFiles(outputPath, previousRoot, previousManifest, hadPrevious)
+
+	// LAST, and deliberately so: tidy must see the workspace exactly as the
+	// developer will — generated code written, user-owned files preserved, stale
+	// generated files already pruned — because it derives the module's requires
+	// from the imports it finds on disk. Best-effort; warns, never fails.
+	reconcileWorkspaceModule(outputPath, localEdits)
 	return written, removed, nil
 }
 
@@ -501,9 +512,22 @@ func extractZip(data []byte, outputPath string) ([]string, error) {
 // the on-box docker build — so it deployed fine and failed on the developer's machine,
 // which is the worst possible split.
 //
-// A hand-added dependency in the local go.mod is not lost by this: it is recovered by
-// the same `go mod tidy` the workspace runs, because the import that needs it is still
-// in the user-owned source the generator preserved.
+// The archive's copies are NOT the whole answer, though, and the comment that used to
+// sit here claimed they were. Generation runs remotely against a tree that has no copy
+// of the user's `app/` zone, so the generator tidies against generated code ALONE: a
+// require that exists only because user-owned code imports it (golang.org/x/time/rate
+// in the reported case) is absent from the archive's go.mod, correctly from the
+// generator's point of view and wrongly from the workspace's. Nothing in this CLI then
+// re-derived it — the claim that "the same `go mod tidy` the workspace runs" recovers
+// it described a run that did not exist; the only tidy that actually happened was the
+// one in the generated Dockerfile, during the image build, which is exactly why the
+// deploy and the container stayed healthy while `go build ./...` failed on the
+// developer's machine.
+//
+// What restores it now is reconcileWorkspaceModule (gomod.go), which runs `go mod tidy`
+// in the workspace AFTER extraction — with the preserved user-owned files on disk — and
+// first re-applies the local `replace`/`exclude`/`tool`/`godebug` directives that no
+// tidy could re-derive.
 var generatorManagedFiles = map[string]bool{
 	"go.mod": true,
 	"go.sum": true,
