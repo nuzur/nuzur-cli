@@ -300,7 +300,7 @@ func (i *Implementation) runDeployPlan(c *cli.Context, s *deploySettings) error 
 		if err != nil {
 			return err
 		}
-		plan = sqlplan.Analyze(createSQL)
+		plan = sqlplan.Analyze(createSQL, sqlplan.Engine(engine))
 		report.ApplySQL = createSQL
 
 	default:
@@ -310,7 +310,7 @@ func (i *Implementation) runDeployPlan(c *cli.Context, s *deploySettings) error 
 		if err != nil {
 			return err
 		}
-		plan = sqlplan.Analyze(applySQL)
+		plan = sqlplan.Analyze(applySQL, sqlplan.Engine(report.Target.Engine))
 		report.ApplySQL = applySQL
 		report.Message = message
 	}

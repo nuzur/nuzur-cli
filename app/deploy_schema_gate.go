@@ -4,6 +4,7 @@ import (
 	"fmt"
 	"os"
 
+	"github.com/nuzur/nuzur-cli/deploy"
 	"github.com/nuzur/nuzur-cli/extensionrun"
 	"github.com/nuzur/nuzur-cli/outputtools"
 	"github.com/nuzur/nuzur-cli/sqlplan"
@@ -67,10 +68,12 @@ func decideSchemaApply(p sqlplan.Plan, allowDestructive bool) (bool, string) {
 }
 
 // schemaApplyDecider answers sql-push's confirmation step for a real deploy, having
-// first read the migration it is being asked to approve.
-func (i *Implementation) schemaApplyDecider(allowDestructive bool, out *schemaGateResult) extensionrun.StepDecider {
+// first read the migration it is being asked to approve. The engine is the target's,
+// because reading the migration means splitting it the way that engine's connection
+// will — see sqlplan.Split.
+func (i *Implementation) schemaApplyDecider(engine deploy.DBEngine, allowDestructive bool, out *schemaGateResult) extensionrun.StepDecider {
 	return func(prompt extensionrun.StepPrompt) (extensionrun.StepDecision, error) {
-		plan := sqlplan.Analyze(prompt.Content)
+		plan := sqlplan.Analyze(prompt.Content, sqlplan.Engine(engine))
 		out.plan = plan
 
 		confirm, reason := decideSchemaApply(plan, allowDestructive)
@@ -153,7 +156,7 @@ func (i *Implementation) preflightSchemaGate(targets *runTargets, t planTarget) 
 				"before it is applied): "+err.Error(), outputtools.Yellow)
 		return nil
 	}
-	plan := sqlplan.Analyze(applySQL)
+	plan := sqlplan.Analyze(applySQL, sqlplan.Engine(t.Engine))
 	if confirm, _ := decideSchemaApply(plan, false); confirm {
 		return nil
 	}

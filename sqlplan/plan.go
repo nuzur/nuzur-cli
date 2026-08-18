@@ -248,9 +248,10 @@ func (p Plan) Destructive() []Statement {
 	return out
 }
 
-// Analyze splits apply SQL into statements and labels each one.
-func Analyze(applySQL string) Plan {
-	frags := Split(applySQL)
+// Analyze splits apply SQL into statements and labels each one. The engine is
+// needed to split the way the target's connection will — see Split.
+func Analyze(applySQL string, engine Engine) Plan {
+	frags := Split(applySQL, engine)
 	p := Plan{Statements: make([]Statement, 0, len(frags))}
 	for idx, frag := range frags {
 		c := classify(frag)
@@ -265,27 +266,6 @@ func Analyze(applySQL string) Plan {
 		})
 	}
 	return p
-}
-
-// Split splits apply SQL into statements exactly the way the connection manager
-// will execute it: on ";", discarding fragments that are only whitespace.
-//
-// This is deliberately the same naive split as executeRawQuery in nuzur-go's
-// sql-query-manager. A smarter splitter would produce a prettier preview and a
-// less truthful one: whatever a ";" inside a string literal does to the real
-// execution, the preview has to show the same thing. If executeRawQuery ever
-// learns to parse, this must learn with it.
-//
-// Fragments are trimmed for display. Leading and trailing whitespace is the one
-// difference from what is executed, and it changes nothing about what runs.
-func Split(applySQL string) []string {
-	var out []string
-	for _, frag := range strings.Split(applySQL, ";") {
-		if t := strings.TrimSpace(frag); t != "" {
-			out = append(out, t)
-		}
-	}
-	return out
 }
 
 // classified is everything the classifier can say about one statement: the summary

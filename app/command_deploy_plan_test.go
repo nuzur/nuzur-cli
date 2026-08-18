@@ -336,7 +336,7 @@ func TestDeployPlanReportJSONContract(t *testing.T) {
 	// against a literal means an accidental field rename fails here rather than
 	// silently breaking every consumer.
 	plan := sqlplan.Analyze(`CREATE TABLE "clients" (uuid UUID PRIMARY KEY);
-ALTER TABLE "public"."orders" DROP COLUMN "legacy_ref";`)
+ALTER TABLE "public"."orders" DROP COLUMN "legacy_ref";`, sqlplan.EnginePostgres)
 
 	report := deployPlanReport{
 		Status:         "plan",
@@ -1015,7 +1015,7 @@ func TestPlanReportOffersACommandOrANoteNeverBoth(t *testing.T) {
 	var out, errOut bytes.Buffer
 	swapOutputWriters(t, &out, &errOut)
 
-	plan := sqlplan.Analyze("ALTER TABLE `customer` DROP COLUMN `legacy_ref`;")
+	plan := sqlplan.Analyze("ALTER TABLE `customer` DROP COLUMN `legacy_ref`;", sqlplan.EngineMySQL)
 	report := deployPlanReport{
 		Status: "plan", Mode: "diff",
 		Project:        planProject{UUID: "p-1", Name: "acme"},

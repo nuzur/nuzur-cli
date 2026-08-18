@@ -7,32 +7,34 @@ import (
 
 func TestSplit(t *testing.T) {
 	for _, tc := range []struct {
-		name string
-		in   string
-		want []string
+		name   string
+		in     string
+		engine Engine
+		want   []string
 	}{
 		{name: "empty", in: "", want: nil},
 		{name: "whitespace only", in: "  \n\t ", want: nil},
 		{name: "single with trailing semicolon", in: "CREATE TABLE a (id INT);", want: []string{"CREATE TABLE a (id INT)"}},
 		{name: "single without trailing semicolon", in: "CREATE TABLE a (id INT)", want: []string{"CREATE TABLE a (id INT)"}},
 		{
-			name: "pg-schema-diff style, semicolon plus newline",
-			in:   "CREATE TABLE a (id INT);\nDROP TABLE b;\n",
-			want: []string{"CREATE TABLE a (id INT)", "DROP TABLE b"},
+			name:   "pg-schema-diff style, semicolon plus newline",
+			in:     "CREATE TABLE a (id INT);\nDROP TABLE b;\n",
+			engine: EnginePostgres,
+			want:   []string{"CREATE TABLE a (id INT)", "DROP TABLE b"},
 		},
 		{name: "blank fragments between statements are dropped", in: "A;;;B;", want: []string{"A", "B"}},
 		{
-			// This is not a bug being tolerated, it is the executor's behavior being
-			// reproduced: nuzur-go's executeRawQuery splits on ";" too, so a
-			// semicolon inside a literal breaks the real execution exactly here. A
-			// preview that hid the split would be lying about what runs.
-			name: "semicolon inside a literal splits, matching the executor",
+			// The executor stopped splitting inside literals, so the preview
+			// stopped too: this is one statement in both places. When it was two,
+			// both were nonsense — and the second half of a DEFAULT was being
+			// classified as if it were a statement of its own.
+			name: "semicolon inside a literal is not a separator",
 			in:   "INSERT INTO t VALUES ('a;b')",
-			want: []string{"INSERT INTO t VALUES ('a", "b')"},
+			want: []string{"INSERT INTO t VALUES ('a;b')"},
 		},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
-			got := Split(tc.in)
+			got := Split(tc.in, tc.engine)
 			if len(got) != len(tc.want) {
 				t.Fatalf("Split(%q) = %#v, want %#v", tc.in, got, tc.want)
 			}
@@ -183,7 +185,7 @@ func TestAnalyzeAndCounts(t *testing.T) {
 		`ALTER TABLE "leads" ALTER COLUMN "email" SET NOT NULL;`,
 	}, "\n")
 
-	p := Analyze(apply)
+	p := Analyze(apply, EngineUnknown)
 	if len(p.Statements) != 6 {
 		t.Fatalf("got %d statements, want 6", len(p.Statements))
 	}
@@ -212,7 +214,7 @@ func TestAnalyzeAndCounts(t *testing.T) {
 }
 
 func TestAnalyzeEmpty(t *testing.T) {
-	p := Analyze("")
+	p := Analyze("", EngineUnknown)
 	if !p.Empty() {
 		t.Fatal("Empty() = false for an empty plan")
 	}
@@ -230,7 +232,7 @@ func TestAnalyzeEmpty(t *testing.T) {
 func TestRendering(t *testing.T) {
 	p := Analyze(`CREATE TABLE a (id INT);
 ALTER TABLE "public"."orders" DROP COLUMN "legacy_ref";
-DROP INDEX idx_a;`)
+DROP INDEX idx_a;`, EngineUnknown)
 
 	summary := p.SummaryLine()
 	for _, want := range []string{"3 statements", "1 additive", "1 DESTRUCTIVE", "1 index/constraint drop"} {
@@ -277,7 +279,7 @@ DROP INDEX idx_a;`)
 func TestBundledAlterReportsEveryHazard(t *testing.T) {
 	const sql = "ALTER TABLE `lot` DROP KEY `idx_lot_process_organic`, DROP COLUMN `moisture_pct`, MODIFY COLUMN `warehouse_bin` int"
 
-	p := Analyze(sql)
+	p := Analyze(sql, EngineUnknown)
 	if len(p.Statements) != 1 {
 		t.Fatalf("Analyze() = %d statements, want 1", len(p.Statements))
 	}
@@ -348,7 +350,7 @@ func TestBundledAlterReportsEveryHazard(t *testing.T) {
 // honest for every plan, and the reassuring direction is the expensive one to get
 // wrong: a reader who believes a failed migration rolled back will not go and check.
 func TestTransactionalWarningIsEngineAndContentAware(t *testing.T) {
-	plain := Analyze("CREATE TABLE a (id INT);\nALTER TABLE b ADD COLUMN c INT;")
+	plain := Analyze("CREATE TABLE a (id INT);\nALTER TABLE b ADD COLUMN c INT;", EngineUnknown)
 
 	// Postgres gets real atomicity.
 	pg := plain.TransactionalWarning(EnginePostgres)
@@ -376,7 +378,7 @@ func TestTransactionalWarningIsEngineAndContentAware(t *testing.T) {
 		"CREATE TABLE a (id INT);\nVACUUM FULL a",
 		"CREATE TABLE a (id INT);\nALTER SYSTEM SET work_mem = '64MB'",
 	} {
-		p := Analyze(sql)
+		p := Analyze(sql, EngineUnknown)
 		got := p.TransactionalWarning(EnginePostgres)
 		if !strings.Contains(got, "do NOT run in a transaction") {
 			t.Errorf("plan %q should lose atomicity, got %q", sql, got)
@@ -400,12 +402,12 @@ func TestTransactionalWarningIsEngineAndContentAware(t *testing.T) {
 }
 
 func TestChurnNote(t *testing.T) {
-	churny := Analyze("ALTER TABLE `a` MODIFY COLUMN `x` VARCHAR(512);\nALTER TABLE `b` MODIFY COLUMN `y` VARCHAR(512);\nCREATE TABLE c (id INT);")
+	churny := Analyze("ALTER TABLE `a` MODIFY COLUMN `x` VARCHAR(512);\nALTER TABLE `b` MODIFY COLUMN `y` VARCHAR(512);\nCREATE TABLE c (id INT);", EngineUnknown)
 	if got := churny.ChurnNote(); !strings.Contains(got, "2 of 3") {
 		t.Errorf("ChurnNote() = %q, want it to count the column redefinitions", got)
 	}
 	// A destructive plan with none of the churn shapes in it has nothing to explain.
-	clean := Analyze("DROP TABLE a;")
+	clean := Analyze("DROP TABLE a;", EngineUnknown)
 	if got := clean.ChurnNote(); got != "" {
 		t.Errorf("ChurnNote() = %q, want empty", got)
 	}
@@ -416,9 +418,9 @@ func TestChurnNote(t *testing.T) {
 // drop it and add it back on every single run — and neither half of that pair is a
 // column redefinition, so a plan that was pure churn top to bottom got no note at all.
 func TestChurnNoteCountsIndexChurn(t *testing.T) {
-	p := Analyze("ALTER TABLE `doc` DROP KEY `idx_body`;\n" +
-		"ALTER TABLE `doc` ADD FULLTEXT KEY `idx_body` (`body`);\n" +
-		"CREATE TABLE c (id INT);")
+	p := Analyze("ALTER TABLE `doc` DROP KEY `idx_body`;\n"+
+		"ALTER TABLE `doc` ADD FULLTEXT KEY `idx_body` (`body`);\n"+
+		"CREATE TABLE c (id INT);", EngineUnknown)
 	got := p.ChurnNote()
 	if !strings.Contains(got, "2 of 3") {
 		t.Errorf("ChurnNote() = %q, want it to count the index drop/add pair", got)
@@ -428,10 +430,10 @@ func TestChurnNoteCountsIndexChurn(t *testing.T) {
 	}
 
 	// Both shapes in one plan are counted together and named separately.
-	mixed := Analyze("ALTER TABLE `a` MODIFY COLUMN `x` VARCHAR(512);\n" +
-		"DROP INDEX idx_a;\n" +
-		"CREATE INDEX idx_a ON a (x);\n" +
-		"CREATE TABLE c (id INT);")
+	mixed := Analyze("ALTER TABLE `a` MODIFY COLUMN `x` VARCHAR(512);\n"+
+		"DROP INDEX idx_a;\n"+
+		"CREATE INDEX idx_a ON a (x);\n"+
+		"CREATE TABLE c (id INT);", EngineUnknown)
 	got = mixed.ChurnNote()
 	if !strings.Contains(got, "3 of 4") {
 		t.Errorf("ChurnNote() = %q, want 3 of 4", got)
@@ -484,7 +486,7 @@ func TestChurnNoteSentenceDoesNotRepeatTheCount(t *testing.T) {
 		},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
-			got := Analyze(tc.sql).ChurnNote()
+			got := Analyze(tc.sql, EngineUnknown).ChurnNote()
 			if got != tc.want {
 				t.Errorf("ChurnNote() =\n%s\nwant\n%s", got, tc.want)
 			}
@@ -501,7 +503,7 @@ func TestChurnNoteSentenceDoesNotRepeatTheCount(t *testing.T) {
 func TestSingleStatementHasNoTransactionWarning(t *testing.T) {
 	// With one statement there is no "the ones before it stayed applied" hazard, so
 	// the warning would be noise.
-	p := Analyze("DROP TABLE a;")
+	p := Analyze("DROP TABLE a;", EngineUnknown)
 	for _, engine := range []Engine{EngineMySQL, EnginePostgres, EngineUnknown} {
 		if got := p.TransactionalWarning(engine); got != "" {
 			t.Fatalf("TransactionalWarning(%q) = %q for a single statement", engine, got)

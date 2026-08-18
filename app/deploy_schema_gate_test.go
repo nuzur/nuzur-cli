@@ -63,7 +63,7 @@ func TestDecideSchemaApply(t *testing.T) {
 		},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
-			plan := sqlplan.Analyze(tc.applySQL)
+			plan := sqlplan.Analyze(tc.applySQL, sqlplan.EnginePostgres)
 			confirm, reason := decideSchemaApply(plan, tc.allowDestructive)
 			if confirm != tc.wantConfirm {
 				t.Fatalf("confirm = %v, want %v (reason: %s)", confirm, tc.wantConfirm, reason)

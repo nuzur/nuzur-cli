@@ -396,7 +396,7 @@ func deployPushTarget(agentUUID, connUUID, schema, teamConnUUID, teamConnStore s
 func (i *Implementation) applySchema(targets *runTargets, t planTarget, allowDestructive bool, gate *schemaGateResult) error {
 	outputtools.PrintlnColoredErr("Applying schema to the database...", outputtools.Blue)
 	var progress sqlPushProgress
-	_, err := i.sqlPushRun(targets, t, i.schemaApplyDecider(allowDestructive, gate), &progress)
+	_, err := i.sqlPushRun(targets, t, i.schemaApplyDecider(t.Engine, allowDestructive, gate), &progress)
 	// Whether anything was actually sent. Recorded even on success, so the caller
 	// never has to infer it from the error.
 	gate.sqlIssued = progress.SQLIssued
