@@ -83,6 +83,12 @@ type fakeProductClient struct {
 	// RevisionUUID is the uuid UpsertDeployment reports as the active revision —
 	// the handle every later UpdateDeploymentRevisionStatus call is keyed by.
 	RevisionUUID string
+	// ObjectStore is what GetObjectStoreWithSecret hands back — the team's
+	// object store WITH its KMS-held key/secret, which is what
+	// resolveObjectStoreForDeploy maps into the app's `aws:` config. Nil is a
+	// legitimate script: the real RPC can return a store whose type_config is
+	// empty, and the resolver must diagnose that rather than dereference it.
+	ObjectStore *nemgen.ObjectStore
 	// TokenUser is what GetTokenUser returns. Nil yields a default user.
 	//
 	// Note: the deploy path's own login check goes through
@@ -105,6 +111,7 @@ type fakeProductClient struct {
 	GetTokenUserErr                error
 	RevokeLocalAgentErr            error
 	MarkDeploymentDestroyedErr     error
+	GetObjectStoreWithSecretErr    error
 
 	// --- recording --------------------------------------------------------
 
@@ -315,6 +322,20 @@ func (f *fakeProductClient) GetTokenUser(ctx context.Context, in *pb.GetTokenUse
 		LastName:   "Tests",
 		Email:      "deploy-tests@example.invalid",
 	}, nil
+}
+
+func (f *fakeProductClient) GetObjectStoreWithSecret(ctx context.Context, in *pb.GetObjectStoreWithSecretRequest, opts ...grpc.CallOption) (*nemgen.ObjectStore, error) {
+	// The team uuid is recorded because it is the authorization: a store that is
+	// not the deployed project's team's must resolve as not-found, so "which team
+	// did we ask about" is an assertable effect.
+	f.record("GetObjectStoreWithSecret", in,
+		"object_store_uuid", in.GetObjectStoreUuid(),
+		"team_uuid", in.GetTeamUuid(),
+	)
+	if f.GetObjectStoreWithSecretErr != nil {
+		return nil, f.GetObjectStoreWithSecretErr
+	}
+	return f.ObjectStore, nil
 }
 
 func (f *fakeProductClient) RevokeLocalAgent(ctx context.Context, in *pb.RevokeLocalAgentRequest, opts ...grpc.CallOption) (*pb.RevokeLocalAgentResponse, error) {

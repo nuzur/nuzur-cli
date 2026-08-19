@@ -117,6 +117,12 @@ type BootstrapParams struct {
 	S3Bucket  string
 	S3Key     string
 	S3Secret  string
+	// S3Endpoint targets an S3-COMPATIBLE store instead of AWS (Cloudflare R2:
+	// https://<account-id>.r2.cloudflarestorage.com). Empty means AWS S3, and the
+	// template then emits no `endpoint:` key at all — the generated config's own
+	// base.yaml defaults it to blank, so an AWS deploy's prod.yaml is byte-for-byte
+	// what it was before R2 existed.
+	S3Endpoint string
 }
 
 // defaults fills unset fields with sensible values.

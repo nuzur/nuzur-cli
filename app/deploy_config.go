@@ -161,6 +161,12 @@ type deploySettings struct {
 	S3Region    string
 	S3AccessKey string
 	S3Secret    string
+	// S3Endpoint points the generated app at an S3-COMPATIBLE store instead of
+	// AWS (Cloudflare R2: https://<account-id>.r2.cloudflarestorage.com). Empty
+	// means AWS S3, and empty is what keeps an AWS deploy's rendered prod.yaml
+	// byte-identical to what it was before R2 existed. Not a secret, but it
+	// follows S3Region: flag-only, so the whole --s3-* group has one rule.
+	S3Endpoint string
 
 	API  string
 	Auth string
@@ -307,6 +313,7 @@ func resolveDeploySettings(c *cli.Context) (*deploySettings, error) {
 		S3Region:    strSetting(c, "s3-region", nil, ""),
 		S3AccessKey: strSetting(c, "s3-access-key", nil, ""),
 		S3Secret:    strSetting(c, "s3-secret", nil, ""),
+		S3Endpoint:  strSetting(c, "s3-endpoint", nil, ""),
 
 		API:    strSetting(c, "api", cfg.API, ""),
 		Auth:   strSetting(c, "auth", cfg.Auth, ""),
@@ -508,8 +515,11 @@ func (s *deploySettings) toDeployConfig() *DeployConfig {
 		NoSaveConnection: bp(s.NoSaveConnection),
 		StorageEnabled:   bp(s.StorageEnabled),
 		Storage:          sp(s.Storage),
-		// Manual S3 creds are deliberately NOT round-tripped into a config snapshot
-		// (they're flag-only secrets, like db_dsn's password should not be shared).
+		// The manual --s3-* group is deliberately NOT round-tripped into a config
+		// snapshot: it carries flag-only secrets, like db_dsn's password should not
+		// be shared. --s3-endpoint is not itself a secret, but it travels with the
+		// group it configures — snapshotting an endpoint whose bucket and keys were
+		// dropped would produce a config that names a store it cannot reach.
 		API:  sp(s.API),
 		Auth: sp(s.Auth),
 		// Passed through as-is, not through bp(): the tri-state is the point. Unset

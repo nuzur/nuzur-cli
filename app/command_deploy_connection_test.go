@@ -1,6 +1,8 @@
 package app
 
 import (
+	"fmt"
+	"strings"
 	"testing"
 
 	nemgen "github.com/nuzur/nem/idl/gen"
@@ -271,5 +273,293 @@ func TestSslmodeParamsRoundTrip(t *testing.T) {
 		if got := sslmodeFromParams("sslmode=" + pgSSLModeToString(m)); got != m {
 			t.Errorf("round-trip failed for %v: got %v", m, got)
 		}
+	}
+}
+
+// --- resolveObjectStoreForDeploy ---------------------------------------------
+//
+// The mapping from a team ObjectStore onto the five values the bootstrap writes
+// into the generated app's `aws:` block. Two providers share that block, and
+// they disagree about two of the five: R2 has no region (SigV4 still signs over
+// one, so Cloudflare mandates the literal "auto") and needs an explicit
+// endpoint, which the store may either carry or imply via its account id.
+//
+// The empty endpoint on the S3 arm is load-bearing, not incidental: it is what
+// makes the bootstrap emit no `endpoint:` key, which is what keeps an AWS
+// deploy's prod.yaml byte-identical to what it rendered before R2 existed.
+
+const testStoreUUID = "0be8a2f0-0000-0000-0000-0000000000s7"
+const testTeamUUID = "0be8a2f0-0000-0000-0000-0000000000tm"
+
+func TestResolveObjectStoreForDeploy(t *testing.T) {
+	cases := []struct {
+		name  string
+		store *nemgen.ObjectStore
+
+		wantRegion   string
+		wantBucket   string
+		wantKey      string
+		wantSecret   string
+		wantEndpoint string
+	}{
+		{
+			// AWS S3: everything comes off the S3 config verbatim and the endpoint
+			// stays empty (the SDK derives one from the region).
+			name: "s3",
+			store: &nemgen.ObjectStore{
+				Uuid: testStoreUUID,
+				Type: nemgen.ObjectStoreType_OBJECT_STORE_TYPE_S_3,
+				TypeConfig: &nemgen.ObjectStoreTypeConfig{S3: &nemgen.ObjectStoreS3TypeConfig{
+					Region: "us-east-1",
+					Bucket: "app-uploads",
+					Key:    "AKIAEXAMPLE",
+					Secret: "s3-secret",
+				}},
+			},
+			wantRegion:   "us-east-1",
+			wantBucket:   "app-uploads",
+			wantKey:      "AKIAEXAMPLE",
+			wantSecret:   "s3-secret",
+			wantEndpoint: "",
+		},
+		{
+			// R2 carrying its own endpoint: it is used verbatim, account id or not.
+			// A stored endpoint wins so a store behind a custom domain or a
+			// jurisdiction-specific host is not silently rewritten to the default one.
+			name: "r2_explicit_endpoint",
+			store: &nemgen.ObjectStore{
+				Uuid: testStoreUUID,
+				Type: nemgen.ObjectStoreType_OBJECT_STORE_TYPE_R_2,
+				TypeConfig: &nemgen.ObjectStoreTypeConfig{R2: &nemgen.ObjectStoreR2TypeConfig{
+					AccountId: "acct123",
+					Bucket:    "r2-uploads",
+					Key:       "r2-key",
+					Secret:    "r2-secret",
+					Endpoint:  "https://files.example.com",
+				}},
+			},
+			wantRegion:   "auto",
+			wantBucket:   "r2-uploads",
+			wantKey:      "r2-key",
+			wantSecret:   "r2-secret",
+			wantEndpoint: "https://files.example.com",
+		},
+		{
+			// R2 with only an account id: the default Cloudflare endpoint is derived,
+			// so a store that recorded the minimum still deploys.
+			name: "r2_derived_endpoint",
+			store: &nemgen.ObjectStore{
+				Uuid: testStoreUUID,
+				Type: nemgen.ObjectStoreType_OBJECT_STORE_TYPE_R_2,
+				TypeConfig: &nemgen.ObjectStoreTypeConfig{R2: &nemgen.ObjectStoreR2TypeConfig{
+					AccountId: "acct123",
+					Bucket:    "r2-uploads",
+					Key:       "r2-key",
+					Secret:    "r2-secret",
+				}},
+			},
+			wantRegion:   "auto",
+			wantBucket:   "r2-uploads",
+			wantKey:      "r2-key",
+			wantSecret:   "r2-secret",
+			wantEndpoint: "https://acct123.r2.cloudflarestorage.com",
+		},
+		{
+			// Whitespace is not an endpoint: a blank-but-present endpoint still falls
+			// through to the account id rather than writing an empty `endpoint:`.
+			name: "r2_blank_endpoint_falls_back_to_account_id",
+			store: &nemgen.ObjectStore{
+				Uuid: testStoreUUID,
+				Type: nemgen.ObjectStoreType_OBJECT_STORE_TYPE_R_2,
+				TypeConfig: &nemgen.ObjectStoreTypeConfig{R2: &nemgen.ObjectStoreR2TypeConfig{
+					AccountId: " acct456 ",
+					Bucket:    "r2-uploads",
+					Key:       "r2-key",
+					Secret:    "r2-secret",
+					Endpoint:  "   ",
+				}},
+			},
+			wantRegion:   "auto",
+			wantBucket:   "r2-uploads",
+			wantKey:      "r2-key",
+			wantSecret:   "r2-secret",
+			wantEndpoint: "https://acct456.r2.cloudflarestorage.com",
+		},
+	}
+
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			isolateHome(t) // for productclient.ClientContext()
+			fake := newFakeProductClient()
+			fake.ObjectStore = tc.store
+			i := fakeImplementation(fake)
+
+			region, bucket, key, secret, endpoint, err := i.resolveObjectStoreForDeploy(testStoreUUID, testTeamUUID)
+			if err != nil {
+				t.Fatalf("resolveObjectStoreForDeploy: %v", err)
+			}
+			if region != tc.wantRegion {
+				t.Errorf("region = %q, want %q", region, tc.wantRegion)
+			}
+			if bucket != tc.wantBucket {
+				t.Errorf("bucket = %q, want %q", bucket, tc.wantBucket)
+			}
+			if key != tc.wantKey {
+				t.Errorf("key = %q, want %q", key, tc.wantKey)
+			}
+			if secret != tc.wantSecret {
+				t.Errorf("secret = %q, want %q", secret, tc.wantSecret)
+			}
+			if endpoint != tc.wantEndpoint {
+				t.Errorf("endpoint = %q, want %q", endpoint, tc.wantEndpoint)
+			}
+
+			// The store is fetched scoped to the deployed project's team — that scoping
+			// IS the authorization check, so it is asserted rather than assumed.
+			calls := fake.CallsTo("GetObjectStoreWithSecret")
+			if len(calls) != 1 {
+				t.Fatalf("GetObjectStoreWithSecret called %d times, want 1", len(calls))
+			}
+			if got := calls[0].Params["object_store_uuid"]; got != testStoreUUID {
+				t.Errorf("object_store_uuid = %q, want %q", got, testStoreUUID)
+			}
+			if got := calls[0].Params["team_uuid"]; got != testTeamUUID {
+				t.Errorf("team_uuid = %q, want %q", got, testTeamUUID)
+			}
+		})
+	}
+}
+
+// Every arm that cannot produce a usable `aws:` block must say WHY, and must do
+// it as an error — the pre-R2 code read .GetS3() unconditionally, so any store
+// that was not an S3 store took a nil dereference instead of a diagnosis.
+func TestResolveObjectStoreForDeployErrors(t *testing.T) {
+	cases := []struct {
+		name  string
+		store *nemgen.ObjectStore
+		// wantIn are substrings the message must contain, so the test pins the
+		// diagnosis rather than the phrasing.
+		wantIn []string
+	}{
+		{
+			// R2 with neither an endpoint nor an account id: nothing names the host to
+			// talk to, and guessing one would produce an app that 503s at runtime.
+			name: "r2_missing_endpoint_and_account_id",
+			store: &nemgen.ObjectStore{
+				Uuid: testStoreUUID,
+				Type: nemgen.ObjectStoreType_OBJECT_STORE_TYPE_R_2,
+				TypeConfig: &nemgen.ObjectStoreTypeConfig{R2: &nemgen.ObjectStoreR2TypeConfig{
+					Bucket: "r2-uploads",
+					Key:    "r2-key",
+					Secret: "r2-secret",
+				}},
+			},
+			wantIn: []string{testStoreUUID, "endpoint", "account id"},
+		},
+		{
+			// The zero value of the enum. It is named OBJECT_STORE_TYPE_INVALID, and a
+			// store carrying it is exactly that — but it used to be indistinguishable
+			// from an S3 store, because nothing read the type at all.
+			name: "unknown_type",
+			store: &nemgen.ObjectStore{
+				Uuid:       testStoreUUID,
+				Type:       nemgen.ObjectStoreType_OBJECT_STORE_TYPE_INVALID,
+				TypeConfig: &nemgen.ObjectStoreTypeConfig{},
+			},
+			wantIn: []string{testStoreUUID, "OBJECT_STORE_TYPE_INVALID", "unsupported type"},
+		},
+		{
+			name: "s3_type_without_s3_config",
+			store: &nemgen.ObjectStore{
+				Uuid:       testStoreUUID,
+				Type:       nemgen.ObjectStoreType_OBJECT_STORE_TYPE_S_3,
+				TypeConfig: &nemgen.ObjectStoreTypeConfig{},
+			},
+			wantIn: []string{testStoreUUID, "no S3 configuration"},
+		},
+		{
+			name: "r2_type_without_r2_config",
+			store: &nemgen.ObjectStore{
+				Uuid:       testStoreUUID,
+				Type:       nemgen.ObjectStoreType_OBJECT_STORE_TYPE_R_2,
+				TypeConfig: &nemgen.ObjectStoreTypeConfig{},
+			},
+			wantIn: []string{testStoreUUID, "no R2 configuration"},
+		},
+		{
+			// The bucket guard predates R2 and must still fire for both providers —
+			// there is one guard, after the switch, so both arms reach it.
+			name: "s3_missing_bucket",
+			store: &nemgen.ObjectStore{
+				Uuid: testStoreUUID,
+				Type: nemgen.ObjectStoreType_OBJECT_STORE_TYPE_S_3,
+				TypeConfig: &nemgen.ObjectStoreTypeConfig{S3: &nemgen.ObjectStoreS3TypeConfig{
+					Region: "us-east-1",
+					Key:    "AKIAEXAMPLE",
+					Secret: "s3-secret",
+				}},
+			},
+			wantIn: []string{testStoreUUID, "missing a bucket"},
+		},
+		{
+			name: "r2_missing_bucket",
+			store: &nemgen.ObjectStore{
+				Uuid: testStoreUUID,
+				Type: nemgen.ObjectStoreType_OBJECT_STORE_TYPE_R_2,
+				TypeConfig: &nemgen.ObjectStoreTypeConfig{R2: &nemgen.ObjectStoreR2TypeConfig{
+					AccountId: "acct123",
+					Key:       "r2-key",
+					Secret:    "r2-secret",
+				}},
+			},
+			wantIn: []string{testStoreUUID, "missing a bucket"},
+		},
+		{
+			// A store the RPC returned as nil at all: still a diagnosis, not a panic.
+			name:   "nil_store",
+			store:  nil,
+			wantIn: []string{testStoreUUID, "unsupported type"},
+		},
+	}
+
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			isolateHome(t)
+			fake := newFakeProductClient()
+			fake.ObjectStore = tc.store
+			i := fakeImplementation(fake)
+
+			region, bucket, key, secret, endpoint, err := i.resolveObjectStoreForDeploy(testStoreUUID, testTeamUUID)
+			if err == nil {
+				t.Fatalf("resolveObjectStoreForDeploy succeeded, want an error (got region=%q bucket=%q endpoint=%q)", region, bucket, endpoint)
+			}
+			// A failed resolve must hand back nothing at all: a partial result would be
+			// written into prod.yaml by a caller that only checked some of it.
+			if region != "" || bucket != "" || key != "" || secret != "" || endpoint != "" {
+				t.Errorf("failed resolve returned values: region=%q bucket=%q key=%q secret=%q endpoint=%q", region, bucket, key, secret, endpoint)
+			}
+			for _, want := range tc.wantIn {
+				if !strings.Contains(err.Error(), want) {
+					t.Errorf("error %q does not mention %q", err.Error(), want)
+				}
+			}
+		})
+	}
+}
+
+// A store the CLI is not allowed to see resolves as not-found, and the message
+// says so in the caller's terms rather than surfacing a bare gRPC status.
+func TestResolveObjectStoreForDeployRPCError(t *testing.T) {
+	isolateHome(t)
+	fake := newFakeProductClient()
+	fake.GetObjectStoreWithSecretErr = fmt.Errorf("permission denied")
+	i := fakeImplementation(fake)
+
+	_, _, _, _, _, err := i.resolveObjectStoreForDeploy(testStoreUUID, testTeamUUID)
+	if err == nil {
+		t.Fatal("resolveObjectStoreForDeploy succeeded despite a scripted RPC error")
+	}
+	if !strings.Contains(err.Error(), "not found in this project's team") || !strings.Contains(err.Error(), "permission denied") {
+		t.Errorf("error = %q, want it to name the team scoping and wrap the RPC error", err.Error())
 	}
 }

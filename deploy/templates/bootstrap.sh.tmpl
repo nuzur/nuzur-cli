@@ -324,7 +324,8 @@ S3_REGION='{{.S3Region}}'
 S3_BUCKET='{{.S3Bucket}}'
 S3_KEY_ID='{{.S3Key}}'
 S3_SECRET='{{.S3Secret}}'
-{{end}}
+{{if .S3Endpoint}}S3_ENDPOINT='{{.S3Endpoint}}'
+{{end}}{{end}}
 
 cat > "$PROD_YAML" <<YAML
 db:
@@ -347,7 +348,8 @@ db:
   key_id: ${S3_KEY_ID}
   secret: ${S3_SECRET}
   bucket: ${S3_BUCKET}
-{{end}}YAML
+{{if .S3Endpoint}}  endpoint: ${S3_ENDPOINT}
+{{end}}{{end}}YAML
 chmod 600 "$PROD_YAML"
 
 # ── 5. Build + run this project's API (host networking → reaches localhost DB) ─

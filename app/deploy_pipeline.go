@@ -490,6 +490,9 @@ type deployState struct {
 	s3Bucket     string
 	s3Key        string
 	s3Secret     string
+	// s3Endpoint is set only for an S3-COMPATIBLE store (Cloudflare R2); AWS S3
+	// leaves it empty and the bootstrap then writes no `endpoint:` at all.
+	s3Endpoint string
 
 	// ── runtime ───────────────────────────────────────────────────────────
 	// What the run learns once it starts touching things: the provisioning
@@ -1365,6 +1368,7 @@ func (i *Implementation) stepBootstrap(ctx context.Context, st *deployState) err
 		S3Bucket:   st.s3Bucket,
 		S3Key:      st.s3Key,
 		S3Secret:   st.s3Secret,
+		S3Endpoint: st.s3Endpoint,
 	}
 	if !st.dbOnly {
 		bp.RemoteSrcDir = remoteSrcDir
@@ -1714,13 +1718,14 @@ func (i *Implementation) stepResolveAndConfigure(ctx context.Context, st *deploy
 			storeUUID := strings.TrimSpace(stringValue(st.configValues, "object_store", ""))
 			switch {
 			case storeUUID != "":
-				st.s3Region, st.s3Bucket, st.s3Key, st.s3Secret, err = i.resolveObjectStoreForDeploy(storeUUID, st.targets.project.TeamUuid)
+				st.s3Region, st.s3Bucket, st.s3Key, st.s3Secret, st.s3Endpoint, err = i.resolveObjectStoreForDeploy(storeUUID, st.targets.project.TeamUuid)
 				if err != nil {
 					return err
 				}
 				st.s3Enabled = true
 			case manualS3:
 				st.s3Region, st.s3Bucket, st.s3Key, st.s3Secret = strings.TrimSpace(st.s.S3Region), strings.TrimSpace(st.s.S3Bucket), strings.TrimSpace(st.s.S3AccessKey), st.s.S3Secret
+				st.s3Endpoint = strings.TrimSpace(st.s.S3Endpoint)
 				st.s3Enabled = true
 			default:
 				outputtools.PrintlnColoredErr("S3 storage is enabled but no credentials were provided (no --storage / --s3-* and none saved) — /upload and /sign will return 503 until you set the aws: block in the app's prod.yaml.", outputtools.Yellow)

@@ -48,35 +48,75 @@ func (i *Implementation) resolveConnectionForDeploy(connUUID, teamUUID string) (
 	return engine, host, port, user, pass, name, params, conn.GetStoreUuid(), nil
 }
 
-// resolveObjectStoreForDeploy fetches a team ObjectStore (with its KMS-held S3
-// key/secret) and returns the four values the bootstrap writes into the app's
+// r2EndpointHost is the suffix Cloudflare gives every account's S3-compatible
+// R2 endpoint: https://<account_id>.r2.cloudflarestorage.com. Derivable rather
+// than stored, so a store that only recorded its account id still resolves.
+const r2EndpointHost = ".r2.cloudflarestorage.com"
+
+// r2Region is the region an S3 client must send to R2. R2 is not regional, but
+// SigV4 signs over a region, and Cloudflare accepts exactly one value: "auto".
+const r2Region = "auto"
+
+// resolveObjectStoreForDeploy fetches a team ObjectStore (with its KMS-held
+// key/secret) and returns the five values the bootstrap writes into the app's
 // `aws:` config so the generated /upload and /sign endpoints can reach the
 // bucket. It mirrors resolveConnectionForDeploy: the caller supplies only the
 // object-store uuid, never the plaintext credentials.
 //
+// Two providers are supported, and they differ only in how the same five values
+// are derived. AWS S3 has a real region and needs no endpoint (the SDK derives
+// one). Cloudflare R2 is S3-compatible but account-scoped: the region is always
+// "auto" and the endpoint is mandatory, either stored on the config or derived
+// from the account id. `endpoint` comes back empty for S3 — and an empty
+// endpoint is what keeps an S3 deploy's rendered prod.yaml byte-identical to
+// what it was before R2 existed (see bootstrap.sh.tmpl).
+//
 // The team is the deployed project's team; a store that doesn't belong to that
 // team resolves as not-found.
-func (i *Implementation) resolveObjectStoreForDeploy(storeUUID, teamUUID string) (region, bucket, key, secret string, err error) {
+func (i *Implementation) resolveObjectStoreForDeploy(storeUUID, teamUUID string) (region, bucket, key, secret, endpoint string, err error) {
 	authCtx, err := productclient.ClientContext()
 	if err != nil {
-		return "", "", "", "", err
+		return "", "", "", "", "", err
 	}
 	store, err := i.productClient.ProductClient.GetObjectStoreWithSecret(authCtx, &pb.GetObjectStoreWithSecretRequest{
 		ObjectStoreUuid: storeUUID,
 		TeamUuid:        teamUUID,
 	})
 	if err != nil {
-		return "", "", "", "", fmt.Errorf("object store %s not found in this project's team: %w", storeUUID, err)
+		return "", "", "", "", "", fmt.Errorf("object store %s not found in this project's team: %w", storeUUID, err)
 	}
-	s3 := store.GetTypeConfig().GetS3()
-	if s3 == nil {
-		return "", "", "", "", fmt.Errorf("object store %s has no S3 configuration", storeUUID)
+	// Switch on the declared type rather than on which config happens to be
+	// populated: the type is what the store IS, and reading a missing config off
+	// the oneof-shaped wrapper would otherwise be a nil dereference.
+	switch store.GetType() {
+	case nemgen.ObjectStoreType_OBJECT_STORE_TYPE_S_3:
+		s3 := store.GetTypeConfig().GetS3()
+		if s3 == nil {
+			return "", "", "", "", "", fmt.Errorf("object store %s has no S3 configuration", storeUUID)
+		}
+		region, bucket, key, secret = s3.GetRegion(), s3.GetBucket(), s3.GetKey(), s3.GetSecret()
+	case nemgen.ObjectStoreType_OBJECT_STORE_TYPE_R_2:
+		r2 := store.GetTypeConfig().GetR2()
+		if r2 == nil {
+			return "", "", "", "", "", fmt.Errorf("object store %s has no R2 configuration", storeUUID)
+		}
+		region = r2Region
+		bucket, key, secret = r2.GetBucket(), r2.GetKey(), r2.GetSecret()
+		endpoint = strings.TrimSpace(r2.GetEndpoint())
+		if endpoint == "" {
+			accountID := strings.TrimSpace(r2.GetAccountId())
+			if accountID == "" {
+				return "", "", "", "", "", fmt.Errorf("object store %s is an R2 store with neither an endpoint nor an account id — set one of them so the app knows which Cloudflare account to reach", storeUUID)
+			}
+			endpoint = "https://" + accountID + r2EndpointHost
+		}
+	default:
+		return "", "", "", "", "", fmt.Errorf("object store %s has an unsupported type (%s) — deploy can resolve credentials for S3 and R2 stores only", storeUUID, store.GetType())
 	}
-	region, bucket, key, secret = s3.GetRegion(), s3.GetBucket(), s3.GetKey(), s3.GetSecret()
 	if strings.TrimSpace(bucket) == "" {
-		return "", "", "", "", fmt.Errorf("object store %s is missing a bucket", storeUUID)
+		return "", "", "", "", "", fmt.Errorf("object store %s is missing a bucket", storeUUID)
 	}
-	return region, bucket, key, secret, nil
+	return region, bucket, key, secret, endpoint, nil
 }
 
 // connectionToDSNParts maps a nem Connection into the seven DSN pieces the deploy
