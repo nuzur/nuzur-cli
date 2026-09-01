@@ -81,3 +81,24 @@ other = "No"
 
 [update_desc]
 other = "Actualiza nuzur-cli a la última versión publicada"
+
+[files_desc]
+other = "Trabaja con los archivos guardados en los campos de archivo de un proyecto"
+
+[files_upload_desc]
+other = "Sube un archivo local a un campo de archivo del proyecto, igual que el gestor de datos"
+
+[files_upload_error]
+other = "Falló la subida del archivo"
+
+[files_upload_select_entity]
+other = "Selecciona la entidad"
+
+[files_upload_select_field]
+other = "Selecciona el campo"
+
+[files_describe_desc]
+other = "Imprime, en JSON, cada campo de una versión del proyecto que puede contener un archivo, y lo que acepta cada uno"
+
+[files_describe_error]
+other = "No se pudieron describir los campos de archivo de la versión del proyecto"

@@ -29,6 +29,10 @@ type extensionRunner interface {
 	// Discovery: projects, versions, extensions.
 	ListUserProjects() ([]*nemgen.Project, error)
 	ListProjectVersions(projectUUID string) ([]*nemgen.ProjectVersion, error)
+	// GetProjectVersion is the only one of these that returns the SCHEMA —
+	// entities, fields and their type configs. ListProjectVersions carries none
+	// of it, so resolving an entity/field by identifier has to come through here.
+	GetProjectVersion(projectVersionUUID string) (*nemgen.ProjectVersion, error)
 	ListGeneratorExtensions() ([]*nemgen.Extension, error)
 	ListRunnableExtensions(pairFronts []string) ([]*nemgen.Extension, error)
 	FindExtensionByIdentifier(identifier string) (*nemgen.Extension, error)

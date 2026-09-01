@@ -6,6 +6,23 @@ import (
 	"github.com/nuzur/nuzur-cli/protodeps/gen"
 )
 
+// GetProjectVersion returns a project version WITH its schema — entities,
+// fields, enums and relationships.
+//
+// ListProjectVersions is the cheaper listing and carries none of that, so
+// anything that has to look inside the model (resolving an entity and field by
+// identifier, for instance) has to come through here.
+func (i *Implementation) GetProjectVersion(projectVersionUUID string) (*nemgen.ProjectVersion, error) {
+	ctx, err := productclient.ClientContext()
+	if err != nil {
+		return nil, err
+	}
+
+	return i.productClient.ProductClient.GetProjectVersionForUser(ctx, &gen.GetProjectVersionForUserRequest{
+		ProjectVersionUuid: projectVersionUUID,
+	})
+}
+
 // GetStandaloneEntities returns all standalone entities from a project version.
 func (i *Implementation) GetStandaloneEntities(projectVersionUUID string) ([]*nemgen.Entity, error) {
 	ctx, err := productclient.ClientContext()

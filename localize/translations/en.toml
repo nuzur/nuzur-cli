@@ -81,3 +81,24 @@ other = "No"
 
 [update_desc]
 other = "Update nuzur-cli to the latest released version"
+
+[files_desc]
+other = "Work with the files stored in a project's file fields"
+
+[files_upload_desc]
+other = "Upload a local file to a project's file field, the same way the data manager does"
+
+[files_upload_error]
+other = "File upload failed"
+
+[files_upload_select_entity]
+other = "Select the entity"
+
+[files_upload_select_field]
+other = "Select the field"
+
+[files_describe_desc]
+other = "Print, as JSON, every field in a project version that can hold a file, and what each one accepts"
+
+[files_describe_error]
+other = "Could not describe the project version's file fields"

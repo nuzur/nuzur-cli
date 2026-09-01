@@ -137,6 +137,41 @@ NULL, defaults, and unique/foreign-key/index constraints. A normal deploy (the
 same command without `--db-only`) reuses the database, agent, schema and data and
 adds the API.
 
+## Upload a file to a project's object store
+
+Until now the only way to put a file into a file field's object store was the
+data manager in the web app. `files upload` does the same thing from a script:
+
+```bash
+nuzur-cli files upload ./invoice.pdf \
+  --project billing --entity invoice --field attachment
+```
+
+`--entity` and `--field` take an identifier or a uuid; omit them for a picker.
+Pass a project-version uuid to `--version` and `--project` becomes unnecessary.
+
+Not sure which field to target? `nuzur-cli files describe --project <p> --version <v>`
+lists every field that can hold a file, what each one accepts, and the exact upload
+command for it.
+
+This talks only to nuzur — the field configuration names the object store and
+the credentials are resolved server-side — so it works for **any project, even
+one with no deployed API**. File names are cleaned exactly the way the data
+manager cleans them, so the same file uploaded either way lands on the same
+object key.
+
+It prints two URLs, and the difference matters:
+
+- **Record value** — what to store in the field. It is an identifier, not a
+  public link; nuzur re-signs it whenever the record is read.
+- **Signed URL** — directly fetchable, and expires in 24 hours. Don't store it.
+
+The command does not write records itself. Use `--json` for a machine-readable
+result (documented in [docs/agent-usage.md](docs/agent-usage.md)), `--dry-run` to
+see the destination key without uploading, and `--force` to overwrite an existing
+object — note the key is the field's path plus the file name with no per-record
+component, so `--force` can replace a file another record points at.
+
 ## Connect a database on a server (headless)
 
 To manage an existing database from nuzur, run the CLI on the machine that can

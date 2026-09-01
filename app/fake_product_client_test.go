@@ -112,6 +112,13 @@ type fakeProductClient struct {
 	RevokeLocalAgentErr            error
 	MarkDeploymentDestroyedErr     error
 	GetObjectStoreWithSecretErr    error
+	UploadRecordFieldFileErr       error
+
+	// UploadSignedURL is the presigned URL UploadRecordFieldFile hands back.
+	// The real server signs for 24h and the CLI splits the query off it to get
+	// the record value, so a scripted one needs a query string to be
+	// representative.
+	UploadSignedURL string
 
 	// --- recording --------------------------------------------------------
 
@@ -131,7 +138,29 @@ func newFakeProductClient() *fakeProductClient {
 		ProvisioningToken: "fake-provisioning-token",
 		TokenExpiresAt:    4876543210,
 		RevisionUUID:      "f8888e33-0000-0000-0000-0000000000re",
+		UploadSignedURL:   "https://bucket.s3.us-east-1.amazonaws.com/uploads/f.png?X-Amz-Signature=deadbeef",
 	}
+}
+
+// UploadRecordFieldFile records the upload and returns the scripted signed URL.
+//
+// FileData is recorded as its LENGTH rather than its contents: a test asserts
+// that the right number of bytes went up, and putting a file's bytes into a
+// recorded param would make any failure message unreadable.
+func (f *fakeProductClient) UploadRecordFieldFile(ctx context.Context, in *pb.UploadRecordFieldFileRequest, opts ...grpc.CallOption) (*pb.UploadRecordFieldFileResponse, error) {
+	f.record("UploadRecordFieldFile", in,
+		"project_uuid", in.GetProjectUuid(),
+		"project_version_uuid", in.GetProjectVersionUuid(),
+		"entity_uuid", in.GetEntityUuid(),
+		"field_uuid", in.GetFieldUuid(),
+		"file_name", in.GetFileName(),
+		"file_bytes", fmt.Sprintf("%d", len(in.GetFileData())),
+		"force_override", fmt.Sprintf("%t", in.GetForceOverride()),
+	)
+	if f.UploadRecordFieldFileErr != nil {
+		return nil, f.UploadRecordFieldFileErr
+	}
+	return &pb.UploadRecordFieldFileResponse{Url: f.UploadSignedURL}, nil
 }
 
 // onlineAgent builds a LocalAgent in the one status the deploy poll loops accept

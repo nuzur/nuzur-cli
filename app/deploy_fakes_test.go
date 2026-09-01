@@ -397,6 +397,12 @@ type fakeExtensionRunner struct {
 	findCalls   map[string]int
 	savedConfig map[string]interface{}
 	steps       []extensionrun.StepPrompt
+
+	// SchemaEntities is what GetProjectVersion hangs off the project version.
+	// Only the file-upload tests need it, so it stays empty for the deploy
+	// goldens rather than changing what they see.
+	SchemaEntities       []*nemgen.Entity
+	GetProjectVersionErr error
 }
 
 var _ extensionRunner = (*fakeExtensionRunner)(nil)
@@ -530,6 +536,28 @@ func (f *fakeExtensionRunner) ListUserProjects() ([]*nemgen.Project, error) {
 func (f *fakeExtensionRunner) ListProjectVersions(projectUUID string) ([]*nemgen.ProjectVersion, error) {
 	f.record("ListProjectVersions", projectUUID)
 	return []*nemgen.ProjectVersion{f.ProjectVersion}, nil
+}
+
+// GetProjectVersion returns the fake's version WITH a schema attached, which is
+// the difference between it and ListProjectVersions. SchemaEntities is nil by
+// default, so a test that needs entities and fields sets it.
+func (f *fakeExtensionRunner) GetProjectVersion(projectVersionUUID string) (*nemgen.ProjectVersion, error) {
+	f.record("GetProjectVersion", projectVersionUUID)
+	if f.GetProjectVersionErr != nil {
+		return nil, f.GetProjectVersionErr
+	}
+	if len(f.SchemaEntities) == 0 {
+		return f.ProjectVersion, nil
+	}
+	// Built field by field rather than copied: a proto message carries a mutex,
+	// so `*f.ProjectVersion` is a vet failure.
+	return &nemgen.ProjectVersion{
+		Uuid:         f.ProjectVersion.GetUuid(),
+		Identifier:   f.ProjectVersion.GetIdentifier(),
+		ProjectUuid:  f.ProjectVersion.GetProjectUuid(),
+		ReviewStatus: f.ProjectVersion.GetReviewStatus(),
+		Entities:     f.SchemaEntities,
+	}, nil
 }
 
 func (f *fakeExtensionRunner) FindExtensionByIdentifier(identifier string) (*nemgen.Extension, error) {

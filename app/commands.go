@@ -14,6 +14,7 @@ func (i *Implementation) Commands() []cli.Command {
 		i.AgentCommand(),
 		i.ConnectCommand(),
 		i.DeployCommand(),
+		i.FilesCommand(),
 		i.DestroyCommand(),
 		i.VersionCommand(),
 		i.UpdateCommand(),

@@ -349,7 +349,8 @@ func loadProvidedConfig(flags extRunFlags) (map[string]interface{}, error) {
 
 // jsonError is the stable JSON error envelope emitted in --json mode.
 type jsonError struct {
-	Status  string                    `json:"status"` // always "error"
+	Status  string                    `json:"status"`         // always "error"
+	Code    string                    `json:"code,omitempty"` // gRPC status code, when the failure came from the server
 	Message string                    `json:"message"`
 	Errors  []extensionrun.FieldError `json:"errors,omitempty"` // populated for config validation failures
 }
@@ -358,19 +359,28 @@ type jsonError struct {
 // non-zero code. In --json mode it emits a structured error envelope on stdout;
 // otherwise it prints a colored message on stderr.
 func (i *Implementation) failRun(flags extRunFlags, err error) error {
-	if flags.jsonOutput {
-		env := jsonError{Status: "error", Message: err.Error()}
-		var ve *extensionrun.ConfigValidationError
-		if errors.As(err, &ve) {
-			env.Message = "invalid config"
-			env.Errors = ve.Fields
-		}
+	env := jsonError{Status: "error", Message: err.Error()}
+	var ve *extensionrun.ConfigValidationError
+	if errors.As(err, &ve) {
+		env.Message = "invalid config"
+		env.Errors = ve.Fields
+	}
+	return failWith(flags.jsonOutput,
+		i.localize.Localize("extension_run_error", "Extension run failed"), env)
+}
+
+// failWith reports a failure on the right stream and returns an error that
+// exits the process with a non-zero code.
+//
+// In --json mode the envelope goes to stdout and nothing else does, which is
+// the contract docs/agent-usage.md declares: stdout is the document, stderr is
+// the commentary. Otherwise the message is a colored line on stderr, prefixed
+// with what failed.
+func failWith(jsonOutput bool, label string, env jsonError) error {
+	if jsonOutput {
 		_ = printJSONValue(env)
 	} else {
-		outputtools.PrintlnColoredErr(
-			fmt.Sprintf("%s: %v", i.localize.Localize("extension_run_error", "Extension run failed"), err),
-			outputtools.Red,
-		)
+		outputtools.PrintlnColoredErr(fmt.Sprintf("%s: %s", label, env.Message), outputtools.Red)
 	}
 	// empty message: the envelope/colored line above is the user-facing output;
 	// this just sets the exit code.

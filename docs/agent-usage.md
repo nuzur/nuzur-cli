@@ -222,6 +222,141 @@ to the user.
 - **stderr** carries all human progress/status/warnings.
 - Exit code is `0` on success, non-zero on any failure.
 
+## Discovering where files can go: `files describe --json`
+
+**Start here.** `files upload` needs an entity and a field, and an agent has no
+other way to learn them — the interactive pickers do not exist in
+`--non-interactive` mode, and the "not found" errors only list candidates after a
+failed call that already needed a real file on disk. `describe` answers the
+question with no payload:
+
+```bash
+nuzur-cli files describe --version <project_version_uuid> --json
+```
+
+```json
+{
+  "status": "describe",
+  "project_uuid": "…",
+  "project_version_uuid": "…",
+  "project_version_identifier": "v_4_media_objects",
+  "file_fields": [
+    {
+      "entity": { "uuid": "…", "identifier": "media" },
+      "field":  { "uuid": "…", "identifier": "url", "type": "IMAGE" },
+      "storage_type": "OBJECT_STORE",
+      "object_store_uuid": "…",
+      "path": "/media",
+      "key_prefix": "media",
+      "allowed_extensions": ["jpg", "webp", "png"],
+      "max_size_kb": 1024,
+      "allow_multiple": false,
+      "uploadable": true,
+      "upload_command": "nuzur-cli files upload <path> --version … --entity media --field url --json"
+    }
+  ]
+}
+```
+
+`upload_command` is usable verbatim — substitute the path.
+
+Every field that *can* hold a file is listed, including ones that currently
+cannot be uploaded to. Those carry `"uploadable": false` and a `reason`, so an
+agent can distinguish **"no such field"** from **"the field exists but is
+misconfigured"**:
+
+```json
+{
+  "field": { "identifier": "spectrogram", "type": "IMAGE" },
+  "storage_type": "INVALID",
+  "uploadable": false,
+  "reason": "field \"spectrogram\" has no storage type set, so there is nowhere to put the file — open the field in the project editor and choose object store or binary storage"
+}
+```
+
+`describe` reads configuration only: it uploads nothing and never touches the
+project database. `max_size_kb` is in **kilobytes**, and `key_prefix` is `path`
+normalized the way the server normalizes it — an uploaded object's key is exactly
+`key_prefix` + `/` + the sanitized file name.
+
+## Uploading a file: `files upload --json`
+
+Puts a local file into the object store configured on a file/image/video/audio
+field — the scriptable equivalent of the data manager's upload modal.
+
+It talks only to nuzur's control plane (the field config names the store, and the
+credentials are resolved server-side), so it works for **any project, including
+one with no deployed API**.
+
+```bash
+nuzur-cli files upload ./invoice.pdf \
+  --version <project_version_uuid> --entity invoice --field attachment --json
+```
+
+`--entity` and `--field` take an identifier or a uuid — get them from
+`files describe` above. When `--version` is a uuid the project is derived from it
+and `--project` is unnecessary; otherwise pass `--project <name|uuid>`. Add
+`--dry-run` to resolve, validate and print the destination key without uploading.
+
+### Upload result (`--json`)
+
+```json
+{
+  "status": "uploaded",
+  "project_uuid": "…",
+  "project_version_uuid": "…",
+  "project_version_identifier": "v3",
+  "entity": { "uuid": "…", "identifier": "invoice" },
+  "field":  { "uuid": "…", "identifier": "attachment", "type": "FILE" },
+  "storage_type": "OBJECT_STORE",
+  "source_path": "./invoice.pdf",
+  "file_name": "invoice.pdf",
+  "size_bytes": 24576,
+  "object_key": "uploads/invoices/invoice.pdf",
+  "record_value": "https://bucket.s3.us-east-1.amazonaws.com/uploads/invoices/invoice.pdf",
+  "signed_url": "https://bucket.s3.us-east-1.amazonaws.com/uploads/invoices/invoice.pdf?X-Amz-…",
+  "signed_url_expires_in_seconds": 86400,
+  "force_override": false
+}
+```
+
+**`record_value` is the field to use.** It is what the data manager stores in the
+record column, and it is an *identifier*, not a public link — nuzur re-signs it
+whenever the record is read, so fetching it directly from a private bucket gives
+a 403. `signed_url` is a temporary, directly-fetchable URL that expires in 24
+hours; storing it in a record is the mistake these two names exist to prevent.
+
+`--dry-run` returns the same document with `"status": "dry_run"` and no
+`record_value` / `signed_url`. `object_key` is absent for a `BINARY` field, whose
+key the server generates per upload.
+
+### Things worth knowing before scripting it
+
+- **The object key has no per-record component.** It is the field's configured
+  path plus the file name, so two records uploading `invoice.pdf` to the same
+  field collide: the second gets `ALREADY_EXISTS`, and `--force` overwrites the
+  file the first record points at. Give each upload a distinct `--name`.
+- **File names are sanitized** the same way the data manager sanitizes them
+  (lowercased, non-`[a-z0-9_]` → `_`, collapsed and trimmed, extension kept), so
+  the same file uploaded from the CLI and from the UI lands on the same key.
+- **`--max-bytes` defaults to 64 MB.** nuzur buffers an upload whole in the API
+  pod, so a much larger file can destabilize it. Raise it deliberately.
+- The command **does not write records**. Take `record_value` and set the field
+  through whatever writes your data.
+
+### Error envelope
+
+The standard envelope, plus `code` carrying the gRPC status when the failure came
+from the server:
+
+```json
+{
+  "status": "error",
+  "code": "ALREADY_EXISTS",
+  "message": "file already exists: uploads/invoices/invoice.pdf\n  re-run with --force to overwrite it, or pass --name to upload under a different file name"
+}
+```
+
 ## Previewing a deploy: `deploy --plan --json`
 
 `nuzur-cli deploy` is declarative — it reconciles the database to the published
