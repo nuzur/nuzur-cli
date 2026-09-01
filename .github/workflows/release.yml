@@ -22,10 +22,23 @@ jobs:
         uses: actions/checkout@v4
         with:
           fetch-depth: 0
+      # go-version-file, NOT "stable": the release must build with the Go version
+      # this module declares, not with whatever is newest on the day it runs.
+      #
+      # "stable" floated to Go 1.27 and broke the release outright. Under 1.27,
+      # golang.org/x/net/http2 swaps server.go (which defines TrailerPrefix) for
+      # server_wrap.go (which does not), and google.golang.org/grpc still
+      # references http2.TrailerPrefix — so every target fails to compile with
+      # "undefined: http2.TrailerPrefix". No grpc or x/net release fixes this
+      # yet, so the Go version is the thing to hold still.
+      #
+      # The test workflow (go.yml) already pinned this way, which is why CI went
+      # on passing while the release broke: a floating toolchain in one workflow
+      # and a pinned one in the other means the two stop testing the same thing.
       - name: Set up Go
         uses: actions/setup-go@v5
         with:
-          go-version: stable
+          go-version-file: go.mod
       # More assembly might be required: Docker logins, GPG, etc.
       # It all depends on your needs.
       - name: Run GoReleaser
