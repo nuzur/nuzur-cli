@@ -39,13 +39,83 @@ func (i *Implementation) resolveConnectionForDeploy(connUUID, teamUUID string) (
 		TeamUuid:       teamUUID,
 	})
 	if err != nil {
-		return "", "", "", "", "", "", "", "", fmt.Errorf("connection %s not found in this project's team: %w", connUUID, err)
+		return "", "", "", "", "", "", "", "", fmt.Errorf("connection %s not found in this project's team: %w%s", connUUID, err, i.connectionNotFoundHint(connUUID, teamUUID))
+	}
+	if conn == nil {
+		return "", "", "", "", "", "", "", "", fmt.Errorf("connection %s not found in this project's team%s", connUUID, i.connectionNotFoundHint(connUUID, teamUUID))
 	}
 	engine, host, port, user, pass, name, params, err = connectionToDSNParts(conn)
 	if err != nil {
 		return "", "", "", "", "", "", "", "", err
 	}
 	return engine, host, port, user, pass, name, params, conn.GetStoreUuid(), nil
+}
+
+// connectionNotFoundHint explains an unresolvable --connection, and returns "" when
+// it has nothing useful to add.
+//
+// Two different uuid namespaces name a "connection" in this CLI and they are easy to
+// confuse — the mistake this exists for is pasting a deployment record's ConnUUID,
+// which is an identity the CLI mints for itself to register the database with a box's
+// agent (see deploy.Deployment.TeamConnUUID) and which appears nowhere in nuzur. The
+// old message echoed the uuid back and left the user hunting team settings for
+// something that was never there.
+func (i *Implementation) connectionNotFoundHint(connUUID, teamUUID string) string {
+	if dep := deploymentByAgentConnUUID(connUUID); dep != nil {
+		hint := fmt.Sprintf("\n  %s is not a team connection — it is the agent-local connection recorded for deployment %s", connUUID, dep.ID)
+		if tc := strings.TrimSpace(dep.TeamConnUUID); tc != "" {
+			return hint + fmt.Sprintf(".\n  That deployment's team connection is %s; `--deployment %s` uses it without naming it", tc, dep.ID)
+		}
+		return hint + ".\n  It only resolves through that box's agent — plan it with `--deployment " + dep.ID + "`"
+	}
+	conns, err := i.teamConnections(teamUUID)
+	if err != nil || len(conns) == 0 {
+		return ""
+	}
+	var b strings.Builder
+	b.WriteString("\n  This team's connections:")
+	for _, c := range conns {
+		if c == nil {
+			continue
+		}
+		b.WriteString(fmt.Sprintf("\n    %s (%s)", c.GetIdentifier(), c.GetUuid()))
+	}
+	return b.String()
+}
+
+// teamConnections lists the team's connections, for error messages only.
+func (i *Implementation) teamConnections(teamUUID string) ([]*nemgen.Connection, error) {
+	if strings.TrimSpace(teamUUID) == "" {
+		return nil, fmt.Errorf("no team")
+	}
+	ctx, err := productclient.ClientContext()
+	if err != nil {
+		return nil, err
+	}
+	team, err := i.productClient.ProductClient.GetTeamForUser(ctx, &pb.GetTeamForUserRequest{TeamUuid: teamUUID})
+	if err != nil {
+		return nil, err
+	}
+	return team.GetConnections(), nil
+}
+
+// deploymentByAgentConnUUID finds a local deployment record whose agent-local
+// ConnUUID matches, which is what makes the namespace mix-up identifiable.
+func deploymentByAgentConnUUID(connUUID string) *deploy.Deployment {
+	connUUID = strings.TrimSpace(connUUID)
+	if connUUID == "" {
+		return nil
+	}
+	deps, err := deploy.ListDeployments()
+	if err != nil {
+		return nil
+	}
+	for idx := range deps {
+		if strings.EqualFold(strings.TrimSpace(deps[idx].ConnUUID), connUUID) {
+			return &deps[idx]
+		}
+	}
+	return nil
 }
 
 // r2EndpointHost is the suffix Cloudflare gives every account's S3-compatible

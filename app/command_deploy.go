@@ -219,6 +219,22 @@ func (i *Implementation) runDeploy(c *cli.Context) (rerr error) {
 		return err
 	}
 	st.s = settings
+	// --deployment and --connection can each name a database, and they used to be
+	// resolved in opposite orders on the two sides: apply consumes --connection
+	// unconditionally (see stepResolveAndConfigure), while --plan ranks --deployment
+	// first. That made `--plan --deployment X --connection Y` plan X and apply Y —
+	// the one thing a plan must never do. Neither order is worth defending when the
+	// two disagree, so say so instead of silently picking one.
+	if depID := strings.TrimSpace(c.String("deployment")); depID != "" {
+		if conn := strings.TrimSpace(st.s.Connection); conn != "" {
+			deps, _ := deploy.ListDeployments()
+			if rec := findDeploymentByID(deps, depID); rec != nil {
+				if rt := strings.TrimSpace(rec.TeamConnUUID); rt != "" && !strings.EqualFold(rt, conn) {
+					return fmt.Errorf("--deployment %s was deployed against team connection %s, but --connection names %s — they are different databases. Drop one: --deployment alone reuses the recorded connection, --connection alone targets that connection directly", depID, rt, conn)
+				}
+			}
+		}
+	}
 	// --deployment <id>: take the targeting from a recorded deployment, the same
 	// selector --plan uses. Skipped for --plan, which resolves the record itself (it
 	// targets a DATABASE, and can legitimately plan a record this project's flags

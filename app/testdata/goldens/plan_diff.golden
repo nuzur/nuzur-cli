@@ -4,7 +4,7 @@ ERR [34mLoading project versions...[0m
 ERR [34mComputing the schema plan (nothing will be applied)...[0m
 ERR [34m
 ERR Plan for project "sfapi", version v_21 (APPROVED)[0m
-ERR [34mTarget: deployment sfapi-seedbox0 — mysql — schema "sfapi" — via agent f8888e33-0000-0000-0000-000000000001 — connection f8888e33-0000-0000-0000-0000000000c1[0m
+ERR [34mTarget: deployment sfapi-seedbox0 — mysql — schema "sfapi" — via agent f8888e33-0000-0000-0000-000000000001 — agent-local connection f8888e33-0000-0000-0000-0000000000c1[0m
 ERR 
 ERR [34m3 statements: 1 additive, 2 DESTRUCTIVE (delete data)[0m
 ERR 

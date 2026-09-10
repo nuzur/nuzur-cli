@@ -130,6 +130,71 @@ func TestResolvePlanTargetFromState(t *testing.T) {
 		}
 	})
 
+	t.Run("a recorded team connection wins over the box's agent", func(t *testing.T) {
+		dep := planDep("dep-1", "h1", "app")
+		dep.TeamConnUUID = "team-conn-1"
+		got, err := resolvePlanTargetFromState(planTargetInput{
+			DeploymentID: "dep-1", ProjectUUID: "project-1",
+			Deployments: []deploy.Deployment{dep},
+		})
+		if err != nil {
+			t.Fatalf("unexpected error: %v", err)
+		}
+		// Apply adopts TeamConnUUID and pushes remotely; the plan has to match or it
+		// is describing a different database than the deploy will touch.
+		if got.Mode != connModeRemote || got.TeamConnUUID != "team-conn-1" {
+			t.Fatalf("got mode=%q teamconn=%q, want remote/team-conn-1", got.Mode, got.TeamConnUUID)
+		}
+		if got.AgentUUID != "" || got.ConnUUID != "" {
+			t.Fatalf("remote target should carry no agent identity, got %+v", got)
+		}
+	})
+
+	// The regression: an external-database deployment records a team connection and
+	// often never pairs an agent at all. Plan used to refuse it outright while
+	// `deploy --deployment` applied it without complaint.
+	t.Run("an external-db deployment with no paired agent still plans", func(t *testing.T) {
+		dep := planDep("dep-1", "h1", "app")
+		dep.LocalAgentUUID = ""
+		dep.ConnUUID = ""
+		dep.ExternalDB = true
+		dep.TeamConnUUID = "team-conn-1"
+		dep.DBEngine = deploy.DBMySQL
+		got, err := resolvePlanTargetFromState(planTargetInput{
+			DeploymentID: "dep-1", ProjectUUID: "project-1",
+			Deployments: []deploy.Deployment{dep},
+		})
+		if err != nil {
+			t.Fatalf("unexpected error: %v", err)
+		}
+		if got.Mode != connModeRemote || got.TeamConnUUID != "team-conn-1" {
+			t.Fatalf("got %+v", got)
+		}
+		// Same connection identity and mode the apply side derives for this record.
+		apply := deployPushTarget("", "", got.Schema, dep.TeamConnUUID, "", dep.DBEngine)
+		if apply.Mode != got.Mode || apply.TeamConnUUID != got.TeamConnUUID || apply.Schema != got.Schema {
+			t.Fatalf("plan %+v and apply %+v disagree", got, apply)
+		}
+	})
+
+	t.Run("a deployment with neither route names both escape hatches", func(t *testing.T) {
+		dep := planDep("dep-1", "h1", "app")
+		dep.LocalAgentUUID = ""
+		dep.TeamConnUUID = ""
+		_, err := resolvePlanTargetFromState(planTargetInput{
+			DeploymentID: "dep-1", ProjectUUID: "project-1",
+			Deployments: []deploy.Deployment{dep},
+		})
+		if err == nil {
+			t.Fatal("expected an error")
+		}
+		for _, want := range []string{"--connection", "--local-agent"} {
+			if !strings.Contains(err.Error(), want) {
+				t.Errorf("err = %v, missing %q", err, want)
+			}
+		}
+	})
+
 	t.Run("a team connection is a remote target", func(t *testing.T) {
 		got, err := resolvePlanTargetFromState(planTargetInput{
 			TeamConnUUID: "team-conn-1",

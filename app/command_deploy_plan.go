@@ -134,22 +134,43 @@ func planTargetFromDeployment(dep *deploy.Deployment, projectUUID, dbSchemaFlag 
 	if projectUUID != "" && dep.ProjectUUID != "" && dep.ProjectUUID != projectUUID {
 		return nil, fmt.Errorf("deployment %q belongs to project %s, not the project being planned (%s) — plan the project that owns it, or pass a different --deployment", dep.ID, dep.ProjectUUID, projectUUID)
 	}
-	if dep.LocalAgentUUID == "" {
-		return nil, fmt.Errorf("deployment %q has no paired agent recorded, so there is nothing to reach its database through (the deploy that created it did not finish pairing) — pass --local-agent/--local-agent-connection, or --connection", dep.ID)
-	}
-	if dep.ConnUUID == "" {
-		return nil, fmt.Errorf("deployment %q has no database connection recorded — pass --local-agent-connection with the connection uuid", dep.ID)
-	}
 	engine := dep.DBEngine
 	if engine == "" {
 		engine = deploy.DBMySQL
 	}
 	// The recorded identifier is what named the database on the box.
+	schema := deploySchemaName(engine, sanitizeDBName(dep.Identifier), dbSchemaFlag)
+
+	// A recorded TEAM connection wins over the box's agent, because that is the
+	// order the apply side uses: applyDeploymentSelector adopts TeamConnUUID and
+	// deployPushTarget then returns a remote target. Reaching for the agent first
+	// would plan a different route than the deploy takes, and on an external-database
+	// deployment — which has a team connection and often no paired agent at all —
+	// it refused to plan something `deploy --deployment` applies without complaint.
+	if tc := strings.TrimSpace(dep.TeamConnUUID); tc != "" {
+		return &planTarget{
+			Mode:         connModeRemote,
+			TeamConnUUID: tc,
+			Schema:       schema,
+			Engine:       engine,
+			DeploymentID: dep.ID,
+			Source:       "deployment " + dep.ID,
+		}, nil
+	}
+
+	// No team connection: the database is behind the box, so it is only reachable
+	// through that box's agent.
+	if dep.LocalAgentUUID == "" {
+		return nil, fmt.Errorf("deployment %q records neither a team connection nor a paired agent, so there is nothing to reach its database through (the deploy that created it did not finish pairing) — pass --connection, or --local-agent/--local-agent-connection", dep.ID)
+	}
+	if dep.ConnUUID == "" {
+		return nil, fmt.Errorf("deployment %q has no database connection recorded — pass --local-agent-connection with the connection uuid", dep.ID)
+	}
 	return &planTarget{
 		Mode:         connModeLocal,
 		AgentUUID:    dep.LocalAgentUUID,
 		ConnUUID:     dep.ConnUUID,
-		Schema:       deploySchemaName(engine, sanitizeDBName(dep.Identifier), dbSchemaFlag),
+		Schema:       schema,
 		Engine:       engine,
 		DeploymentID: dep.ID,
 		Source:       "deployment " + dep.ID,

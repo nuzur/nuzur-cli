@@ -190,7 +190,10 @@ func planTargetLine(t planTargetReport) string {
 	}
 	switch {
 	case t.LocalAgentUUID != "":
-		parts = append(parts, "via agent "+t.LocalAgentUUID, "connection "+t.LocalAgentConnectionUUID)
+		// "agent-local" rather than bare "connection": this uuid is minted by the CLI
+		// for the box's agent and exists nowhere in nuzur, so an unqualified label
+		// invites hunting for it in team settings.
+		parts = append(parts, "via agent "+t.LocalAgentUUID, "agent-local connection "+t.LocalAgentConnectionUUID)
 	case t.TeamConnectionUUID != "":
 		parts = append(parts, "team connection "+t.TeamConnectionUUID)
 	}
