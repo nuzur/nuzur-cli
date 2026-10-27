@@ -48,6 +48,7 @@ const (
 	NuzurProduct_CreateProject_FullMethodName                               = "/NuzurProduct/CreateProject"
 	NuzurProduct_UpdateProject_FullMethodName                               = "/NuzurProduct/UpdateProject"
 	NuzurProduct_GetProjectName_FullMethodName                              = "/NuzurProduct/GetProjectName"
+	NuzurProduct_GetProjectPreview_FullMethodName                           = "/NuzurProduct/GetProjectPreview"
 	NuzurProduct_ListProjectVersions_FullMethodName                         = "/NuzurProduct/ListProjectVersions"
 	NuzurProduct_ListProjectVersionsForUser_FullMethodName                  = "/NuzurProduct/ListProjectVersionsForUser"
 	NuzurProduct_ListProjectVersionsForUserCached_FullMethodName            = "/NuzurProduct/ListProjectVersionsForUserCached"
@@ -69,7 +70,6 @@ const (
 	NuzurProduct_SendProjectVersionForReview_FullMethodName                 = "/NuzurProduct/SendProjectVersionForReview"
 	NuzurProduct_WithdrawFromReviewProjectVersion_FullMethodName            = "/NuzurProduct/WithdrawFromReviewProjectVersion"
 	NuzurProduct_ReviewProjectVersion_FullMethodName                        = "/NuzurProduct/ReviewProjectVersion"
-	NuzurProduct_UploadProjectVersionSnapshot_FullMethodName                = "/NuzurProduct/UploadProjectVersionSnapshot"
 	NuzurProduct_GetSignedFileURL_FullMethodName                            = "/NuzurProduct/GetSignedFileURL"
 	NuzurProduct_UploadExtensionExecutionFile_FullMethodName                = "/NuzurProduct/UploadExtensionExecutionFile"
 	NuzurProduct_GetExtensionExecutionFile_FullMethodName                   = "/NuzurProduct/GetExtensionExecutionFile"
@@ -99,6 +99,7 @@ const (
 	NuzurProduct_UpdateChangeRequest_FullMethodName                         = "/NuzurProduct/UpdateChangeRequest"
 	NuzurProduct_ApplyChangeRequestOps_FullMethodName                       = "/NuzurProduct/ApplyChangeRequestOps"
 	NuzurProduct_WithdrawChangeRequestFromReview_FullMethodName             = "/NuzurProduct/WithdrawChangeRequestFromReview"
+	NuzurProduct_UndoDataChangeRequest_FullMethodName                       = "/NuzurProduct/UndoDataChangeRequest"
 	NuzurProduct_ListChangeRequestsForReview_FullMethodName                 = "/NuzurProduct/ListChangeRequestsForReview"
 	NuzurProduct_GetUserProjectVersionData_FullMethodName                   = "/NuzurProduct/GetUserProjectVersionData"
 	NuzurProduct_SaveUserProjectVersionData_FullMethodName                  = "/NuzurProduct/SaveUserProjectVersionData"
@@ -148,6 +149,14 @@ const (
 	NuzurProduct_ListDeploymentRevisions_FullMethodName                     = "/NuzurProduct/ListDeploymentRevisions"
 	NuzurProduct_UpdateDeploymentRevisionStatus_FullMethodName              = "/NuzurProduct/UpdateDeploymentRevisionStatus"
 	NuzurProduct_MarkDeploymentDestroyed_FullMethodName                     = "/NuzurProduct/MarkDeploymentDestroyed"
+	NuzurProduct_CreateCodebase_FullMethodName                              = "/NuzurProduct/CreateCodebase"
+	NuzurProduct_ListCodebasesForProject_FullMethodName                     = "/NuzurProduct/ListCodebasesForProject"
+	NuzurProduct_UploadCodeSnapshot_FullMethodName                          = "/NuzurProduct/UploadCodeSnapshot"
+	NuzurProduct_ListCodeSnapshots_FullMethodName                           = "/NuzurProduct/ListCodeSnapshots"
+	NuzurProduct_GetCodeSnapshot_FullMethodName                             = "/NuzurProduct/GetCodeSnapshot"
+	NuzurProduct_DiffCodeSnapshots_FullMethodName                           = "/NuzurProduct/DiffCodeSnapshots"
+	NuzurProduct_GetCodeModel_FullMethodName                                = "/NuzurProduct/GetCodeModel"
+	NuzurProduct_DescribeComponents_FullMethodName                          = "/NuzurProduct/DescribeComponents"
 	NuzurProduct_CreateAutomation_FullMethodName                            = "/NuzurProduct/CreateAutomation"
 	NuzurProduct_RotateAutomationSecret_FullMethodName                      = "/NuzurProduct/RotateAutomationSecret"
 	NuzurProduct_UpdateAutomation_FullMethodName                            = "/NuzurProduct/UpdateAutomation"
@@ -159,6 +168,7 @@ const (
 	NuzurProduct_GetAutomationEvent_FullMethodName                          = "/NuzurProduct/GetAutomationEvent"
 	NuzurProduct_RetryAutomationEvent_FullMethodName                        = "/NuzurProduct/RetryAutomationEvent"
 	NuzurProduct_MarkChangeRequestApplied_FullMethodName                    = "/NuzurProduct/MarkChangeRequestApplied"
+	NuzurProduct_MarkChangeRequestApplyFailed_FullMethodName                = "/NuzurProduct/MarkChangeRequestApplyFailed"
 )
 
 // NuzurProductClient is the client API for NuzurProduct service.
@@ -198,6 +208,7 @@ type NuzurProductClient interface {
 	CreateProject(ctx context.Context, in *CreateProjectRequest, opts ...grpc.CallOption) (*gen.Project, error)
 	UpdateProject(ctx context.Context, in *UpdateProjectRequest, opts ...grpc.CallOption) (*gen.Project, error)
 	GetProjectName(ctx context.Context, in *GetProjectNameRequest, opts ...grpc.CallOption) (*GetProjectNameResponse, error)
+	GetProjectPreview(ctx context.Context, in *GetProjectPreviewRequest, opts ...grpc.CallOption) (*GetProjectPreviewResponse, error)
 	// project version
 	ListProjectVersions(ctx context.Context, in *ListProjectVersionsRequest, opts ...grpc.CallOption) (*ListProjectVersionsResponse, error)
 	ListProjectVersionsForUser(ctx context.Context, in *ListProjectVersionsForUserRequest, opts ...grpc.CallOption) (*ListProjectVersionsForUserResponse, error)
@@ -226,7 +237,6 @@ type NuzurProductClient interface {
 	WithdrawFromReviewProjectVersion(ctx context.Context, in *WithdrawFromReviewProjectVersionRequest, opts ...grpc.CallOption) (*gen.ProjectVersion, error)
 	ReviewProjectVersion(ctx context.Context, in *ReviewProjectVersionRequest, opts ...grpc.CallOption) (*gen.ProjectVersion, error)
 	// files
-	UploadProjectVersionSnapshot(ctx context.Context, in *UploadProjectVersionSnapshotRequest, opts ...grpc.CallOption) (*UploadProjectVersionSnapshotResponse, error)
 	GetSignedFileURL(ctx context.Context, in *GetSignedFileURLRequest, opts ...grpc.CallOption) (*GetSignedFileURLResponse, error)
 	UploadExtensionExecutionFile(ctx context.Context, in *UploadExtensionExecutionFileRequest, opts ...grpc.CallOption) (*UploadExtensionExecutionFileResponse, error)
 	GetExtensionExecutionFile(ctx context.Context, in *GetExtensionExecutionFileRequest, opts ...grpc.CallOption) (*GetExtensionExecutionFileResponse, error)
@@ -261,6 +271,7 @@ type NuzurProductClient interface {
 	UpdateChangeRequest(ctx context.Context, in *UpdateChangeRequestRequest, opts ...grpc.CallOption) (*gen.ChangeRequest, error)
 	ApplyChangeRequestOps(ctx context.Context, in *ApplyChangeRequestOpsRequest, opts ...grpc.CallOption) (*ApplyChangeRequestOpsResponse, error)
 	WithdrawChangeRequestFromReview(ctx context.Context, in *WithdrawChangeRequestFromReviewRequest, opts ...grpc.CallOption) (*gen.ChangeRequest, error)
+	UndoDataChangeRequest(ctx context.Context, in *UndoDataChangeRequestRequest, opts ...grpc.CallOption) (*UndoDataChangeRequestResponse, error)
 	ListChangeRequestsForReview(ctx context.Context, in *ListChangeRequestsForReviewRequest, opts ...grpc.CallOption) (*ListChangeRequestsForReviewResponse, error)
 	// user project version data
 	GetUserProjectVersionData(ctx context.Context, in *GetUserProjectVersionDataRequest, opts ...grpc.CallOption) (*GetUserProjectVersionDataResponse, error)
@@ -327,6 +338,19 @@ type NuzurProductClient interface {
 	ListDeploymentRevisions(ctx context.Context, in *ListDeploymentRevisionsRequest, opts ...grpc.CallOption) (*ListDeploymentRevisionsResponse, error)
 	UpdateDeploymentRevisionStatus(ctx context.Context, in *UpdateDeploymentRevisionStatusRequest, opts ...grpc.CallOption) (*UpdateDeploymentRevisionStatusResponse, error)
 	MarkDeploymentDestroyed(ctx context.Context, in *MarkDeploymentDestroyedRequest, opts ...grpc.CallOption) (*MarkDeploymentDestroyedResponse, error)
+	// code architecture — `nuzur-cli code scan` uploads per-commit CodeFacts for
+	// a codebase linked to a project; the web Code view and ccmcp read them back
+	// with server-derived findings and commit-to-commit diffs.
+	CreateCodebase(ctx context.Context, in *CreateCodebaseRequest, opts ...grpc.CallOption) (*CreateCodebaseResponse, error)
+	ListCodebasesForProject(ctx context.Context, in *ListCodebasesForProjectRequest, opts ...grpc.CallOption) (*ListCodebasesForProjectResponse, error)
+	UploadCodeSnapshot(ctx context.Context, in *UploadCodeSnapshotRequest, opts ...grpc.CallOption) (*UploadCodeSnapshotResponse, error)
+	ListCodeSnapshots(ctx context.Context, in *ListCodeSnapshotsRequest, opts ...grpc.CallOption) (*ListCodeSnapshotsResponse, error)
+	GetCodeSnapshot(ctx context.Context, in *GetCodeSnapshotRequest, opts ...grpc.CallOption) (*GetCodeSnapshotResponse, error)
+	DiffCodeSnapshots(ctx context.Context, in *DiffCodeSnapshotsRequest, opts ...grpc.CallOption) (*CodeDiff, error)
+	// The curated layer: what each component is for, written by people in the
+	// Code view or by agents through ccmcp describeComponents.
+	GetCodeModel(ctx context.Context, in *GetCodeModelRequest, opts ...grpc.CallOption) (*gen.CodeModel, error)
+	DescribeComponents(ctx context.Context, in *DescribeComponentsRequest, opts ...grpc.CallOption) (*gen.CodeModel, error)
 	// automations
 	CreateAutomation(ctx context.Context, in *CreateAutomationRequest, opts ...grpc.CallOption) (*CreateAutomationResponse, error)
 	RotateAutomationSecret(ctx context.Context, in *RotateAutomationSecretRequest, opts ...grpc.CallOption) (*RotateAutomationSecretResponse, error)
@@ -339,6 +363,7 @@ type NuzurProductClient interface {
 	GetAutomationEvent(ctx context.Context, in *GetAutomationEventRequest, opts ...grpc.CallOption) (*gen.AutomationEvent, error)
 	RetryAutomationEvent(ctx context.Context, in *RetryAutomationEventRequest, opts ...grpc.CallOption) (*gen.AutomationEvent, error)
 	MarkChangeRequestApplied(ctx context.Context, in *MarkChangeRequestAppliedRequest, opts ...grpc.CallOption) (*MarkChangeRequestAppliedResponse, error)
+	MarkChangeRequestApplyFailed(ctx context.Context, in *MarkChangeRequestApplyFailedRequest, opts ...grpc.CallOption) (*MarkChangeRequestApplyFailedResponse, error)
 }
 
 type nuzurProductClient struct {
@@ -629,6 +654,16 @@ func (c *nuzurProductClient) GetProjectName(ctx context.Context, in *GetProjectN
 	return out, nil
 }
 
+func (c *nuzurProductClient) GetProjectPreview(ctx context.Context, in *GetProjectPreviewRequest, opts ...grpc.CallOption) (*GetProjectPreviewResponse, error) {
+	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
+	out := new(GetProjectPreviewResponse)
+	err := c.cc.Invoke(ctx, NuzurProduct_GetProjectPreview_FullMethodName, in, out, cOpts...)
+	if err != nil {
+		return nil, err
+	}
+	return out, nil
+}
+
 func (c *nuzurProductClient) ListProjectVersions(ctx context.Context, in *ListProjectVersionsRequest, opts ...grpc.CallOption) (*ListProjectVersionsResponse, error) {
 	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
 	out := new(ListProjectVersionsResponse)
@@ -833,16 +868,6 @@ func (c *nuzurProductClient) ReviewProjectVersion(ctx context.Context, in *Revie
 	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
 	out := new(gen.ProjectVersion)
 	err := c.cc.Invoke(ctx, NuzurProduct_ReviewProjectVersion_FullMethodName, in, out, cOpts...)
-	if err != nil {
-		return nil, err
-	}
-	return out, nil
-}
-
-func (c *nuzurProductClient) UploadProjectVersionSnapshot(ctx context.Context, in *UploadProjectVersionSnapshotRequest, opts ...grpc.CallOption) (*UploadProjectVersionSnapshotResponse, error) {
-	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
-	out := new(UploadProjectVersionSnapshotResponse)
-	err := c.cc.Invoke(ctx, NuzurProduct_UploadProjectVersionSnapshot_FullMethodName, in, out, cOpts...)
 	if err != nil {
 		return nil, err
 	}
@@ -1133,6 +1158,16 @@ func (c *nuzurProductClient) WithdrawChangeRequestFromReview(ctx context.Context
 	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
 	out := new(gen.ChangeRequest)
 	err := c.cc.Invoke(ctx, NuzurProduct_WithdrawChangeRequestFromReview_FullMethodName, in, out, cOpts...)
+	if err != nil {
+		return nil, err
+	}
+	return out, nil
+}
+
+func (c *nuzurProductClient) UndoDataChangeRequest(ctx context.Context, in *UndoDataChangeRequestRequest, opts ...grpc.CallOption) (*UndoDataChangeRequestResponse, error) {
+	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
+	out := new(UndoDataChangeRequestResponse)
+	err := c.cc.Invoke(ctx, NuzurProduct_UndoDataChangeRequest_FullMethodName, in, out, cOpts...)
 	if err != nil {
 		return nil, err
 	}
@@ -1629,6 +1664,86 @@ func (c *nuzurProductClient) MarkDeploymentDestroyed(ctx context.Context, in *Ma
 	return out, nil
 }
 
+func (c *nuzurProductClient) CreateCodebase(ctx context.Context, in *CreateCodebaseRequest, opts ...grpc.CallOption) (*CreateCodebaseResponse, error) {
+	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
+	out := new(CreateCodebaseResponse)
+	err := c.cc.Invoke(ctx, NuzurProduct_CreateCodebase_FullMethodName, in, out, cOpts...)
+	if err != nil {
+		return nil, err
+	}
+	return out, nil
+}
+
+func (c *nuzurProductClient) ListCodebasesForProject(ctx context.Context, in *ListCodebasesForProjectRequest, opts ...grpc.CallOption) (*ListCodebasesForProjectResponse, error) {
+	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
+	out := new(ListCodebasesForProjectResponse)
+	err := c.cc.Invoke(ctx, NuzurProduct_ListCodebasesForProject_FullMethodName, in, out, cOpts...)
+	if err != nil {
+		return nil, err
+	}
+	return out, nil
+}
+
+func (c *nuzurProductClient) UploadCodeSnapshot(ctx context.Context, in *UploadCodeSnapshotRequest, opts ...grpc.CallOption) (*UploadCodeSnapshotResponse, error) {
+	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
+	out := new(UploadCodeSnapshotResponse)
+	err := c.cc.Invoke(ctx, NuzurProduct_UploadCodeSnapshot_FullMethodName, in, out, cOpts...)
+	if err != nil {
+		return nil, err
+	}
+	return out, nil
+}
+
+func (c *nuzurProductClient) ListCodeSnapshots(ctx context.Context, in *ListCodeSnapshotsRequest, opts ...grpc.CallOption) (*ListCodeSnapshotsResponse, error) {
+	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
+	out := new(ListCodeSnapshotsResponse)
+	err := c.cc.Invoke(ctx, NuzurProduct_ListCodeSnapshots_FullMethodName, in, out, cOpts...)
+	if err != nil {
+		return nil, err
+	}
+	return out, nil
+}
+
+func (c *nuzurProductClient) GetCodeSnapshot(ctx context.Context, in *GetCodeSnapshotRequest, opts ...grpc.CallOption) (*GetCodeSnapshotResponse, error) {
+	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
+	out := new(GetCodeSnapshotResponse)
+	err := c.cc.Invoke(ctx, NuzurProduct_GetCodeSnapshot_FullMethodName, in, out, cOpts...)
+	if err != nil {
+		return nil, err
+	}
+	return out, nil
+}
+
+func (c *nuzurProductClient) DiffCodeSnapshots(ctx context.Context, in *DiffCodeSnapshotsRequest, opts ...grpc.CallOption) (*CodeDiff, error) {
+	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
+	out := new(CodeDiff)
+	err := c.cc.Invoke(ctx, NuzurProduct_DiffCodeSnapshots_FullMethodName, in, out, cOpts...)
+	if err != nil {
+		return nil, err
+	}
+	return out, nil
+}
+
+func (c *nuzurProductClient) GetCodeModel(ctx context.Context, in *GetCodeModelRequest, opts ...grpc.CallOption) (*gen.CodeModel, error) {
+	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
+	out := new(gen.CodeModel)
+	err := c.cc.Invoke(ctx, NuzurProduct_GetCodeModel_FullMethodName, in, out, cOpts...)
+	if err != nil {
+		return nil, err
+	}
+	return out, nil
+}
+
+func (c *nuzurProductClient) DescribeComponents(ctx context.Context, in *DescribeComponentsRequest, opts ...grpc.CallOption) (*gen.CodeModel, error) {
+	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
+	out := new(gen.CodeModel)
+	err := c.cc.Invoke(ctx, NuzurProduct_DescribeComponents_FullMethodName, in, out, cOpts...)
+	if err != nil {
+		return nil, err
+	}
+	return out, nil
+}
+
 func (c *nuzurProductClient) CreateAutomation(ctx context.Context, in *CreateAutomationRequest, opts ...grpc.CallOption) (*CreateAutomationResponse, error) {
 	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
 	out := new(CreateAutomationResponse)
@@ -1739,6 +1854,16 @@ func (c *nuzurProductClient) MarkChangeRequestApplied(ctx context.Context, in *M
 	return out, nil
 }
 
+func (c *nuzurProductClient) MarkChangeRequestApplyFailed(ctx context.Context, in *MarkChangeRequestApplyFailedRequest, opts ...grpc.CallOption) (*MarkChangeRequestApplyFailedResponse, error) {
+	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
+	out := new(MarkChangeRequestApplyFailedResponse)
+	err := c.cc.Invoke(ctx, NuzurProduct_MarkChangeRequestApplyFailed_FullMethodName, in, out, cOpts...)
+	if err != nil {
+		return nil, err
+	}
+	return out, nil
+}
+
 // NuzurProductServer is the server API for NuzurProduct service.
 // All implementations must embed UnimplementedNuzurProductServer
 // for forward compatibility.
@@ -1776,6 +1901,7 @@ type NuzurProductServer interface {
 	CreateProject(context.Context, *CreateProjectRequest) (*gen.Project, error)
 	UpdateProject(context.Context, *UpdateProjectRequest) (*gen.Project, error)
 	GetProjectName(context.Context, *GetProjectNameRequest) (*GetProjectNameResponse, error)
+	GetProjectPreview(context.Context, *GetProjectPreviewRequest) (*GetProjectPreviewResponse, error)
 	// project version
 	ListProjectVersions(context.Context, *ListProjectVersionsRequest) (*ListProjectVersionsResponse, error)
 	ListProjectVersionsForUser(context.Context, *ListProjectVersionsForUserRequest) (*ListProjectVersionsForUserResponse, error)
@@ -1804,7 +1930,6 @@ type NuzurProductServer interface {
 	WithdrawFromReviewProjectVersion(context.Context, *WithdrawFromReviewProjectVersionRequest) (*gen.ProjectVersion, error)
 	ReviewProjectVersion(context.Context, *ReviewProjectVersionRequest) (*gen.ProjectVersion, error)
 	// files
-	UploadProjectVersionSnapshot(context.Context, *UploadProjectVersionSnapshotRequest) (*UploadProjectVersionSnapshotResponse, error)
 	GetSignedFileURL(context.Context, *GetSignedFileURLRequest) (*GetSignedFileURLResponse, error)
 	UploadExtensionExecutionFile(context.Context, *UploadExtensionExecutionFileRequest) (*UploadExtensionExecutionFileResponse, error)
 	GetExtensionExecutionFile(context.Context, *GetExtensionExecutionFileRequest) (*GetExtensionExecutionFileResponse, error)
@@ -1839,6 +1964,7 @@ type NuzurProductServer interface {
 	UpdateChangeRequest(context.Context, *UpdateChangeRequestRequest) (*gen.ChangeRequest, error)
 	ApplyChangeRequestOps(context.Context, *ApplyChangeRequestOpsRequest) (*ApplyChangeRequestOpsResponse, error)
 	WithdrawChangeRequestFromReview(context.Context, *WithdrawChangeRequestFromReviewRequest) (*gen.ChangeRequest, error)
+	UndoDataChangeRequest(context.Context, *UndoDataChangeRequestRequest) (*UndoDataChangeRequestResponse, error)
 	ListChangeRequestsForReview(context.Context, *ListChangeRequestsForReviewRequest) (*ListChangeRequestsForReviewResponse, error)
 	// user project version data
 	GetUserProjectVersionData(context.Context, *GetUserProjectVersionDataRequest) (*GetUserProjectVersionDataResponse, error)
@@ -1905,6 +2031,19 @@ type NuzurProductServer interface {
 	ListDeploymentRevisions(context.Context, *ListDeploymentRevisionsRequest) (*ListDeploymentRevisionsResponse, error)
 	UpdateDeploymentRevisionStatus(context.Context, *UpdateDeploymentRevisionStatusRequest) (*UpdateDeploymentRevisionStatusResponse, error)
 	MarkDeploymentDestroyed(context.Context, *MarkDeploymentDestroyedRequest) (*MarkDeploymentDestroyedResponse, error)
+	// code architecture — `nuzur-cli code scan` uploads per-commit CodeFacts for
+	// a codebase linked to a project; the web Code view and ccmcp read them back
+	// with server-derived findings and commit-to-commit diffs.
+	CreateCodebase(context.Context, *CreateCodebaseRequest) (*CreateCodebaseResponse, error)
+	ListCodebasesForProject(context.Context, *ListCodebasesForProjectRequest) (*ListCodebasesForProjectResponse, error)
+	UploadCodeSnapshot(context.Context, *UploadCodeSnapshotRequest) (*UploadCodeSnapshotResponse, error)
+	ListCodeSnapshots(context.Context, *ListCodeSnapshotsRequest) (*ListCodeSnapshotsResponse, error)
+	GetCodeSnapshot(context.Context, *GetCodeSnapshotRequest) (*GetCodeSnapshotResponse, error)
+	DiffCodeSnapshots(context.Context, *DiffCodeSnapshotsRequest) (*CodeDiff, error)
+	// The curated layer: what each component is for, written by people in the
+	// Code view or by agents through ccmcp describeComponents.
+	GetCodeModel(context.Context, *GetCodeModelRequest) (*gen.CodeModel, error)
+	DescribeComponents(context.Context, *DescribeComponentsRequest) (*gen.CodeModel, error)
 	// automations
 	CreateAutomation(context.Context, *CreateAutomationRequest) (*CreateAutomationResponse, error)
 	RotateAutomationSecret(context.Context, *RotateAutomationSecretRequest) (*RotateAutomationSecretResponse, error)
@@ -1917,6 +2056,7 @@ type NuzurProductServer interface {
 	GetAutomationEvent(context.Context, *GetAutomationEventRequest) (*gen.AutomationEvent, error)
 	RetryAutomationEvent(context.Context, *RetryAutomationEventRequest) (*gen.AutomationEvent, error)
 	MarkChangeRequestApplied(context.Context, *MarkChangeRequestAppliedRequest) (*MarkChangeRequestAppliedResponse, error)
+	MarkChangeRequestApplyFailed(context.Context, *MarkChangeRequestApplyFailedRequest) (*MarkChangeRequestApplyFailedResponse, error)
 	mustEmbedUnimplementedNuzurProductServer()
 }
 
@@ -2011,6 +2151,9 @@ func (UnimplementedNuzurProductServer) UpdateProject(context.Context, *UpdatePro
 func (UnimplementedNuzurProductServer) GetProjectName(context.Context, *GetProjectNameRequest) (*GetProjectNameResponse, error) {
 	return nil, status.Error(codes.Unimplemented, "method GetProjectName not implemented")
 }
+func (UnimplementedNuzurProductServer) GetProjectPreview(context.Context, *GetProjectPreviewRequest) (*GetProjectPreviewResponse, error) {
+	return nil, status.Error(codes.Unimplemented, "method GetProjectPreview not implemented")
+}
 func (UnimplementedNuzurProductServer) ListProjectVersions(context.Context, *ListProjectVersionsRequest) (*ListProjectVersionsResponse, error) {
 	return nil, status.Error(codes.Unimplemented, "method ListProjectVersions not implemented")
 }
@@ -2073,9 +2216,6 @@ func (UnimplementedNuzurProductServer) WithdrawFromReviewProjectVersion(context.
 }
 func (UnimplementedNuzurProductServer) ReviewProjectVersion(context.Context, *ReviewProjectVersionRequest) (*gen.ProjectVersion, error) {
 	return nil, status.Error(codes.Unimplemented, "method ReviewProjectVersion not implemented")
-}
-func (UnimplementedNuzurProductServer) UploadProjectVersionSnapshot(context.Context, *UploadProjectVersionSnapshotRequest) (*UploadProjectVersionSnapshotResponse, error) {
-	return nil, status.Error(codes.Unimplemented, "method UploadProjectVersionSnapshot not implemented")
 }
 func (UnimplementedNuzurProductServer) GetSignedFileURL(context.Context, *GetSignedFileURLRequest) (*GetSignedFileURLResponse, error) {
 	return nil, status.Error(codes.Unimplemented, "method GetSignedFileURL not implemented")
@@ -2163,6 +2303,9 @@ func (UnimplementedNuzurProductServer) ApplyChangeRequestOps(context.Context, *A
 }
 func (UnimplementedNuzurProductServer) WithdrawChangeRequestFromReview(context.Context, *WithdrawChangeRequestFromReviewRequest) (*gen.ChangeRequest, error) {
 	return nil, status.Error(codes.Unimplemented, "method WithdrawChangeRequestFromReview not implemented")
+}
+func (UnimplementedNuzurProductServer) UndoDataChangeRequest(context.Context, *UndoDataChangeRequestRequest) (*UndoDataChangeRequestResponse, error) {
+	return nil, status.Error(codes.Unimplemented, "method UndoDataChangeRequest not implemented")
 }
 func (UnimplementedNuzurProductServer) ListChangeRequestsForReview(context.Context, *ListChangeRequestsForReviewRequest) (*ListChangeRequestsForReviewResponse, error) {
 	return nil, status.Error(codes.Unimplemented, "method ListChangeRequestsForReview not implemented")
@@ -2311,6 +2454,30 @@ func (UnimplementedNuzurProductServer) UpdateDeploymentRevisionStatus(context.Co
 func (UnimplementedNuzurProductServer) MarkDeploymentDestroyed(context.Context, *MarkDeploymentDestroyedRequest) (*MarkDeploymentDestroyedResponse, error) {
 	return nil, status.Error(codes.Unimplemented, "method MarkDeploymentDestroyed not implemented")
 }
+func (UnimplementedNuzurProductServer) CreateCodebase(context.Context, *CreateCodebaseRequest) (*CreateCodebaseResponse, error) {
+	return nil, status.Error(codes.Unimplemented, "method CreateCodebase not implemented")
+}
+func (UnimplementedNuzurProductServer) ListCodebasesForProject(context.Context, *ListCodebasesForProjectRequest) (*ListCodebasesForProjectResponse, error) {
+	return nil, status.Error(codes.Unimplemented, "method ListCodebasesForProject not implemented")
+}
+func (UnimplementedNuzurProductServer) UploadCodeSnapshot(context.Context, *UploadCodeSnapshotRequest) (*UploadCodeSnapshotResponse, error) {
+	return nil, status.Error(codes.Unimplemented, "method UploadCodeSnapshot not implemented")
+}
+func (UnimplementedNuzurProductServer) ListCodeSnapshots(context.Context, *ListCodeSnapshotsRequest) (*ListCodeSnapshotsResponse, error) {
+	return nil, status.Error(codes.Unimplemented, "method ListCodeSnapshots not implemented")
+}
+func (UnimplementedNuzurProductServer) GetCodeSnapshot(context.Context, *GetCodeSnapshotRequest) (*GetCodeSnapshotResponse, error) {
+	return nil, status.Error(codes.Unimplemented, "method GetCodeSnapshot not implemented")
+}
+func (UnimplementedNuzurProductServer) DiffCodeSnapshots(context.Context, *DiffCodeSnapshotsRequest) (*CodeDiff, error) {
+	return nil, status.Error(codes.Unimplemented, "method DiffCodeSnapshots not implemented")
+}
+func (UnimplementedNuzurProductServer) GetCodeModel(context.Context, *GetCodeModelRequest) (*gen.CodeModel, error) {
+	return nil, status.Error(codes.Unimplemented, "method GetCodeModel not implemented")
+}
+func (UnimplementedNuzurProductServer) DescribeComponents(context.Context, *DescribeComponentsRequest) (*gen.CodeModel, error) {
+	return nil, status.Error(codes.Unimplemented, "method DescribeComponents not implemented")
+}
 func (UnimplementedNuzurProductServer) CreateAutomation(context.Context, *CreateAutomationRequest) (*CreateAutomationResponse, error) {
 	return nil, status.Error(codes.Unimplemented, "method CreateAutomation not implemented")
 }
@@ -2343,6 +2510,9 @@ func (UnimplementedNuzurProductServer) RetryAutomationEvent(context.Context, *Re
 }
 func (UnimplementedNuzurProductServer) MarkChangeRequestApplied(context.Context, *MarkChangeRequestAppliedRequest) (*MarkChangeRequestAppliedResponse, error) {
 	return nil, status.Error(codes.Unimplemented, "method MarkChangeRequestApplied not implemented")
+}
+func (UnimplementedNuzurProductServer) MarkChangeRequestApplyFailed(context.Context, *MarkChangeRequestApplyFailedRequest) (*MarkChangeRequestApplyFailedResponse, error) {
+	return nil, status.Error(codes.Unimplemented, "method MarkChangeRequestApplyFailed not implemented")
 }
 func (UnimplementedNuzurProductServer) mustEmbedUnimplementedNuzurProductServer() {}
 func (UnimplementedNuzurProductServer) testEmbeddedByValue()                      {}
@@ -2869,6 +3039,24 @@ func _NuzurProduct_GetProjectName_Handler(srv interface{}, ctx context.Context, 
 	return interceptor(ctx, in, info, handler)
 }
 
+func _NuzurProduct_GetProjectPreview_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
+	in := new(GetProjectPreviewRequest)
+	if err := dec(in); err != nil {
+		return nil, err
+	}
+	if interceptor == nil {
+		return srv.(NuzurProductServer).GetProjectPreview(ctx, in)
+	}
+	info := &grpc.UnaryServerInfo{
+		Server:     srv,
+		FullMethod: NuzurProduct_GetProjectPreview_FullMethodName,
+	}
+	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
+		return srv.(NuzurProductServer).GetProjectPreview(ctx, req.(*GetProjectPreviewRequest))
+	}
+	return interceptor(ctx, in, info, handler)
+}
+
 func _NuzurProduct_ListProjectVersions_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
 	in := new(ListProjectVersionsRequest)
 	if err := dec(in); err != nil {
@@ -3243,24 +3431,6 @@ func _NuzurProduct_ReviewProjectVersion_Handler(srv interface{}, ctx context.Con
 	}
 	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
 		return srv.(NuzurProductServer).ReviewProjectVersion(ctx, req.(*ReviewProjectVersionRequest))
-	}
-	return interceptor(ctx, in, info, handler)
-}
-
-func _NuzurProduct_UploadProjectVersionSnapshot_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
-	in := new(UploadProjectVersionSnapshotRequest)
-	if err := dec(in); err != nil {
-		return nil, err
-	}
-	if interceptor == nil {
-		return srv.(NuzurProductServer).UploadProjectVersionSnapshot(ctx, in)
-	}
-	info := &grpc.UnaryServerInfo{
-		Server:     srv,
-		FullMethod: NuzurProduct_UploadProjectVersionSnapshot_FullMethodName,
-	}
-	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
-		return srv.(NuzurProductServer).UploadProjectVersionSnapshot(ctx, req.(*UploadProjectVersionSnapshotRequest))
 	}
 	return interceptor(ctx, in, info, handler)
 }
@@ -3783,6 +3953,24 @@ func _NuzurProduct_WithdrawChangeRequestFromReview_Handler(srv interface{}, ctx 
 	}
 	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
 		return srv.(NuzurProductServer).WithdrawChangeRequestFromReview(ctx, req.(*WithdrawChangeRequestFromReviewRequest))
+	}
+	return interceptor(ctx, in, info, handler)
+}
+
+func _NuzurProduct_UndoDataChangeRequest_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
+	in := new(UndoDataChangeRequestRequest)
+	if err := dec(in); err != nil {
+		return nil, err
+	}
+	if interceptor == nil {
+		return srv.(NuzurProductServer).UndoDataChangeRequest(ctx, in)
+	}
+	info := &grpc.UnaryServerInfo{
+		Server:     srv,
+		FullMethod: NuzurProduct_UndoDataChangeRequest_FullMethodName,
+	}
+	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
+		return srv.(NuzurProductServer).UndoDataChangeRequest(ctx, req.(*UndoDataChangeRequestRequest))
 	}
 	return interceptor(ctx, in, info, handler)
 }
@@ -4669,6 +4857,150 @@ func _NuzurProduct_MarkDeploymentDestroyed_Handler(srv interface{}, ctx context.
 	return interceptor(ctx, in, info, handler)
 }
 
+func _NuzurProduct_CreateCodebase_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
+	in := new(CreateCodebaseRequest)
+	if err := dec(in); err != nil {
+		return nil, err
+	}
+	if interceptor == nil {
+		return srv.(NuzurProductServer).CreateCodebase(ctx, in)
+	}
+	info := &grpc.UnaryServerInfo{
+		Server:     srv,
+		FullMethod: NuzurProduct_CreateCodebase_FullMethodName,
+	}
+	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
+		return srv.(NuzurProductServer).CreateCodebase(ctx, req.(*CreateCodebaseRequest))
+	}
+	return interceptor(ctx, in, info, handler)
+}
+
+func _NuzurProduct_ListCodebasesForProject_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
+	in := new(ListCodebasesForProjectRequest)
+	if err := dec(in); err != nil {
+		return nil, err
+	}
+	if interceptor == nil {
+		return srv.(NuzurProductServer).ListCodebasesForProject(ctx, in)
+	}
+	info := &grpc.UnaryServerInfo{
+		Server:     srv,
+		FullMethod: NuzurProduct_ListCodebasesForProject_FullMethodName,
+	}
+	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
+		return srv.(NuzurProductServer).ListCodebasesForProject(ctx, req.(*ListCodebasesForProjectRequest))
+	}
+	return interceptor(ctx, in, info, handler)
+}
+
+func _NuzurProduct_UploadCodeSnapshot_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
+	in := new(UploadCodeSnapshotRequest)
+	if err := dec(in); err != nil {
+		return nil, err
+	}
+	if interceptor == nil {
+		return srv.(NuzurProductServer).UploadCodeSnapshot(ctx, in)
+	}
+	info := &grpc.UnaryServerInfo{
+		Server:     srv,
+		FullMethod: NuzurProduct_UploadCodeSnapshot_FullMethodName,
+	}
+	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
+		return srv.(NuzurProductServer).UploadCodeSnapshot(ctx, req.(*UploadCodeSnapshotRequest))
+	}
+	return interceptor(ctx, in, info, handler)
+}
+
+func _NuzurProduct_ListCodeSnapshots_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
+	in := new(ListCodeSnapshotsRequest)
+	if err := dec(in); err != nil {
+		return nil, err
+	}
+	if interceptor == nil {
+		return srv.(NuzurProductServer).ListCodeSnapshots(ctx, in)
+	}
+	info := &grpc.UnaryServerInfo{
+		Server:     srv,
+		FullMethod: NuzurProduct_ListCodeSnapshots_FullMethodName,
+	}
+	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
+		return srv.(NuzurProductServer).ListCodeSnapshots(ctx, req.(*ListCodeSnapshotsRequest))
+	}
+	return interceptor(ctx, in, info, handler)
+}
+
+func _NuzurProduct_GetCodeSnapshot_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
+	in := new(GetCodeSnapshotRequest)
+	if err := dec(in); err != nil {
+		return nil, err
+	}
+	if interceptor == nil {
+		return srv.(NuzurProductServer).GetCodeSnapshot(ctx, in)
+	}
+	info := &grpc.UnaryServerInfo{
+		Server:     srv,
+		FullMethod: NuzurProduct_GetCodeSnapshot_FullMethodName,
+	}
+	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
+		return srv.(NuzurProductServer).GetCodeSnapshot(ctx, req.(*GetCodeSnapshotRequest))
+	}
+	return interceptor(ctx, in, info, handler)
+}
+
+func _NuzurProduct_DiffCodeSnapshots_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
+	in := new(DiffCodeSnapshotsRequest)
+	if err := dec(in); err != nil {
+		return nil, err
+	}
+	if interceptor == nil {
+		return srv.(NuzurProductServer).DiffCodeSnapshots(ctx, in)
+	}
+	info := &grpc.UnaryServerInfo{
+		Server:     srv,
+		FullMethod: NuzurProduct_DiffCodeSnapshots_FullMethodName,
+	}
+	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
+		return srv.(NuzurProductServer).DiffCodeSnapshots(ctx, req.(*DiffCodeSnapshotsRequest))
+	}
+	return interceptor(ctx, in, info, handler)
+}
+
+func _NuzurProduct_GetCodeModel_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
+	in := new(GetCodeModelRequest)
+	if err := dec(in); err != nil {
+		return nil, err
+	}
+	if interceptor == nil {
+		return srv.(NuzurProductServer).GetCodeModel(ctx, in)
+	}
+	info := &grpc.UnaryServerInfo{
+		Server:     srv,
+		FullMethod: NuzurProduct_GetCodeModel_FullMethodName,
+	}
+	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
+		return srv.(NuzurProductServer).GetCodeModel(ctx, req.(*GetCodeModelRequest))
+	}
+	return interceptor(ctx, in, info, handler)
+}
+
+func _NuzurProduct_DescribeComponents_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
+	in := new(DescribeComponentsRequest)
+	if err := dec(in); err != nil {
+		return nil, err
+	}
+	if interceptor == nil {
+		return srv.(NuzurProductServer).DescribeComponents(ctx, in)
+	}
+	info := &grpc.UnaryServerInfo{
+		Server:     srv,
+		FullMethod: NuzurProduct_DescribeComponents_FullMethodName,
+	}
+	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
+		return srv.(NuzurProductServer).DescribeComponents(ctx, req.(*DescribeComponentsRequest))
+	}
+	return interceptor(ctx, in, info, handler)
+}
+
 func _NuzurProduct_CreateAutomation_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
 	in := new(CreateAutomationRequest)
 	if err := dec(in); err != nil {
@@ -4867,6 +5199,24 @@ func _NuzurProduct_MarkChangeRequestApplied_Handler(srv interface{}, ctx context
 	return interceptor(ctx, in, info, handler)
 }
 
+func _NuzurProduct_MarkChangeRequestApplyFailed_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
+	in := new(MarkChangeRequestApplyFailedRequest)
+	if err := dec(in); err != nil {
+		return nil, err
+	}
+	if interceptor == nil {
+		return srv.(NuzurProductServer).MarkChangeRequestApplyFailed(ctx, in)
+	}
+	info := &grpc.UnaryServerInfo{
+		Server:     srv,
+		FullMethod: NuzurProduct_MarkChangeRequestApplyFailed_FullMethodName,
+	}
+	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
+		return srv.(NuzurProductServer).MarkChangeRequestApplyFailed(ctx, req.(*MarkChangeRequestApplyFailedRequest))
+	}
+	return interceptor(ctx, in, info, handler)
+}
+
 // NuzurProduct_ServiceDesc is the grpc.ServiceDesc for NuzurProduct service.
 // It's only intended for direct use with grpc.RegisterService,
 // and not to be introspected or modified (even as a copy)
@@ -4987,6 +5337,10 @@ var NuzurProduct_ServiceDesc = grpc.ServiceDesc{
 			Handler:    _NuzurProduct_GetProjectName_Handler,
 		},
 		{
+			MethodName: "GetProjectPreview",
+			Handler:    _NuzurProduct_GetProjectPreview_Handler,
+		},
+		{
 			MethodName: "ListProjectVersions",
 			Handler:    _NuzurProduct_ListProjectVersions_Handler,
 		},
@@ -5069,10 +5423,6 @@ var NuzurProduct_ServiceDesc = grpc.ServiceDesc{
 		{
 			MethodName: "ReviewProjectVersion",
 			Handler:    _NuzurProduct_ReviewProjectVersion_Handler,
-		},
-		{
-			MethodName: "UploadProjectVersionSnapshot",
-			Handler:    _NuzurProduct_UploadProjectVersionSnapshot_Handler,
 		},
 		{
 			MethodName: "GetSignedFileURL",
@@ -5189,6 +5539,10 @@ var NuzurProduct_ServiceDesc = grpc.ServiceDesc{
 		{
 			MethodName: "WithdrawChangeRequestFromReview",
 			Handler:    _NuzurProduct_WithdrawChangeRequestFromReview_Handler,
+		},
+		{
+			MethodName: "UndoDataChangeRequest",
+			Handler:    _NuzurProduct_UndoDataChangeRequest_Handler,
 		},
 		{
 			MethodName: "ListChangeRequestsForReview",
@@ -5387,6 +5741,38 @@ var NuzurProduct_ServiceDesc = grpc.ServiceDesc{
 			Handler:    _NuzurProduct_MarkDeploymentDestroyed_Handler,
 		},
 		{
+			MethodName: "CreateCodebase",
+			Handler:    _NuzurProduct_CreateCodebase_Handler,
+		},
+		{
+			MethodName: "ListCodebasesForProject",
+			Handler:    _NuzurProduct_ListCodebasesForProject_Handler,
+		},
+		{
+			MethodName: "UploadCodeSnapshot",
+			Handler:    _NuzurProduct_UploadCodeSnapshot_Handler,
+		},
+		{
+			MethodName: "ListCodeSnapshots",
+			Handler:    _NuzurProduct_ListCodeSnapshots_Handler,
+		},
+		{
+			MethodName: "GetCodeSnapshot",
+			Handler:    _NuzurProduct_GetCodeSnapshot_Handler,
+		},
+		{
+			MethodName: "DiffCodeSnapshots",
+			Handler:    _NuzurProduct_DiffCodeSnapshots_Handler,
+		},
+		{
+			MethodName: "GetCodeModel",
+			Handler:    _NuzurProduct_GetCodeModel_Handler,
+		},
+		{
+			MethodName: "DescribeComponents",
+			Handler:    _NuzurProduct_DescribeComponents_Handler,
+		},
+		{
 			MethodName: "CreateAutomation",
 			Handler:    _NuzurProduct_CreateAutomation_Handler,
 		},
@@ -5429,6 +5815,10 @@ var NuzurProduct_ServiceDesc = grpc.ServiceDesc{
 		{
 			MethodName: "MarkChangeRequestApplied",
 			Handler:    _NuzurProduct_MarkChangeRequestApplied_Handler,
+		},
+		{
+			MethodName: "MarkChangeRequestApplyFailed",
+			Handler:    _NuzurProduct_MarkChangeRequestApplyFailed_Handler,
 		},
 	},
 	Streams:  []grpc.StreamDesc{},

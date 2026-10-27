@@ -14,6 +14,7 @@ package app
 import (
 	"context"
 	"fmt"
+	"golang.org/x/term"
 	"os"
 	"path/filepath"
 	"strings"
@@ -282,15 +283,13 @@ func (i *Implementation) stepK8sWriteConfig(ctx context.Context, st *deployState
 
 // isInteractive reports whether there is a person at the terminal to answer.
 //
-// stdin being a character device is the signal: a piped or redirected stdin
-// means a script, CI, or an agent, and a prompt there would either hang or be
-// answered by whatever bytes happened to be next.
+// stdin being a terminal is the signal: a piped or redirected stdin means a
+// script, CI, or an agent, and a prompt there would either hang or be answered
+// by whatever bytes happened to be next. It must be a real terminal, not just
+// a character device: /dev/null is one too, and a job run with </dev/null
+// would otherwise be prompted and read EOF as its answer.
 func isInteractive() bool {
-	fi, err := os.Stdin.Stat()
-	if err != nil {
-		return false
-	}
-	return fi.Mode()&os.ModeCharDevice != 0
+	return term.IsTerminal(int(os.Stdin.Fd()))
 }
 
 // promptWriteConfig asks how much to write. Non-interactive runs write nothing:
