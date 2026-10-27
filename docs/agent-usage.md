@@ -99,6 +99,31 @@ nuzur-cli run-extension --project my-project --version v3 --extension sql-push \
   --confirm-steps --json
 ```
 
+`store` is a team **database store** (team settings → databases), not an object
+store. `describe` lists only the active ones, and `connection` lists only active
+connections, the same lists the web form offers.
+
+#### Reviewing the SQL before it runs
+
+`sql-push` stops at a confirmation step whose content is the exact SQL it will
+execute. How the CLI answers that step:
+
+| flags | what happens at the step |
+|---|---|
+| `--preview-steps` | prints the step (the SQL) and **declines** it. Nothing is applied and the command exits 0. A dry run. |
+| `--confirm-steps` | approves without showing it. Use it only after a preview, or against a disposable database. |
+| interactive run, neither flag | shows the step and asks `Apply this step? [y/N]` |
+| non-interactive run, neither flag | fails with an error, without answering |
+
+The two flags contradict each other and are rejected together. The safe
+sequence against a database you care about:
+
+```bash
+nuzur-cli run-extension --project p --version v --extension sql-push \
+  --config '{"store":"…","connection":"…","schema":"…"}' --preview-steps
+# read the SQL, then the same command with --confirm-steps
+```
+
 Interactively, picking `sql-push` or `sql-import` asks for the connection mode,
 starting on whichever member you ran last for that project version.
 

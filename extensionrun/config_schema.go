@@ -80,7 +80,7 @@ func typeName(t extensiongen.ExtensionInputType) string {
 }
 
 // ConfigResolver resolves and caches the concrete option lists (entities,
-// connections, object stores, local agents) for a project version, so uuid/enum
+// connections, database stores, local agents) for a project version, so uuid/enum
 // fields can be described and validated without re-fetching per field. It is
 // shared by `describe` (to list options), the non-interactive config apply (to
 // validate membership) and the interactive prompts (to offer choices).
@@ -175,7 +175,7 @@ func (r *ConfigResolver) OptionsForEntityType(declared extensiongen.EntityType, 
 		return r.connections, nil
 	case extensiongen.EntityType_ENTITY_TYPE_DB_STORE:
 		if !r.storesDone {
-			stores, err := r.er.GetTeamObjectStores(r.project.TeamUuid)
+			stores, err := r.er.GetTeamDBStores(r.project.TeamUuid)
 			if err != nil {
 				return nil, err
 			}

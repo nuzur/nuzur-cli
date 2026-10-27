@@ -1,8 +1,11 @@
 package app
 
 import (
+	"bufio"
 	"errors"
 	"fmt"
+	"io"
+	"os"
 	"regexp"
 	"strings"
 
@@ -68,6 +71,7 @@ type extRunFlags struct {
 	nonInteractive bool
 	jsonOutput     bool
 	confirmSteps   bool
+	previewSteps   bool
 }
 
 // hasConfigInput reports whether the caller supplied a config non-interactively.
@@ -94,6 +98,7 @@ func extensionRunFlags() []cli.Flag {
 		cli.BoolFlag{Name: "non-interactive", Usage: "Never prompt; fail if required input is missing (for scripts and AI agents)"},
 		cli.BoolFlag{Name: "json", Usage: "Emit machine-readable JSON output (implies non-interactive)"},
 		cli.BoolFlag{Name: "confirm-steps", Usage: "Auto-approve confirmation steps (e.g. the SQL-diff review in sql-push) so step-based extensions run non-interactively"},
+		cli.BoolFlag{Name: "preview-steps", Usage: "Print each confirmation step (for sql-push, the exact SQL it would run) and decline it, so nothing is applied. A dry run for step-based extensions"},
 	}
 }
 
@@ -110,6 +115,7 @@ func extRunFlagsFromContext(c *cli.Context) extRunFlags {
 		nonInteractive: c.Bool("non-interactive"),
 		jsonOutput:     c.Bool("json"),
 		confirmSteps:   c.Bool("confirm-steps"),
+		previewSteps:   c.Bool("preview-steps"),
 	}
 }
 
@@ -119,6 +125,9 @@ func extRunFlagsFromContext(c *cli.Context) extRunFlags {
 // `nuzur-cli go-code-gen`).
 func (i *Implementation) runExtensionFlow(extensionIdentifier string, flags extRunFlags) error {
 	interactive := !flags.isNonInteractive()
+	if flags.confirmSteps && flags.previewSteps {
+		return i.failRun(flags, errors.New("--confirm-steps and --preview-steps contradict each other: one applies every step, the other declines them all"))
+	}
 
 	// Parsed up front: for a paired extension the fields it carries also tell us
 	// which connection mode the caller means.
@@ -211,7 +220,16 @@ func (i *Implementation) runExtensionFlow(extensionIdentifier string, flags extR
 		ConfigValues:       configValues,
 		OutputPath:         outputPath,
 		AutoConfirmSteps:   flags.confirmSteps,
+		OnConfirmationStep: stepDeciderForRun(flags, interactive, os.Stdin, os.Stderr),
 	})
+	if flags.previewSteps && errors.Is(err, extensionrun.ErrExecutionCancelled) {
+		// Declining was the point: the preview is the steps printed above.
+		if flags.jsonOutput {
+			return printJSONValue(result)
+		}
+		outputtools.PrintlnColored("Preview only: every confirmation step was declined and nothing was applied.", outputtools.Green)
+		return nil
+	}
 	if err != nil {
 		// A cancelled execution is the extension's own decision, reported in its own
 		// words (sql-push says "Changes rejected by user"). Surface that instead of
@@ -852,4 +870,53 @@ func (i *Implementation) FindGeneratorExtension(er extensionRunner, identifier s
 		}
 	}
 	return nil, fmt.Errorf("the %q extension is not available for your account", identifier)
+}
+
+// stepDeciderForRun picks how a run answers confirmation steps (for sql-push,
+// the review of the SQL it is about to execute). nil defers to
+// RunParams.AutoConfirmSteps: confirm everything with --confirm-steps, or fail
+// a non-interactive run that has no answer.
+//
+//   - --preview-steps prints each step and declines it: a dry run.
+//   - an interactive run without --confirm-steps shows the step and asks, so a
+//     person reviews the SQL before it touches their database.
+func stepDeciderForRun(flags extRunFlags, interactive bool, in io.Reader, out io.Writer) extensionrun.StepDecider {
+	switch {
+	case flags.previewSteps:
+		return func(p extensionrun.StepPrompt) (extensionrun.StepDecision, error) {
+			printStepPrompt(out, p)
+			return extensionrun.StepDecision{Confirm: false, Reason: "preview only"}, nil
+		}
+	case interactive && !flags.confirmSteps:
+		reader := bufio.NewReader(in)
+		return func(p extensionrun.StepPrompt) (extensionrun.StepDecision, error) {
+			printStepPrompt(out, p)
+			fmt.Fprint(out, "Apply this step? [y/N]: ")
+			answer, err := reader.ReadString('\n')
+			if err != nil && answer == "" {
+				return extensionrun.StepDecision{}, fmt.Errorf("reading the answer to step %q: %w", p.StepIdentifier, err)
+			}
+			answer = strings.ToLower(strings.TrimSpace(answer))
+			if answer == "y" || answer == "yes" {
+				return extensionrun.StepDecision{Confirm: true, Reason: "confirmed by user"}, nil
+			}
+			return extensionrun.StepDecision{Confirm: false, Reason: "declined by user"}, nil
+		}
+	}
+	return nil
+}
+
+func printStepPrompt(out io.Writer, p extensionrun.StepPrompt) {
+	title := p.Title
+	if title == "" {
+		title = p.StepIdentifier
+	}
+	fmt.Fprintf(out, "\n── confirmation step: %s ──\n", title)
+	if p.Description != "" {
+		fmt.Fprintln(out, p.Description)
+	}
+	if p.Content != "" {
+		fmt.Fprintln(out, p.Content)
+	}
+	fmt.Fprintln(out, "──")
 }

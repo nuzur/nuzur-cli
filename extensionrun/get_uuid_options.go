@@ -46,34 +46,52 @@ func (i *Implementation) GetStandaloneEntities(projectVersionUUID string) ([]*ne
 	return result, nil
 }
 
-// GetTeamConnections returns all connections for the team that owns the given project.
+// GetTeamConnections returns the active connections of the team that owns the
+// given project — the same list the web's extension config form offers.
 func (i *Implementation) GetTeamConnections(projectTeamUUID string) ([]*nemgen.Connection, error) {
-	ctx, err := productclient.ClientContext()
+	team, err := i.getTeam(projectTeamUUID)
 	if err != nil {
 		return nil, err
 	}
-
-	team, err := i.productClient.ProductClient.GetTeamForUser(ctx, &gen.GetTeamForUserRequest{
-		TeamUuid: projectTeamUUID,
-	})
-	if err != nil {
-		return nil, err
-	}
-	return team.Connections, nil
+	return activeConnections(team), nil
 }
 
-// GetTeamObjectStores returns all object stores for the team that owns the given project.
-func (i *Implementation) GetTeamObjectStores(projectTeamUUID string) ([]*nemgen.ObjectStore, error) {
+// GetTeamDBStores returns the active database stores (team settings →
+// databases) of the team that owns the given project. A DB_STORE field means
+// one of these, never an object store: sql-push and sql-import pick a store,
+// then a connection that belongs to it.
+func (i *Implementation) GetTeamDBStores(projectTeamUUID string) ([]*nemgen.Store, error) {
+	team, err := i.getTeam(projectTeamUUID)
+	if err != nil {
+		return nil, err
+	}
+	return activeDBStores(team), nil
+}
+
+func (i *Implementation) getTeam(teamUUID string) (*nemgen.Team, error) {
 	ctx, err := productclient.ClientContext()
 	if err != nil {
 		return nil, err
 	}
+	return i.productClient.ProductClient.GetTeamForUser(ctx, &gen.GetTeamForUserRequest{TeamUuid: teamUUID})
+}
 
-	team, err := i.productClient.ProductClient.GetTeamForUser(ctx, &gen.GetTeamForUserRequest{
-		TeamUuid: projectTeamUUID,
-	})
-	if err != nil {
-		return nil, err
+func activeDBStores(team *nemgen.Team) []*nemgen.Store {
+	var out []*nemgen.Store
+	for _, s := range team.GetStores() {
+		if s.GetStatus() == nemgen.StoreStatus_STORE_STATUS_ACTIVE {
+			out = append(out, s)
+		}
 	}
-	return team.ObjectStores, nil
+	return out
+}
+
+func activeConnections(team *nemgen.Team) []*nemgen.Connection {
+	var out []*nemgen.Connection
+	for _, c := range team.GetConnections() {
+		if c.GetStatus() == nemgen.ConnectionStatus_CONNECTION_STATUS_ACTIVE {
+			out = append(out, c)
+		}
+	}
+	return out
 }
