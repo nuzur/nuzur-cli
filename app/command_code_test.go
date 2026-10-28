@@ -22,6 +22,7 @@ type codeFakeClient struct {
 	pb.NuzurProductClient
 	existing []*pb.CodeSnapshotItem
 	uploads  []*pb.UploadCodeSnapshotRequest
+	archived []string
 }
 
 func (f *codeFakeClient) ListCodeSnapshots(ctx context.Context, in *pb.ListCodeSnapshotsRequest, opts ...grpc.CallOption) (*pb.ListCodeSnapshotsResponse, error) {
@@ -34,6 +35,11 @@ func (f *codeFakeClient) UploadCodeSnapshot(ctx context.Context, in *pb.UploadCo
 		Snapshot: &nemgen.CodeSnapshot{CommitSha: "aef8d2d6c1f3b6f7e0c9d8a7b6c5d4e3f2a1b0c9"},
 		Summary:  &pb.CodeSummary{Findings: []*pb.CodeFinding{{Severity: "warning", Title: "3 components depend on each other in a cycle"}}},
 	}, nil
+}
+
+func (f *codeFakeClient) ArchiveCodebase(ctx context.Context, in *pb.ArchiveCodebaseRequest, opts ...grpc.CallOption) (*nemgen.Codebase, error) {
+	f.archived = append(f.archived, in.GetCodebaseUuid())
+	return &nemgen.Codebase{Uuid: in.GetCodebaseUuid()}, nil
 }
 
 func codeTestFacts() *pb.CodeFacts {
@@ -116,5 +122,27 @@ func TestAskYesNo(t *testing.T) {
 	}
 	if _, err := askYesNo(strings.NewReader(""), io.Discard, "?"); err == nil {
 		t.Error("EOF without an answer must be an error, not a silent no")
+	}
+}
+
+func TestCodeArchive(t *testing.T) {
+	isolateHome(t)
+	fake := &codeFakeClient{}
+	i := &Implementation{productClient: &productclient.Client{ProductClient: fake}}
+	link := codescan.Link{CodebaseUUID: "cb", Identifier: "app"}
+
+	// Outside a terminal, archiving needs --yes and must not call the server.
+	if err := i.codeArchive(link, false, strings.NewReader(""), io.Discard); err == nil || !strings.Contains(err.Error(), "--yes") {
+		t.Fatalf("err = %v, want a request for --yes", err)
+	}
+	if len(fake.archived) != 0 {
+		t.Fatal("archived without confirmation")
+	}
+	var out bytes.Buffer
+	if err := i.codeArchive(link, true, strings.NewReader(""), &out); err != nil {
+		t.Fatal(err)
+	}
+	if len(fake.archived) != 1 || fake.archived[0] != "cb" || !strings.Contains(out.String(), "Archived codebase app") {
+		t.Fatalf("archived %v, output %q", fake.archived, out.String())
 	}
 }

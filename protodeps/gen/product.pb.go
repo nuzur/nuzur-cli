@@ -13382,6 +13382,50 @@ func (x *DescribeComponentsRequest) GetExpectedVersion() int64 {
 	return 0
 }
 
+type ArchiveCodebaseRequest struct {
+	state         protoimpl.MessageState `protogen:"open.v1"`
+	CodebaseUuid  string                 `protobuf:"bytes,1,opt,name=codebase_uuid,json=codebaseUuid,proto3" json:"codebase_uuid,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *ArchiveCodebaseRequest) Reset() {
+	*x = ArchiveCodebaseRequest{}
+	mi := &file_product_proto_msgTypes[243]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *ArchiveCodebaseRequest) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*ArchiveCodebaseRequest) ProtoMessage() {}
+
+func (x *ArchiveCodebaseRequest) ProtoReflect() protoreflect.Message {
+	mi := &file_product_proto_msgTypes[243]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use ArchiveCodebaseRequest.ProtoReflect.Descriptor instead.
+func (*ArchiveCodebaseRequest) Descriptor() ([]byte, []int) {
+	return file_product_proto_rawDescGZIP(), []int{243}
+}
+
+func (x *ArchiveCodebaseRequest) GetCodebaseUuid() string {
+	if x != nil {
+		return x.CodebaseUuid
+	}
+	return ""
+}
+
 var File_product_proto protoreflect.FileDescriptor
 
 const file_product_proto_rawDesc = "" +
@@ -14278,7 +14322,9 @@ const file_product_proto_rawDesc = "" +
 	"\n" +
 	"components\x18\x02 \x03(\v2\x17.nem.CodeModelComponentR\n" +
 	"components\x12)\n" +
-	"\x10expected_version\x18\x03 \x01(\x03R\x0fexpectedVersion*}\n" +
+	"\x10expected_version\x18\x03 \x01(\x03R\x0fexpectedVersion\"=\n" +
+	"\x16ArchiveCodebaseRequest\x12#\n" +
+	"\rcodebase_uuid\x18\x01 \x01(\tR\fcodebaseUuid*}\n" +
 	"\x13CheckoutSessionType\x12!\n" +
 	"\x1dCHECKOUT_SESSION_TYPE_INVALID\x10\x00\x12!\n" +
 	"\x1dCHECKOUT_SESSION_TYPE_MONTHLY\x10\x01\x12 \n" +
@@ -14294,7 +14340,7 @@ const file_product_proto_rawDesc = "" +
 	"\x1bEXECUTION_SLOT_STATE_QUEUED\x10\x02*g\n" +
 	"\x17ChangeRequestOwnerScope\x12\"\n" +
 	"\x1eCHANGE_REQUEST_OWNER_SCOPE_OWN\x10\x00\x12(\n" +
-	"$CHANGE_REQUEST_OWNER_SCOPE_ALL_ADMIN\x10\x012\xe4`\n" +
+	"$CHANGE_REQUEST_OWNER_SCOPE_ALL_ADMIN\x10\x012\xa1a\n" +
 	"\fNuzurProduct\x12'\n" +
 	"\aGetUser\x12\x0f.GetUserRequest\x1a\t.nem.User\"\x00\x121\n" +
 	"\fGetTokenUser\x12\x14.GetTokenUserRequest\x1a\t.nem.User\"\x00\x125\n" +
@@ -14434,7 +14480,8 @@ const file_product_proto_rawDesc = "" +
 	"\x0fGetCodeSnapshot\x12\x17.GetCodeSnapshotRequest\x1a\x18.GetCodeSnapshotResponse\"\x00\x12;\n" +
 	"\x11DiffCodeSnapshots\x12\x19.DiffCodeSnapshotsRequest\x1a\t.CodeDiff\"\x00\x126\n" +
 	"\fGetCodeModel\x12\x14.GetCodeModelRequest\x1a\x0e.nem.CodeModel\"\x00\x12B\n" +
-	"\x12DescribeComponents\x12\x1a.DescribeComponentsRequest\x1a\x0e.nem.CodeModel\"\x00\x12I\n" +
+	"\x12DescribeComponents\x12\x1a.DescribeComponentsRequest\x1a\x0e.nem.CodeModel\"\x00\x12;\n" +
+	"\x0fArchiveCodebase\x12\x17.ArchiveCodebaseRequest\x1a\r.nem.Codebase\"\x00\x12I\n" +
 	"\x10CreateAutomation\x12\x18.CreateAutomationRequest\x1a\x19.CreateAutomationResponse\"\x00\x12[\n" +
 	"\x16RotateAutomationSecret\x12\x1e.RotateAutomationSecretRequest\x1a\x1f.RotateAutomationSecretResponse\"\x00\x12?\n" +
 	"\x10UpdateAutomation\x12\x18.UpdateAutomationRequest\x1a\x0f.nem.Automation\"\x00\x12I\n" +
@@ -14462,7 +14509,7 @@ func file_product_proto_rawDescGZIP() []byte {
 }
 
 var file_product_proto_enumTypes = make([]protoimpl.EnumInfo, 4)
-var file_product_proto_msgTypes = make([]protoimpl.MessageInfo, 246)
+var file_product_proto_msgTypes = make([]protoimpl.MessageInfo, 247)
 var file_product_proto_goTypes = []any{
 	(CheckoutSessionType)(0),                                   // 0: CheckoutSessionType
 	(ProContext)(0),                                            // 1: ProContext
@@ -14711,185 +14758,186 @@ var file_product_proto_goTypes = []any{
 	(*DiffCodeSnapshotsRequest)(nil),                           // 244: DiffCodeSnapshotsRequest
 	(*GetCodeModelRequest)(nil),                                // 245: GetCodeModelRequest
 	(*DescribeComponentsRequest)(nil),                          // 246: DescribeComponentsRequest
-	nil,                                                        // 247: DriftCheckStatement.ExpectedByColumnEntry
-	nil,                                                        // 248: GenerateSQLForCRStatement.PreImageColumnFieldUuidsEntry
-	nil,                                                        // 249: DataChangeAppliedValues.ValuesEntry
-	(gen.UserProjectRole)(0),                                   // 250: nem.UserProjectRole
-	(gen.UserTeamRole)(0),                                      // 251: nem.UserTeamRole
-	(*gen.User)(nil),                                           // 252: nem.User
-	(*gen.UserTeam)(nil),                                       // 253: nem.UserTeam
-	(*gen.UserProject)(nil),                                    // 254: nem.UserProject
-	(*gen.Team)(nil),                                           // 255: nem.Team
-	(*fieldmaskpb.FieldMask)(nil),                              // 256: google.protobuf.FieldMask
-	(*gen.Connection)(nil),                                     // 257: nem.Connection
-	(*gen.Project)(nil),                                        // 258: nem.Project
-	(*gen.ProjectVersion)(nil),                                 // 259: nem.ProjectVersion
-	(gen.ProjectVersionReviewStatus)(0),                        // 260: nem.ProjectVersionReviewStatus
-	(*gen.ChangeRequest)(nil),                                  // 261: nem.ChangeRequest
-	(*gen.Extension)(nil),                                      // 262: nem.Extension
-	(*gen.ExtensionVersion)(nil),                               // 263: nem.ExtensionVersion
-	(*gen.ExtensionExecution)(nil),                             // 264: nem.ExtensionExecution
-	(gen.ChangeRequestReviewStatus)(0),                         // 265: nem.ChangeRequestReviewStatus
-	(gen.ChangeRequestChangeType)(0),                           // 266: nem.ChangeRequestChangeType
-	(*gen.ObjectStore)(nil),                                    // 267: nem.ObjectStore
-	(gen.ConnectionDbType)(0),                                  // 268: nem.ConnectionDbType
-	(*gen.Membership)(nil),                                     // 269: nem.Membership
-	(gen.MembershipType)(0),                                    // 270: nem.MembershipType
-	(*gen.AiUsage)(nil),                                        // 271: nem.AiUsage
-	(*gen.LocalAgent)(nil),                                     // 272: nem.LocalAgent
-	(*gen.LocalAgentConnection)(nil),                           // 273: nem.LocalAgentConnection
-	(gen.LocalAgentStatus)(0),                                  // 274: nem.LocalAgentStatus
-	(*timestamppb.Timestamp)(nil),                              // 275: google.protobuf.Timestamp
-	(*gen.Deployment)(nil),                                     // 276: nem.Deployment
-	(*gen.DeploymentRevision)(nil),                             // 277: nem.DeploymentRevision
-	(gen.DeploymentRevisionStatus)(0),                          // 278: nem.DeploymentRevisionStatus
-	(*gen.Automation)(nil),                                     // 279: nem.Automation
-	(gen.AutomationEventStatus)(0),                             // 280: nem.AutomationEventStatus
-	(*gen.AutomationEvent)(nil),                                // 281: nem.AutomationEvent
-	(*gen.DataChangeBeforeImage)(nil),                          // 282: nem.DataChangeBeforeImage
-	(*gen.Codebase)(nil),                                       // 283: nem.Codebase
-	(*gen.CodeSnapshot)(nil),                                   // 284: nem.CodeSnapshot
-	(*CodeSummary)(nil),                                        // 285: CodeSummary
-	(*CodeFacts)(nil),                                          // 286: CodeFacts
-	(*gen.CodeModelComponent)(nil),                             // 287: nem.CodeModelComponent
-	(*CodeDiff)(nil),                                           // 288: CodeDiff
-	(*gen.CodeModel)(nil),                                      // 289: nem.CodeModel
+	(*ArchiveCodebaseRequest)(nil),                             // 247: ArchiveCodebaseRequest
+	nil,                                                        // 248: DriftCheckStatement.ExpectedByColumnEntry
+	nil,                                                        // 249: GenerateSQLForCRStatement.PreImageColumnFieldUuidsEntry
+	nil,                                                        // 250: DataChangeAppliedValues.ValuesEntry
+	(gen.UserProjectRole)(0),                                   // 251: nem.UserProjectRole
+	(gen.UserTeamRole)(0),                                      // 252: nem.UserTeamRole
+	(*gen.User)(nil),                                           // 253: nem.User
+	(*gen.UserTeam)(nil),                                       // 254: nem.UserTeam
+	(*gen.UserProject)(nil),                                    // 255: nem.UserProject
+	(*gen.Team)(nil),                                           // 256: nem.Team
+	(*fieldmaskpb.FieldMask)(nil),                              // 257: google.protobuf.FieldMask
+	(*gen.Connection)(nil),                                     // 258: nem.Connection
+	(*gen.Project)(nil),                                        // 259: nem.Project
+	(*gen.ProjectVersion)(nil),                                 // 260: nem.ProjectVersion
+	(gen.ProjectVersionReviewStatus)(0),                        // 261: nem.ProjectVersionReviewStatus
+	(*gen.ChangeRequest)(nil),                                  // 262: nem.ChangeRequest
+	(*gen.Extension)(nil),                                      // 263: nem.Extension
+	(*gen.ExtensionVersion)(nil),                               // 264: nem.ExtensionVersion
+	(*gen.ExtensionExecution)(nil),                             // 265: nem.ExtensionExecution
+	(gen.ChangeRequestReviewStatus)(0),                         // 266: nem.ChangeRequestReviewStatus
+	(gen.ChangeRequestChangeType)(0),                           // 267: nem.ChangeRequestChangeType
+	(*gen.ObjectStore)(nil),                                    // 268: nem.ObjectStore
+	(gen.ConnectionDbType)(0),                                  // 269: nem.ConnectionDbType
+	(*gen.Membership)(nil),                                     // 270: nem.Membership
+	(gen.MembershipType)(0),                                    // 271: nem.MembershipType
+	(*gen.AiUsage)(nil),                                        // 272: nem.AiUsage
+	(*gen.LocalAgent)(nil),                                     // 273: nem.LocalAgent
+	(*gen.LocalAgentConnection)(nil),                           // 274: nem.LocalAgentConnection
+	(gen.LocalAgentStatus)(0),                                  // 275: nem.LocalAgentStatus
+	(*timestamppb.Timestamp)(nil),                              // 276: google.protobuf.Timestamp
+	(*gen.Deployment)(nil),                                     // 277: nem.Deployment
+	(*gen.DeploymentRevision)(nil),                             // 278: nem.DeploymentRevision
+	(gen.DeploymentRevisionStatus)(0),                          // 279: nem.DeploymentRevisionStatus
+	(*gen.Automation)(nil),                                     // 280: nem.Automation
+	(gen.AutomationEventStatus)(0),                             // 281: nem.AutomationEventStatus
+	(*gen.AutomationEvent)(nil),                                // 282: nem.AutomationEvent
+	(*gen.DataChangeBeforeImage)(nil),                          // 283: nem.DataChangeBeforeImage
+	(*gen.Codebase)(nil),                                       // 284: nem.Codebase
+	(*gen.CodeSnapshot)(nil),                                   // 285: nem.CodeSnapshot
+	(*CodeSummary)(nil),                                        // 286: CodeSummary
+	(*CodeFacts)(nil),                                          // 287: CodeFacts
+	(*gen.CodeModelComponent)(nil),                             // 288: nem.CodeModelComponent
+	(*CodeDiff)(nil),                                           // 289: CodeDiff
+	(*gen.CodeModel)(nil),                                      // 290: nem.CodeModel
 }
 var file_product_proto_depIdxs = []int32{
-	250, // 0: GetUserRoleForProjectResponse.role:type_name -> nem.UserProjectRole
-	251, // 1: GetUserRoleForTeamResponse.role:type_name -> nem.UserTeamRole
-	252, // 2: UpdateUserRequest.user:type_name -> nem.User
-	252, // 3: ListUsersForTeamResponse.users:type_name -> nem.User
-	253, // 4: ListUsersForTeamResponse.user_teams:type_name -> nem.UserTeam
-	252, // 5: ListUsersForProjectResponse.users:type_name -> nem.User
-	254, // 6: ListUsersForProjectResponse.user_projects:type_name -> nem.UserProject
-	250, // 7: AddUserToProjectRequest.role:type_name -> nem.UserProjectRole
-	250, // 8: UpdateUserProjectRequest.role:type_name -> nem.UserProjectRole
-	251, // 9: AddUserToTeamRequest.role:type_name -> nem.UserTeamRole
-	251, // 10: UpdateUserTeamRequest.role:type_name -> nem.UserTeamRole
-	255, // 11: ListTeamsForUserResponse.teams:type_name -> nem.Team
-	255, // 12: ListTeamsForAdminUserResponse.teams:type_name -> nem.Team
-	255, // 13: CreateTeamRequest.team:type_name -> nem.Team
-	255, // 14: UpdateTeamRequest.team:type_name -> nem.Team
-	256, // 15: UpdateTeamRequest.update_mask:type_name -> google.protobuf.FieldMask
-	257, // 16: CreateConnectionSecretRequest.connection:type_name -> nem.Connection
-	257, // 17: UpdateConnectionSecretRequest.connection:type_name -> nem.Connection
-	257, // 18: DeleteConnectionSecretRequest.connection:type_name -> nem.Connection
-	258, // 19: ListProjectsForUserResponse.projects:type_name -> nem.Project
-	258, // 20: CreateProjectRequest.project:type_name -> nem.Project
-	258, // 21: UpdateProjectRequest.project:type_name -> nem.Project
-	256, // 22: UpdateProjectRequest.update_mask:type_name -> google.protobuf.FieldMask
-	259, // 23: ListProjectVersionsResponse.project_versions:type_name -> nem.ProjectVersion
-	260, // 24: ListProjectVersionsForUserRequest.review_status:type_name -> nem.ProjectVersionReviewStatus
-	259, // 25: ListProjectVersionsForUserResponse.project_versions:type_name -> nem.ProjectVersion
-	260, // 26: GetLatestProjectVersionRequest.review_status:type_name -> nem.ProjectVersionReviewStatus
-	260, // 27: GetLatestProjectVersionForUserRequest.review_status:type_name -> nem.ProjectVersionReviewStatus
-	260, // 28: GetLatestProjectVersionUUIDForUserRequest.review_status:type_name -> nem.ProjectVersionReviewStatus
-	259, // 29: CreateProjectVersionRequest.project_version:type_name -> nem.ProjectVersion
-	259, // 30: UpdateProjectVersionRequest.project_version:type_name -> nem.ProjectVersion
-	256, // 31: UpdateProjectVersionRequest.update_mask:type_name -> google.protobuf.FieldMask
+	251, // 0: GetUserRoleForProjectResponse.role:type_name -> nem.UserProjectRole
+	252, // 1: GetUserRoleForTeamResponse.role:type_name -> nem.UserTeamRole
+	253, // 2: UpdateUserRequest.user:type_name -> nem.User
+	253, // 3: ListUsersForTeamResponse.users:type_name -> nem.User
+	254, // 4: ListUsersForTeamResponse.user_teams:type_name -> nem.UserTeam
+	253, // 5: ListUsersForProjectResponse.users:type_name -> nem.User
+	255, // 6: ListUsersForProjectResponse.user_projects:type_name -> nem.UserProject
+	251, // 7: AddUserToProjectRequest.role:type_name -> nem.UserProjectRole
+	251, // 8: UpdateUserProjectRequest.role:type_name -> nem.UserProjectRole
+	252, // 9: AddUserToTeamRequest.role:type_name -> nem.UserTeamRole
+	252, // 10: UpdateUserTeamRequest.role:type_name -> nem.UserTeamRole
+	256, // 11: ListTeamsForUserResponse.teams:type_name -> nem.Team
+	256, // 12: ListTeamsForAdminUserResponse.teams:type_name -> nem.Team
+	256, // 13: CreateTeamRequest.team:type_name -> nem.Team
+	256, // 14: UpdateTeamRequest.team:type_name -> nem.Team
+	257, // 15: UpdateTeamRequest.update_mask:type_name -> google.protobuf.FieldMask
+	258, // 16: CreateConnectionSecretRequest.connection:type_name -> nem.Connection
+	258, // 17: UpdateConnectionSecretRequest.connection:type_name -> nem.Connection
+	258, // 18: DeleteConnectionSecretRequest.connection:type_name -> nem.Connection
+	259, // 19: ListProjectsForUserResponse.projects:type_name -> nem.Project
+	259, // 20: CreateProjectRequest.project:type_name -> nem.Project
+	259, // 21: UpdateProjectRequest.project:type_name -> nem.Project
+	257, // 22: UpdateProjectRequest.update_mask:type_name -> google.protobuf.FieldMask
+	260, // 23: ListProjectVersionsResponse.project_versions:type_name -> nem.ProjectVersion
+	261, // 24: ListProjectVersionsForUserRequest.review_status:type_name -> nem.ProjectVersionReviewStatus
+	260, // 25: ListProjectVersionsForUserResponse.project_versions:type_name -> nem.ProjectVersion
+	261, // 26: GetLatestProjectVersionRequest.review_status:type_name -> nem.ProjectVersionReviewStatus
+	261, // 27: GetLatestProjectVersionForUserRequest.review_status:type_name -> nem.ProjectVersionReviewStatus
+	261, // 28: GetLatestProjectVersionUUIDForUserRequest.review_status:type_name -> nem.ProjectVersionReviewStatus
+	260, // 29: CreateProjectVersionRequest.project_version:type_name -> nem.ProjectVersion
+	260, // 30: UpdateProjectVersionRequest.project_version:type_name -> nem.ProjectVersion
+	257, // 31: UpdateProjectVersionRequest.update_mask:type_name -> google.protobuf.FieldMask
 	58,  // 32: ApplyProjectVersionOpsRequest.ops:type_name -> ApplyOp
-	259, // 33: ApplyProjectVersionOpsResponse.project_version:type_name -> nem.ProjectVersion
+	260, // 33: ApplyProjectVersionOpsResponse.project_version:type_name -> nem.ProjectVersion
 	58,  // 34: ApplyChangeRequestOpsRequest.ops:type_name -> ApplyOp
-	261, // 35: ApplyChangeRequestOpsResponse.change_request:type_name -> nem.ChangeRequest
-	260, // 36: ReviewProjectVersionRequest.review_status:type_name -> nem.ProjectVersionReviewStatus
-	262, // 37: ListExtensionsResponse.extensions:type_name -> nem.Extension
-	262, // 38: CreateExtensionRequest.extension:type_name -> nem.Extension
-	262, // 39: UpdateExtensionRequest.extension:type_name -> nem.Extension
-	256, // 40: UpdateExtensionRequest.update_mask:type_name -> google.protobuf.FieldMask
-	263, // 41: ListExtensionVersionsResponse.versions:type_name -> nem.ExtensionVersion
-	263, // 42: CreateExtensionVersionRequest.version:type_name -> nem.ExtensionVersion
-	263, // 43: UpdateExtensionVersionRequest.version:type_name -> nem.ExtensionVersion
-	256, // 44: UpdateExtensionVersionRequest.update_mask:type_name -> google.protobuf.FieldMask
-	264, // 45: ListExtensionExecutionsResponse.executions:type_name -> nem.ExtensionExecution
-	264, // 46: CreateExtensionExecutionRequest.execution:type_name -> nem.ExtensionExecution
-	264, // 47: UpdateExtensionExecutionRequest.execution:type_name -> nem.ExtensionExecution
-	256, // 48: UpdateExtensionExecutionRequest.update_mask:type_name -> google.protobuf.FieldMask
-	265, // 49: ListUserChangeRequestsRequest.review_status:type_name -> nem.ChangeRequestReviewStatus
-	266, // 50: ListUserChangeRequestsRequest.change_request_type:type_name -> nem.ChangeRequestChangeType
+	262, // 35: ApplyChangeRequestOpsResponse.change_request:type_name -> nem.ChangeRequest
+	261, // 36: ReviewProjectVersionRequest.review_status:type_name -> nem.ProjectVersionReviewStatus
+	263, // 37: ListExtensionsResponse.extensions:type_name -> nem.Extension
+	263, // 38: CreateExtensionRequest.extension:type_name -> nem.Extension
+	263, // 39: UpdateExtensionRequest.extension:type_name -> nem.Extension
+	257, // 40: UpdateExtensionRequest.update_mask:type_name -> google.protobuf.FieldMask
+	264, // 41: ListExtensionVersionsResponse.versions:type_name -> nem.ExtensionVersion
+	264, // 42: CreateExtensionVersionRequest.version:type_name -> nem.ExtensionVersion
+	264, // 43: UpdateExtensionVersionRequest.version:type_name -> nem.ExtensionVersion
+	257, // 44: UpdateExtensionVersionRequest.update_mask:type_name -> google.protobuf.FieldMask
+	265, // 45: ListExtensionExecutionsResponse.executions:type_name -> nem.ExtensionExecution
+	265, // 46: CreateExtensionExecutionRequest.execution:type_name -> nem.ExtensionExecution
+	265, // 47: UpdateExtensionExecutionRequest.execution:type_name -> nem.ExtensionExecution
+	257, // 48: UpdateExtensionExecutionRequest.update_mask:type_name -> google.protobuf.FieldMask
+	266, // 49: ListUserChangeRequestsRequest.review_status:type_name -> nem.ChangeRequestReviewStatus
+	267, // 50: ListUserChangeRequestsRequest.change_request_type:type_name -> nem.ChangeRequestChangeType
 	3,   // 51: ListUserChangeRequestsRequest.owner_scope:type_name -> ChangeRequestOwnerScope
-	261, // 52: ListUserChangeRequestsResponse.change_requests:type_name -> nem.ChangeRequest
-	261, // 53: CreateChangeRequestRequest.change_request:type_name -> nem.ChangeRequest
-	261, // 54: UpdateChangeRequestRequest.change_request:type_name -> nem.ChangeRequest
-	256, // 55: UpdateChangeRequestRequest.update_mask:type_name -> google.protobuf.FieldMask
-	266, // 56: ListChangeRequestsForReviewRequest.change_request_type:type_name -> nem.ChangeRequestChangeType
-	261, // 57: ListChangeRequestsForReviewResponse.change_requests:type_name -> nem.ChangeRequest
-	267, // 58: CreateObjectStoreSecretRequest.object_store:type_name -> nem.ObjectStore
-	267, // 59: UpdateObjectStoreSecretRequest.object_store:type_name -> nem.ObjectStore
-	267, // 60: DeleteObjectStoreSecretRequest.object_store:type_name -> nem.ObjectStore
-	268, // 61: GenerateSQLForCRRequest.db_type_override:type_name -> nem.ConnectionDbType
+	262, // 52: ListUserChangeRequestsResponse.change_requests:type_name -> nem.ChangeRequest
+	262, // 53: CreateChangeRequestRequest.change_request:type_name -> nem.ChangeRequest
+	262, // 54: UpdateChangeRequestRequest.change_request:type_name -> nem.ChangeRequest
+	257, // 55: UpdateChangeRequestRequest.update_mask:type_name -> google.protobuf.FieldMask
+	267, // 56: ListChangeRequestsForReviewRequest.change_request_type:type_name -> nem.ChangeRequestChangeType
+	262, // 57: ListChangeRequestsForReviewResponse.change_requests:type_name -> nem.ChangeRequest
+	268, // 58: CreateObjectStoreSecretRequest.object_store:type_name -> nem.ObjectStore
+	268, // 59: UpdateObjectStoreSecretRequest.object_store:type_name -> nem.ObjectStore
+	268, // 60: DeleteObjectStoreSecretRequest.object_store:type_name -> nem.ObjectStore
+	269, // 61: GenerateSQLForCRRequest.db_type_override:type_name -> nem.ConnectionDbType
 	120, // 62: GenerateSQLForCRResponse.statements:type_name -> GenerateSQLForCRStatement
 	119, // 63: GenerateSQLForCRResponse.drift_checks:type_name -> DriftCheckStatement
-	247, // 64: DriftCheckStatement.expected_by_column:type_name -> DriftCheckStatement.ExpectedByColumnEntry
-	248, // 65: GenerateSQLForCRStatement.pre_image_column_field_uuids:type_name -> GenerateSQLForCRStatement.PreImageColumnFieldUuidsEntry
-	265, // 66: ReviewDataChangeRequest.review_status:type_name -> nem.ChangeRequestReviewStatus
-	269, // 67: CreateMembershipRequest.membership:type_name -> nem.Membership
-	269, // 68: UpdateMembershipRequest.membership:type_name -> nem.Membership
-	256, // 69: UpdateMembershipRequest.update_mask:type_name -> google.protobuf.FieldMask
+	248, // 64: DriftCheckStatement.expected_by_column:type_name -> DriftCheckStatement.ExpectedByColumnEntry
+	249, // 65: GenerateSQLForCRStatement.pre_image_column_field_uuids:type_name -> GenerateSQLForCRStatement.PreImageColumnFieldUuidsEntry
+	266, // 66: ReviewDataChangeRequest.review_status:type_name -> nem.ChangeRequestReviewStatus
+	270, // 67: CreateMembershipRequest.membership:type_name -> nem.Membership
+	270, // 68: UpdateMembershipRequest.membership:type_name -> nem.Membership
+	257, // 69: UpdateMembershipRequest.update_mask:type_name -> google.protobuf.FieldMask
 	0,   // 70: CreateCheckoutSessionRequest.session_type:type_name -> CheckoutSessionType
-	270, // 71: CreateCheckoutSessionRequest.plan_type:type_name -> nem.MembershipType
-	270, // 72: ChangeMembershipPlanRequest.new_plan_type:type_name -> nem.MembershipType
-	252, // 73: ListMembershipUsersResponse.users:type_name -> nem.User
-	258, // 74: ListMembershipUserProjectsResponse.projects:type_name -> nem.Project
-	269, // 75: MembershipWithName.membership:type_name -> nem.Membership
+	271, // 71: CreateCheckoutSessionRequest.plan_type:type_name -> nem.MembershipType
+	271, // 72: ChangeMembershipPlanRequest.new_plan_type:type_name -> nem.MembershipType
+	253, // 73: ListMembershipUsersResponse.users:type_name -> nem.User
+	259, // 74: ListMembershipUserProjectsResponse.projects:type_name -> nem.Project
+	270, // 75: MembershipWithName.membership:type_name -> nem.Membership
 	145, // 76: ListMembershipsForUserResponse.memberships:type_name -> MembershipWithName
-	270, // 77: GetMembershipTierForProjectResponse.membership_type:type_name -> nem.MembershipType
+	271, // 77: GetMembershipTierForProjectResponse.membership_type:type_name -> nem.MembershipType
 	1,   // 78: EvaluateUserPromptRequest.context:type_name -> ProContext
 	1,   // 79: HandleUserPromptRequest.context:type_name -> ProContext
 	1,   // 80: GetUserPromptJobRequest.context:type_name -> ProContext
-	259, // 81: GetUserPromptJobResponse.project_version:type_name -> nem.ProjectVersion
+	260, // 81: GetUserPromptJobResponse.project_version:type_name -> nem.ProjectVersion
 	1,   // 82: HandleFollowupUserPromptRequest.context:type_name -> ProContext
 	1,   // 83: FinalizeUserPromptRequest.context:type_name -> ProContext
-	271, // 84: ListAIUsageForUserResponse.usages:type_name -> nem.AiUsage
-	272, // 85: ListLocalAgentsResponse.local_agents:type_name -> nem.LocalAgent
-	273, // 86: UpdateLocalAgentConnectionsRequest.connections:type_name -> nem.LocalAgentConnection
-	273, // 87: GetLocalAgentConnectionsResponse.connections:type_name -> nem.LocalAgentConnection
-	273, // 88: UpdateLocalAgentConnectionSharingResponse.connection:type_name -> nem.LocalAgentConnection
-	274, // 89: TeamAgentConnection.agent_status:type_name -> nem.LocalAgentStatus
-	275, // 90: TeamAgentConnection.last_seen_at:type_name -> google.protobuf.Timestamp
-	273, // 91: TeamAgentConnection.connection:type_name -> nem.LocalAgentConnection
+	272, // 84: ListAIUsageForUserResponse.usages:type_name -> nem.AiUsage
+	273, // 85: ListLocalAgentsResponse.local_agents:type_name -> nem.LocalAgent
+	274, // 86: UpdateLocalAgentConnectionsRequest.connections:type_name -> nem.LocalAgentConnection
+	274, // 87: GetLocalAgentConnectionsResponse.connections:type_name -> nem.LocalAgentConnection
+	274, // 88: UpdateLocalAgentConnectionSharingResponse.connection:type_name -> nem.LocalAgentConnection
+	275, // 89: TeamAgentConnection.agent_status:type_name -> nem.LocalAgentStatus
+	276, // 90: TeamAgentConnection.last_seen_at:type_name -> google.protobuf.Timestamp
+	274, // 91: TeamAgentConnection.connection:type_name -> nem.LocalAgentConnection
 	182, // 92: ListTeamAgentConnectionsResponse.connections:type_name -> TeamAgentConnection
-	276, // 93: UpsertDeploymentRequest.deployment:type_name -> nem.Deployment
-	277, // 94: UpsertDeploymentRequest.revision:type_name -> nem.DeploymentRevision
-	276, // 95: UpsertDeploymentResponse.deployment:type_name -> nem.Deployment
-	277, // 96: UpsertDeploymentResponse.active_revision:type_name -> nem.DeploymentRevision
-	276, // 97: DeploymentWithRevision.deployment:type_name -> nem.Deployment
-	277, // 98: DeploymentWithRevision.active_revision:type_name -> nem.DeploymentRevision
+	277, // 93: UpsertDeploymentRequest.deployment:type_name -> nem.Deployment
+	278, // 94: UpsertDeploymentRequest.revision:type_name -> nem.DeploymentRevision
+	277, // 95: UpsertDeploymentResponse.deployment:type_name -> nem.Deployment
+	278, // 96: UpsertDeploymentResponse.active_revision:type_name -> nem.DeploymentRevision
+	277, // 97: DeploymentWithRevision.deployment:type_name -> nem.Deployment
+	278, // 98: DeploymentWithRevision.active_revision:type_name -> nem.DeploymentRevision
 	186, // 99: ListDeploymentsResponse.deployments:type_name -> DeploymentWithRevision
-	277, // 100: ListDeploymentRevisionsResponse.revisions:type_name -> nem.DeploymentRevision
-	278, // 101: UpdateDeploymentRevisionStatusRequest.status:type_name -> nem.DeploymentRevisionStatus
-	277, // 102: UpdateDeploymentRevisionStatusResponse.revision:type_name -> nem.DeploymentRevision
-	273, // 103: PublishLocalAgentCatalogRequest.connections:type_name -> nem.LocalAgentConnection
+	278, // 100: ListDeploymentRevisionsResponse.revisions:type_name -> nem.DeploymentRevision
+	279, // 101: UpdateDeploymentRevisionStatusRequest.status:type_name -> nem.DeploymentRevisionStatus
+	278, // 102: UpdateDeploymentRevisionStatusResponse.revision:type_name -> nem.DeploymentRevision
+	274, // 103: PublishLocalAgentCatalogRequest.connections:type_name -> nem.LocalAgentConnection
 	2,   // 104: AcquireExecutionSlotResponse.state:type_name -> ExecutionSlotState
-	279, // 105: CreateAutomationRequest.automation:type_name -> nem.Automation
-	279, // 106: CreateAutomationResponse.automation:type_name -> nem.Automation
-	279, // 107: UpdateAutomationRequest.automation:type_name -> nem.Automation
-	279, // 108: ListAutomationsForProjectResponse.automations:type_name -> nem.Automation
-	280, // 109: ListAutomationEventsRequest.status:type_name -> nem.AutomationEventStatus
-	281, // 110: ListAutomationEventsResponse.automation_events:type_name -> nem.AutomationEvent
+	280, // 105: CreateAutomationRequest.automation:type_name -> nem.Automation
+	280, // 106: CreateAutomationResponse.automation:type_name -> nem.Automation
+	280, // 107: UpdateAutomationRequest.automation:type_name -> nem.Automation
+	280, // 108: ListAutomationsForProjectResponse.automations:type_name -> nem.Automation
+	281, // 109: ListAutomationEventsRequest.status:type_name -> nem.AutomationEventStatus
+	282, // 110: ListAutomationEventsResponse.automation_events:type_name -> nem.AutomationEvent
 	225, // 111: MarkChangeRequestAppliedRequest.applied_values:type_name -> DataChangeAppliedValues
 	224, // 112: MarkChangeRequestAppliedRequest.before_images:type_name -> DataChangeBeforeImage
-	282, // 113: DataChangeBeforeImage.before_image:type_name -> nem.DataChangeBeforeImage
-	249, // 114: DataChangeAppliedValues.values:type_name -> DataChangeAppliedValues.ValuesEntry
-	261, // 115: MarkChangeRequestAppliedResponse.change_request:type_name -> nem.ChangeRequest
-	261, // 116: UndoDataChangeRequestResponse.undo_change_request:type_name -> nem.ChangeRequest
+	283, // 113: DataChangeBeforeImage.before_image:type_name -> nem.DataChangeBeforeImage
+	250, // 114: DataChangeAppliedValues.values:type_name -> DataChangeAppliedValues.ValuesEntry
+	262, // 115: MarkChangeRequestAppliedResponse.change_request:type_name -> nem.ChangeRequest
+	262, // 116: UndoDataChangeRequestResponse.undo_change_request:type_name -> nem.ChangeRequest
 	229, // 117: UndoDataChangeRequestResponse.skipped:type_name -> UndoSkippedDataChange
 	229, // 118: UndoDataChangeRequestResponse.degraded:type_name -> UndoSkippedDataChange
-	261, // 119: MarkChangeRequestApplyFailedResponse.change_request:type_name -> nem.ChangeRequest
-	283, // 120: CreateCodebaseResponse.codebase:type_name -> nem.Codebase
-	283, // 121: CodebaseWithLatest.codebase:type_name -> nem.Codebase
-	284, // 122: CodebaseWithLatest.latest_snapshot:type_name -> nem.CodeSnapshot
-	285, // 123: CodebaseWithLatest.latest_summary:type_name -> CodeSummary
+	262, // 119: MarkChangeRequestApplyFailedResponse.change_request:type_name -> nem.ChangeRequest
+	284, // 120: CreateCodebaseResponse.codebase:type_name -> nem.Codebase
+	284, // 121: CodebaseWithLatest.codebase:type_name -> nem.Codebase
+	285, // 122: CodebaseWithLatest.latest_snapshot:type_name -> nem.CodeSnapshot
+	286, // 123: CodebaseWithLatest.latest_summary:type_name -> CodeSummary
 	235, // 124: ListCodebasesForProjectResponse.codebases:type_name -> CodebaseWithLatest
-	284, // 125: UploadCodeSnapshotResponse.snapshot:type_name -> nem.CodeSnapshot
-	285, // 126: UploadCodeSnapshotResponse.summary:type_name -> CodeSummary
-	284, // 127: CodeSnapshotItem.snapshot:type_name -> nem.CodeSnapshot
-	285, // 128: CodeSnapshotItem.summary:type_name -> CodeSummary
+	285, // 125: UploadCodeSnapshotResponse.snapshot:type_name -> nem.CodeSnapshot
+	286, // 126: UploadCodeSnapshotResponse.summary:type_name -> CodeSummary
+	285, // 127: CodeSnapshotItem.snapshot:type_name -> nem.CodeSnapshot
+	286, // 128: CodeSnapshotItem.summary:type_name -> CodeSummary
 	239, // 129: ListCodeSnapshotsResponse.snapshots:type_name -> CodeSnapshotItem
-	284, // 130: GetCodeSnapshotResponse.snapshot:type_name -> nem.CodeSnapshot
-	286, // 131: GetCodeSnapshotResponse.facts:type_name -> CodeFacts
-	285, // 132: GetCodeSnapshotResponse.summary:type_name -> CodeSummary
-	287, // 133: DescribeComponentsRequest.components:type_name -> nem.CodeModelComponent
+	285, // 130: GetCodeSnapshotResponse.snapshot:type_name -> nem.CodeSnapshot
+	287, // 131: GetCodeSnapshotResponse.facts:type_name -> CodeFacts
+	286, // 132: GetCodeSnapshotResponse.summary:type_name -> CodeSummary
+	288, // 133: DescribeComponentsRequest.components:type_name -> nem.CodeModelComponent
 	4,   // 134: NuzurProduct.GetUser:input_type -> GetUserRequest
 	5,   // 135: NuzurProduct.GetTokenUser:input_type -> GetTokenUserRequest
 	6,   // 136: NuzurProduct.GetUserByEmail:input_type -> GetUserByEmailRequest
@@ -15027,169 +15075,171 @@ var file_product_proto_depIdxs = []int32{
 	244, // 268: NuzurProduct.DiffCodeSnapshots:input_type -> DiffCodeSnapshotsRequest
 	245, // 269: NuzurProduct.GetCodeModel:input_type -> GetCodeModelRequest
 	246, // 270: NuzurProduct.DescribeComponents:input_type -> DescribeComponentsRequest
-	207, // 271: NuzurProduct.CreateAutomation:input_type -> CreateAutomationRequest
-	209, // 272: NuzurProduct.RotateAutomationSecret:input_type -> RotateAutomationSecretRequest
-	211, // 273: NuzurProduct.UpdateAutomation:input_type -> UpdateAutomationRequest
-	212, // 274: NuzurProduct.DeleteAutomation:input_type -> DeleteAutomationRequest
-	214, // 275: NuzurProduct.GetAutomation:input_type -> GetAutomationRequest
-	215, // 276: NuzurProduct.ListAutomationsForProject:input_type -> ListAutomationsForProjectRequest
-	217, // 277: NuzurProduct.TestAutomation:input_type -> TestAutomationRequest
-	219, // 278: NuzurProduct.ListAutomationEvents:input_type -> ListAutomationEventsRequest
-	221, // 279: NuzurProduct.GetAutomationEvent:input_type -> GetAutomationEventRequest
-	222, // 280: NuzurProduct.RetryAutomationEvent:input_type -> RetryAutomationEventRequest
-	223, // 281: NuzurProduct.MarkChangeRequestApplied:input_type -> MarkChangeRequestAppliedRequest
-	230, // 282: NuzurProduct.MarkChangeRequestApplyFailed:input_type -> MarkChangeRequestApplyFailedRequest
-	252, // 283: NuzurProduct.GetUser:output_type -> nem.User
-	252, // 284: NuzurProduct.GetTokenUser:output_type -> nem.User
-	252, // 285: NuzurProduct.GetUserByEmail:output_type -> nem.User
-	8,   // 286: NuzurProduct.GetTokenUserRoleForProject:output_type -> GetUserRoleForProjectResponse
-	10,  // 287: NuzurProduct.GetTokenUserRoleForTeam:output_type -> GetUserRoleForTeamResponse
-	252, // 288: NuzurProduct.UpdateTokenUser:output_type -> nem.User
-	13,  // 289: NuzurProduct.ListUsersForTeam:output_type -> ListUsersForTeamResponse
-	15,  // 290: NuzurProduct.ListUsersForProject:output_type -> ListUsersForProjectResponse
-	254, // 291: NuzurProduct.AddUserToProject:output_type -> nem.UserProject
-	254, // 292: NuzurProduct.UpdateUserProject:output_type -> nem.UserProject
-	254, // 293: NuzurProduct.RemoveUserFromProject:output_type -> nem.UserProject
-	253, // 294: NuzurProduct.AddUserToTeam:output_type -> nem.UserTeam
-	253, // 295: NuzurProduct.UpdateUserTeam:output_type -> nem.UserTeam
-	253, // 296: NuzurProduct.RemoveUserFromTeam:output_type -> nem.UserTeam
-	23,  // 297: NuzurProduct.ListTeamsForUser:output_type -> ListTeamsForUserResponse
-	25,  // 298: NuzurProduct.ListTeamsForAdminUser:output_type -> ListTeamsForAdminUserResponse
-	255, // 299: NuzurProduct.GetTeamForUser:output_type -> nem.Team
-	255, // 300: NuzurProduct.CreateTeam:output_type -> nem.Team
-	255, // 301: NuzurProduct.UpdateTeam:output_type -> nem.Team
-	257, // 302: NuzurProduct.GetConnectionWithSecret:output_type -> nem.Connection
-	257, // 303: NuzurProduct.CreateConnectionSecret:output_type -> nem.Connection
-	257, // 304: NuzurProduct.UpdateConnectionSecret:output_type -> nem.Connection
-	257, // 305: NuzurProduct.DeleteConnectionSecret:output_type -> nem.Connection
-	34,  // 306: NuzurProduct.ListProjectsForUser:output_type -> ListProjectsForUserResponse
-	258, // 307: NuzurProduct.GetProjectForUser:output_type -> nem.Project
-	258, // 308: NuzurProduct.CreateProject:output_type -> nem.Project
-	258, // 309: NuzurProduct.UpdateProject:output_type -> nem.Project
-	39,  // 310: NuzurProduct.GetProjectName:output_type -> GetProjectNameResponse
-	41,  // 311: NuzurProduct.GetProjectPreview:output_type -> GetProjectPreviewResponse
-	43,  // 312: NuzurProduct.ListProjectVersions:output_type -> ListProjectVersionsResponse
-	45,  // 313: NuzurProduct.ListProjectVersionsForUser:output_type -> ListProjectVersionsForUserResponse
-	45,  // 314: NuzurProduct.ListProjectVersionsForUserCached:output_type -> ListProjectVersionsForUserResponse
-	259, // 315: NuzurProduct.GetProjectVersionForUser:output_type -> nem.ProjectVersion
-	259, // 316: NuzurProduct.GetProjectVersionForUserCached:output_type -> nem.ProjectVersion
-	259, // 317: NuzurProduct.GetProjectVersionLeanForUser:output_type -> nem.ProjectVersion
-	259, // 318: NuzurProduct.GetLatestProjectVersion:output_type -> nem.ProjectVersion
-	259, // 319: NuzurProduct.GetLatestProjectVersionForUser:output_type -> nem.ProjectVersion
-	259, // 320: NuzurProduct.GetLatestProjectVersionLeanForUser:output_type -> nem.ProjectVersion
-	50,  // 321: NuzurProduct.GetLatestProjectVersionUUIDForUser:output_type -> GetLatestProjectVersionUUIDForUserResponse
-	52,  // 322: NuzurProduct.GetProjectVersionVersion:output_type -> GetProjectVersionVersionResponse
-	54,  // 323: NuzurProduct.GetProjectVersionIdentifier:output_type -> GetProjectVersionIdentifierResponse
-	259, // 324: NuzurProduct.CreateProjectVersion:output_type -> nem.ProjectVersion
-	259, // 325: NuzurProduct.CreateProjectVersionFromJSON:output_type -> nem.ProjectVersion
-	259, // 326: NuzurProduct.CreateDraftProjectVersionForExistingProject:output_type -> nem.ProjectVersion
-	259, // 327: NuzurProduct.UpdateProjectVersion:output_type -> nem.ProjectVersion
-	60,  // 328: NuzurProduct.ApplyProjectVersionOps:output_type -> ApplyProjectVersionOpsResponse
-	259, // 329: NuzurProduct.DiscardDraftProjectVersion:output_type -> nem.ProjectVersion
-	259, // 330: NuzurProduct.SendProjectVersionForReview:output_type -> nem.ProjectVersion
-	259, // 331: NuzurProduct.WithdrawFromReviewProjectVersion:output_type -> nem.ProjectVersion
-	259, // 332: NuzurProduct.ReviewProjectVersion:output_type -> nem.ProjectVersion
-	69,  // 333: NuzurProduct.GetSignedFileURL:output_type -> GetSignedFileURLResponse
-	71,  // 334: NuzurProduct.UploadExtensionExecutionFile:output_type -> UploadExtensionExecutionFileResponse
-	73,  // 335: NuzurProduct.GetExtensionExecutionFile:output_type -> GetExtensionExecutionFileResponse
-	75,  // 336: NuzurProduct.UploadExtensionIcon:output_type -> UploadExtensionIconResponse
-	85,  // 337: NuzurProduct.UploadUserAvatar:output_type -> UploadUserAvatarResponse
-	79,  // 338: NuzurProduct.UploadRecordFieldFile:output_type -> UploadRecordFieldFileResponse
-	81,  // 339: NuzurProduct.GetRecordFieldSignedFileURL:output_type -> GetRecordFieldSignedFileURLResponse
-	83,  // 340: NuzurProduct.GetRecordFileContent:output_type -> GetRecordFileContentResponse
-	87,  // 341: NuzurProduct.ListExtensions:output_type -> ListExtensionsResponse
-	262, // 342: NuzurProduct.GetExtension:output_type -> nem.Extension
-	262, // 343: NuzurProduct.CreateExtension:output_type -> nem.Extension
-	262, // 344: NuzurProduct.UpdateExtension:output_type -> nem.Extension
-	92,  // 345: NuzurProduct.ListExtensionVersions:output_type -> ListExtensionVersionsResponse
-	263, // 346: NuzurProduct.GetExtensionVersion:output_type -> nem.ExtensionVersion
-	263, // 347: NuzurProduct.CreateExtensionVersion:output_type -> nem.ExtensionVersion
-	263, // 348: NuzurProduct.UpdateExtensionVersion:output_type -> nem.ExtensionVersion
-	97,  // 349: NuzurProduct.ListExtensionExecutions:output_type -> ListExtensionExecutionsResponse
-	264, // 350: NuzurProduct.GetExtensionExecution:output_type -> nem.ExtensionExecution
-	264, // 351: NuzurProduct.CreateExtensionExecution:output_type -> nem.ExtensionExecution
-	264, // 352: NuzurProduct.UpdateExtensionExecution:output_type -> nem.ExtensionExecution
-	202, // 353: NuzurProduct.CheckExtensionExecutionLimit:output_type -> CheckExtensionExecutionLimitResponse
-	204, // 354: NuzurProduct.AcquireExecutionSlot:output_type -> AcquireExecutionSlotResponse
-	206, // 355: NuzurProduct.HeartbeatExecution:output_type -> HeartbeatExecutionResponse
-	102, // 356: NuzurProduct.ListUserChangeRequests:output_type -> ListUserChangeRequestsResponse
-	261, // 357: NuzurProduct.GetChangeRequest:output_type -> nem.ChangeRequest
-	261, // 358: NuzurProduct.CreateChangeRequest:output_type -> nem.ChangeRequest
-	261, // 359: NuzurProduct.UpdateChangeRequest:output_type -> nem.ChangeRequest
-	62,  // 360: NuzurProduct.ApplyChangeRequestOps:output_type -> ApplyChangeRequestOpsResponse
-	261, // 361: NuzurProduct.WithdrawChangeRequestFromReview:output_type -> nem.ChangeRequest
-	228, // 362: NuzurProduct.UndoDataChangeRequest:output_type -> UndoDataChangeRequestResponse
-	108, // 363: NuzurProduct.ListChangeRequestsForReview:output_type -> ListChangeRequestsForReviewResponse
-	110, // 364: NuzurProduct.GetUserProjectVersionData:output_type -> GetUserProjectVersionDataResponse
-	112, // 365: NuzurProduct.SaveUserProjectVersionData:output_type -> SaveUserProjectVersionDataResponse
-	267, // 366: NuzurProduct.GetObjectStoreWithSecret:output_type -> nem.ObjectStore
-	267, // 367: NuzurProduct.CreateObjectStoreSecret:output_type -> nem.ObjectStore
-	267, // 368: NuzurProduct.UpdateObjectStoreSecret:output_type -> nem.ObjectStore
-	267, // 369: NuzurProduct.DeleteObjectStoreSecret:output_type -> nem.ObjectStore
-	118, // 370: NuzurProduct.GenerateSQLForCR:output_type -> GenerateSQLForCRResponse
-	122, // 371: NuzurProduct.ReviewDataChange:output_type -> ReviewDataChangeResponse
-	269, // 372: NuzurProduct.GetMembership:output_type -> nem.Membership
-	269, // 373: NuzurProduct.CreateMembership:output_type -> nem.Membership
-	269, // 374: NuzurProduct.UpdateMembership:output_type -> nem.Membership
-	269, // 375: NuzurProduct.MembershipForProject:output_type -> nem.Membership
-	269, // 376: NuzurProduct.MembershipForTeam:output_type -> nem.Membership
-	129, // 377: NuzurProduct.CreateCheckoutSession:output_type -> CreateCheckoutSessionResponse
-	133, // 378: NuzurProduct.ListMembershipUsers:output_type -> ListMembershipUsersResponse
-	135, // 379: NuzurProduct.CancelMembership:output_type -> CancelMembershipResponse
-	137, // 380: NuzurProduct.ReactivateMembership:output_type -> ReactivateMembershipResponse
-	139, // 381: NuzurProduct.UserHasActiveStripeSubscription:output_type -> UserHasActiveStripeSubscriptionResponse
-	141, // 382: NuzurProduct.ListMembershipUserProjects:output_type -> ListMembershipUserProjectsResponse
-	143, // 383: NuzurProduct.RemoveMembershipUser:output_type -> RemoveMembershipUserResponse
-	146, // 384: NuzurProduct.ListMembershipsForUser:output_type -> ListMembershipsForUserResponse
-	131, // 385: NuzurProduct.ChangeMembershipPlan:output_type -> ChangeMembershipPlanResponse
-	148, // 386: NuzurProduct.SendPrioritySupportEmail:output_type -> PrioritySupportEmailResponse
-	150, // 387: NuzurProduct.HandleWebhook:output_type -> HandleWebhookResponse
-	152, // 388: NuzurProduct.IsProActiveForProject:output_type -> IsProActiveForProjectResponse
-	154, // 389: NuzurProduct.GetMembershipTierForProject:output_type -> GetMembershipTierForProjectResponse
-	156, // 390: NuzurProduct.EvaluateUserPrompt:output_type -> EvaluateUserPromptResponse
-	158, // 391: NuzurProduct.HandleUserPrompt:output_type -> HandleUserPromptResponse
-	160, // 392: NuzurProduct.GetUserPromptJob:output_type -> GetUserPromptJobResponse
-	162, // 393: NuzurProduct.HandleFollowupUserPrompt:output_type -> HandleFollowupUserPromptResponse
-	164, // 394: NuzurProduct.FinalizeUserPrompt:output_type -> FinalizeUserPromptResponse
-	166, // 395: NuzurProduct.ListAIUsageForUser:output_type -> ListAIUsageForUserResponse
-	168, // 396: NuzurProduct.GetAIUsageForUserInPeriod:output_type -> GetAIUsageForUserInPeriodResponse
-	170, // 397: NuzurProduct.RegisterLocalAgent:output_type -> RegisterLocalAgentResponse
-	172, // 398: NuzurProduct.RevokeLocalAgent:output_type -> RevokeLocalAgentResponse
-	174, // 399: NuzurProduct.ListLocalAgents:output_type -> ListLocalAgentsResponse
-	176, // 400: NuzurProduct.UpdateLocalAgentConnections:output_type -> UpdateLocalAgentConnectionsResponse
-	178, // 401: NuzurProduct.GetLocalAgentConnections:output_type -> GetLocalAgentConnectionsResponse
-	180, // 402: NuzurProduct.UpdateLocalAgentConnectionSharing:output_type -> UpdateLocalAgentConnectionSharingResponse
-	183, // 403: NuzurProduct.ListTeamAgentConnections:output_type -> ListTeamAgentConnectionsResponse
-	196, // 404: NuzurProduct.IssueProvisioningToken:output_type -> IssueProvisioningTokenResponse
-	198, // 405: NuzurProduct.ExchangeProvisioningToken:output_type -> ExchangeProvisioningTokenResponse
-	200, // 406: NuzurProduct.PublishLocalAgentCatalog:output_type -> PublishLocalAgentCatalogResponse
-	185, // 407: NuzurProduct.UpsertDeployment:output_type -> UpsertDeploymentResponse
-	188, // 408: NuzurProduct.ListDeployments:output_type -> ListDeploymentsResponse
-	190, // 409: NuzurProduct.ListDeploymentRevisions:output_type -> ListDeploymentRevisionsResponse
-	192, // 410: NuzurProduct.UpdateDeploymentRevisionStatus:output_type -> UpdateDeploymentRevisionStatusResponse
-	194, // 411: NuzurProduct.MarkDeploymentDestroyed:output_type -> MarkDeploymentDestroyedResponse
-	233, // 412: NuzurProduct.CreateCodebase:output_type -> CreateCodebaseResponse
-	236, // 413: NuzurProduct.ListCodebasesForProject:output_type -> ListCodebasesForProjectResponse
-	238, // 414: NuzurProduct.UploadCodeSnapshot:output_type -> UploadCodeSnapshotResponse
-	241, // 415: NuzurProduct.ListCodeSnapshots:output_type -> ListCodeSnapshotsResponse
-	243, // 416: NuzurProduct.GetCodeSnapshot:output_type -> GetCodeSnapshotResponse
-	288, // 417: NuzurProduct.DiffCodeSnapshots:output_type -> CodeDiff
-	289, // 418: NuzurProduct.GetCodeModel:output_type -> nem.CodeModel
-	289, // 419: NuzurProduct.DescribeComponents:output_type -> nem.CodeModel
-	208, // 420: NuzurProduct.CreateAutomation:output_type -> CreateAutomationResponse
-	210, // 421: NuzurProduct.RotateAutomationSecret:output_type -> RotateAutomationSecretResponse
-	279, // 422: NuzurProduct.UpdateAutomation:output_type -> nem.Automation
-	213, // 423: NuzurProduct.DeleteAutomation:output_type -> DeleteAutomationResponse
-	279, // 424: NuzurProduct.GetAutomation:output_type -> nem.Automation
-	216, // 425: NuzurProduct.ListAutomationsForProject:output_type -> ListAutomationsForProjectResponse
-	218, // 426: NuzurProduct.TestAutomation:output_type -> TestAutomationResponse
-	220, // 427: NuzurProduct.ListAutomationEvents:output_type -> ListAutomationEventsResponse
-	281, // 428: NuzurProduct.GetAutomationEvent:output_type -> nem.AutomationEvent
-	281, // 429: NuzurProduct.RetryAutomationEvent:output_type -> nem.AutomationEvent
-	226, // 430: NuzurProduct.MarkChangeRequestApplied:output_type -> MarkChangeRequestAppliedResponse
-	231, // 431: NuzurProduct.MarkChangeRequestApplyFailed:output_type -> MarkChangeRequestApplyFailedResponse
-	283, // [283:432] is the sub-list for method output_type
-	134, // [134:283] is the sub-list for method input_type
+	247, // 271: NuzurProduct.ArchiveCodebase:input_type -> ArchiveCodebaseRequest
+	207, // 272: NuzurProduct.CreateAutomation:input_type -> CreateAutomationRequest
+	209, // 273: NuzurProduct.RotateAutomationSecret:input_type -> RotateAutomationSecretRequest
+	211, // 274: NuzurProduct.UpdateAutomation:input_type -> UpdateAutomationRequest
+	212, // 275: NuzurProduct.DeleteAutomation:input_type -> DeleteAutomationRequest
+	214, // 276: NuzurProduct.GetAutomation:input_type -> GetAutomationRequest
+	215, // 277: NuzurProduct.ListAutomationsForProject:input_type -> ListAutomationsForProjectRequest
+	217, // 278: NuzurProduct.TestAutomation:input_type -> TestAutomationRequest
+	219, // 279: NuzurProduct.ListAutomationEvents:input_type -> ListAutomationEventsRequest
+	221, // 280: NuzurProduct.GetAutomationEvent:input_type -> GetAutomationEventRequest
+	222, // 281: NuzurProduct.RetryAutomationEvent:input_type -> RetryAutomationEventRequest
+	223, // 282: NuzurProduct.MarkChangeRequestApplied:input_type -> MarkChangeRequestAppliedRequest
+	230, // 283: NuzurProduct.MarkChangeRequestApplyFailed:input_type -> MarkChangeRequestApplyFailedRequest
+	253, // 284: NuzurProduct.GetUser:output_type -> nem.User
+	253, // 285: NuzurProduct.GetTokenUser:output_type -> nem.User
+	253, // 286: NuzurProduct.GetUserByEmail:output_type -> nem.User
+	8,   // 287: NuzurProduct.GetTokenUserRoleForProject:output_type -> GetUserRoleForProjectResponse
+	10,  // 288: NuzurProduct.GetTokenUserRoleForTeam:output_type -> GetUserRoleForTeamResponse
+	253, // 289: NuzurProduct.UpdateTokenUser:output_type -> nem.User
+	13,  // 290: NuzurProduct.ListUsersForTeam:output_type -> ListUsersForTeamResponse
+	15,  // 291: NuzurProduct.ListUsersForProject:output_type -> ListUsersForProjectResponse
+	255, // 292: NuzurProduct.AddUserToProject:output_type -> nem.UserProject
+	255, // 293: NuzurProduct.UpdateUserProject:output_type -> nem.UserProject
+	255, // 294: NuzurProduct.RemoveUserFromProject:output_type -> nem.UserProject
+	254, // 295: NuzurProduct.AddUserToTeam:output_type -> nem.UserTeam
+	254, // 296: NuzurProduct.UpdateUserTeam:output_type -> nem.UserTeam
+	254, // 297: NuzurProduct.RemoveUserFromTeam:output_type -> nem.UserTeam
+	23,  // 298: NuzurProduct.ListTeamsForUser:output_type -> ListTeamsForUserResponse
+	25,  // 299: NuzurProduct.ListTeamsForAdminUser:output_type -> ListTeamsForAdminUserResponse
+	256, // 300: NuzurProduct.GetTeamForUser:output_type -> nem.Team
+	256, // 301: NuzurProduct.CreateTeam:output_type -> nem.Team
+	256, // 302: NuzurProduct.UpdateTeam:output_type -> nem.Team
+	258, // 303: NuzurProduct.GetConnectionWithSecret:output_type -> nem.Connection
+	258, // 304: NuzurProduct.CreateConnectionSecret:output_type -> nem.Connection
+	258, // 305: NuzurProduct.UpdateConnectionSecret:output_type -> nem.Connection
+	258, // 306: NuzurProduct.DeleteConnectionSecret:output_type -> nem.Connection
+	34,  // 307: NuzurProduct.ListProjectsForUser:output_type -> ListProjectsForUserResponse
+	259, // 308: NuzurProduct.GetProjectForUser:output_type -> nem.Project
+	259, // 309: NuzurProduct.CreateProject:output_type -> nem.Project
+	259, // 310: NuzurProduct.UpdateProject:output_type -> nem.Project
+	39,  // 311: NuzurProduct.GetProjectName:output_type -> GetProjectNameResponse
+	41,  // 312: NuzurProduct.GetProjectPreview:output_type -> GetProjectPreviewResponse
+	43,  // 313: NuzurProduct.ListProjectVersions:output_type -> ListProjectVersionsResponse
+	45,  // 314: NuzurProduct.ListProjectVersionsForUser:output_type -> ListProjectVersionsForUserResponse
+	45,  // 315: NuzurProduct.ListProjectVersionsForUserCached:output_type -> ListProjectVersionsForUserResponse
+	260, // 316: NuzurProduct.GetProjectVersionForUser:output_type -> nem.ProjectVersion
+	260, // 317: NuzurProduct.GetProjectVersionForUserCached:output_type -> nem.ProjectVersion
+	260, // 318: NuzurProduct.GetProjectVersionLeanForUser:output_type -> nem.ProjectVersion
+	260, // 319: NuzurProduct.GetLatestProjectVersion:output_type -> nem.ProjectVersion
+	260, // 320: NuzurProduct.GetLatestProjectVersionForUser:output_type -> nem.ProjectVersion
+	260, // 321: NuzurProduct.GetLatestProjectVersionLeanForUser:output_type -> nem.ProjectVersion
+	50,  // 322: NuzurProduct.GetLatestProjectVersionUUIDForUser:output_type -> GetLatestProjectVersionUUIDForUserResponse
+	52,  // 323: NuzurProduct.GetProjectVersionVersion:output_type -> GetProjectVersionVersionResponse
+	54,  // 324: NuzurProduct.GetProjectVersionIdentifier:output_type -> GetProjectVersionIdentifierResponse
+	260, // 325: NuzurProduct.CreateProjectVersion:output_type -> nem.ProjectVersion
+	260, // 326: NuzurProduct.CreateProjectVersionFromJSON:output_type -> nem.ProjectVersion
+	260, // 327: NuzurProduct.CreateDraftProjectVersionForExistingProject:output_type -> nem.ProjectVersion
+	260, // 328: NuzurProduct.UpdateProjectVersion:output_type -> nem.ProjectVersion
+	60,  // 329: NuzurProduct.ApplyProjectVersionOps:output_type -> ApplyProjectVersionOpsResponse
+	260, // 330: NuzurProduct.DiscardDraftProjectVersion:output_type -> nem.ProjectVersion
+	260, // 331: NuzurProduct.SendProjectVersionForReview:output_type -> nem.ProjectVersion
+	260, // 332: NuzurProduct.WithdrawFromReviewProjectVersion:output_type -> nem.ProjectVersion
+	260, // 333: NuzurProduct.ReviewProjectVersion:output_type -> nem.ProjectVersion
+	69,  // 334: NuzurProduct.GetSignedFileURL:output_type -> GetSignedFileURLResponse
+	71,  // 335: NuzurProduct.UploadExtensionExecutionFile:output_type -> UploadExtensionExecutionFileResponse
+	73,  // 336: NuzurProduct.GetExtensionExecutionFile:output_type -> GetExtensionExecutionFileResponse
+	75,  // 337: NuzurProduct.UploadExtensionIcon:output_type -> UploadExtensionIconResponse
+	85,  // 338: NuzurProduct.UploadUserAvatar:output_type -> UploadUserAvatarResponse
+	79,  // 339: NuzurProduct.UploadRecordFieldFile:output_type -> UploadRecordFieldFileResponse
+	81,  // 340: NuzurProduct.GetRecordFieldSignedFileURL:output_type -> GetRecordFieldSignedFileURLResponse
+	83,  // 341: NuzurProduct.GetRecordFileContent:output_type -> GetRecordFileContentResponse
+	87,  // 342: NuzurProduct.ListExtensions:output_type -> ListExtensionsResponse
+	263, // 343: NuzurProduct.GetExtension:output_type -> nem.Extension
+	263, // 344: NuzurProduct.CreateExtension:output_type -> nem.Extension
+	263, // 345: NuzurProduct.UpdateExtension:output_type -> nem.Extension
+	92,  // 346: NuzurProduct.ListExtensionVersions:output_type -> ListExtensionVersionsResponse
+	264, // 347: NuzurProduct.GetExtensionVersion:output_type -> nem.ExtensionVersion
+	264, // 348: NuzurProduct.CreateExtensionVersion:output_type -> nem.ExtensionVersion
+	264, // 349: NuzurProduct.UpdateExtensionVersion:output_type -> nem.ExtensionVersion
+	97,  // 350: NuzurProduct.ListExtensionExecutions:output_type -> ListExtensionExecutionsResponse
+	265, // 351: NuzurProduct.GetExtensionExecution:output_type -> nem.ExtensionExecution
+	265, // 352: NuzurProduct.CreateExtensionExecution:output_type -> nem.ExtensionExecution
+	265, // 353: NuzurProduct.UpdateExtensionExecution:output_type -> nem.ExtensionExecution
+	202, // 354: NuzurProduct.CheckExtensionExecutionLimit:output_type -> CheckExtensionExecutionLimitResponse
+	204, // 355: NuzurProduct.AcquireExecutionSlot:output_type -> AcquireExecutionSlotResponse
+	206, // 356: NuzurProduct.HeartbeatExecution:output_type -> HeartbeatExecutionResponse
+	102, // 357: NuzurProduct.ListUserChangeRequests:output_type -> ListUserChangeRequestsResponse
+	262, // 358: NuzurProduct.GetChangeRequest:output_type -> nem.ChangeRequest
+	262, // 359: NuzurProduct.CreateChangeRequest:output_type -> nem.ChangeRequest
+	262, // 360: NuzurProduct.UpdateChangeRequest:output_type -> nem.ChangeRequest
+	62,  // 361: NuzurProduct.ApplyChangeRequestOps:output_type -> ApplyChangeRequestOpsResponse
+	262, // 362: NuzurProduct.WithdrawChangeRequestFromReview:output_type -> nem.ChangeRequest
+	228, // 363: NuzurProduct.UndoDataChangeRequest:output_type -> UndoDataChangeRequestResponse
+	108, // 364: NuzurProduct.ListChangeRequestsForReview:output_type -> ListChangeRequestsForReviewResponse
+	110, // 365: NuzurProduct.GetUserProjectVersionData:output_type -> GetUserProjectVersionDataResponse
+	112, // 366: NuzurProduct.SaveUserProjectVersionData:output_type -> SaveUserProjectVersionDataResponse
+	268, // 367: NuzurProduct.GetObjectStoreWithSecret:output_type -> nem.ObjectStore
+	268, // 368: NuzurProduct.CreateObjectStoreSecret:output_type -> nem.ObjectStore
+	268, // 369: NuzurProduct.UpdateObjectStoreSecret:output_type -> nem.ObjectStore
+	268, // 370: NuzurProduct.DeleteObjectStoreSecret:output_type -> nem.ObjectStore
+	118, // 371: NuzurProduct.GenerateSQLForCR:output_type -> GenerateSQLForCRResponse
+	122, // 372: NuzurProduct.ReviewDataChange:output_type -> ReviewDataChangeResponse
+	270, // 373: NuzurProduct.GetMembership:output_type -> nem.Membership
+	270, // 374: NuzurProduct.CreateMembership:output_type -> nem.Membership
+	270, // 375: NuzurProduct.UpdateMembership:output_type -> nem.Membership
+	270, // 376: NuzurProduct.MembershipForProject:output_type -> nem.Membership
+	270, // 377: NuzurProduct.MembershipForTeam:output_type -> nem.Membership
+	129, // 378: NuzurProduct.CreateCheckoutSession:output_type -> CreateCheckoutSessionResponse
+	133, // 379: NuzurProduct.ListMembershipUsers:output_type -> ListMembershipUsersResponse
+	135, // 380: NuzurProduct.CancelMembership:output_type -> CancelMembershipResponse
+	137, // 381: NuzurProduct.ReactivateMembership:output_type -> ReactivateMembershipResponse
+	139, // 382: NuzurProduct.UserHasActiveStripeSubscription:output_type -> UserHasActiveStripeSubscriptionResponse
+	141, // 383: NuzurProduct.ListMembershipUserProjects:output_type -> ListMembershipUserProjectsResponse
+	143, // 384: NuzurProduct.RemoveMembershipUser:output_type -> RemoveMembershipUserResponse
+	146, // 385: NuzurProduct.ListMembershipsForUser:output_type -> ListMembershipsForUserResponse
+	131, // 386: NuzurProduct.ChangeMembershipPlan:output_type -> ChangeMembershipPlanResponse
+	148, // 387: NuzurProduct.SendPrioritySupportEmail:output_type -> PrioritySupportEmailResponse
+	150, // 388: NuzurProduct.HandleWebhook:output_type -> HandleWebhookResponse
+	152, // 389: NuzurProduct.IsProActiveForProject:output_type -> IsProActiveForProjectResponse
+	154, // 390: NuzurProduct.GetMembershipTierForProject:output_type -> GetMembershipTierForProjectResponse
+	156, // 391: NuzurProduct.EvaluateUserPrompt:output_type -> EvaluateUserPromptResponse
+	158, // 392: NuzurProduct.HandleUserPrompt:output_type -> HandleUserPromptResponse
+	160, // 393: NuzurProduct.GetUserPromptJob:output_type -> GetUserPromptJobResponse
+	162, // 394: NuzurProduct.HandleFollowupUserPrompt:output_type -> HandleFollowupUserPromptResponse
+	164, // 395: NuzurProduct.FinalizeUserPrompt:output_type -> FinalizeUserPromptResponse
+	166, // 396: NuzurProduct.ListAIUsageForUser:output_type -> ListAIUsageForUserResponse
+	168, // 397: NuzurProduct.GetAIUsageForUserInPeriod:output_type -> GetAIUsageForUserInPeriodResponse
+	170, // 398: NuzurProduct.RegisterLocalAgent:output_type -> RegisterLocalAgentResponse
+	172, // 399: NuzurProduct.RevokeLocalAgent:output_type -> RevokeLocalAgentResponse
+	174, // 400: NuzurProduct.ListLocalAgents:output_type -> ListLocalAgentsResponse
+	176, // 401: NuzurProduct.UpdateLocalAgentConnections:output_type -> UpdateLocalAgentConnectionsResponse
+	178, // 402: NuzurProduct.GetLocalAgentConnections:output_type -> GetLocalAgentConnectionsResponse
+	180, // 403: NuzurProduct.UpdateLocalAgentConnectionSharing:output_type -> UpdateLocalAgentConnectionSharingResponse
+	183, // 404: NuzurProduct.ListTeamAgentConnections:output_type -> ListTeamAgentConnectionsResponse
+	196, // 405: NuzurProduct.IssueProvisioningToken:output_type -> IssueProvisioningTokenResponse
+	198, // 406: NuzurProduct.ExchangeProvisioningToken:output_type -> ExchangeProvisioningTokenResponse
+	200, // 407: NuzurProduct.PublishLocalAgentCatalog:output_type -> PublishLocalAgentCatalogResponse
+	185, // 408: NuzurProduct.UpsertDeployment:output_type -> UpsertDeploymentResponse
+	188, // 409: NuzurProduct.ListDeployments:output_type -> ListDeploymentsResponse
+	190, // 410: NuzurProduct.ListDeploymentRevisions:output_type -> ListDeploymentRevisionsResponse
+	192, // 411: NuzurProduct.UpdateDeploymentRevisionStatus:output_type -> UpdateDeploymentRevisionStatusResponse
+	194, // 412: NuzurProduct.MarkDeploymentDestroyed:output_type -> MarkDeploymentDestroyedResponse
+	233, // 413: NuzurProduct.CreateCodebase:output_type -> CreateCodebaseResponse
+	236, // 414: NuzurProduct.ListCodebasesForProject:output_type -> ListCodebasesForProjectResponse
+	238, // 415: NuzurProduct.UploadCodeSnapshot:output_type -> UploadCodeSnapshotResponse
+	241, // 416: NuzurProduct.ListCodeSnapshots:output_type -> ListCodeSnapshotsResponse
+	243, // 417: NuzurProduct.GetCodeSnapshot:output_type -> GetCodeSnapshotResponse
+	289, // 418: NuzurProduct.DiffCodeSnapshots:output_type -> CodeDiff
+	290, // 419: NuzurProduct.GetCodeModel:output_type -> nem.CodeModel
+	290, // 420: NuzurProduct.DescribeComponents:output_type -> nem.CodeModel
+	284, // 421: NuzurProduct.ArchiveCodebase:output_type -> nem.Codebase
+	208, // 422: NuzurProduct.CreateAutomation:output_type -> CreateAutomationResponse
+	210, // 423: NuzurProduct.RotateAutomationSecret:output_type -> RotateAutomationSecretResponse
+	280, // 424: NuzurProduct.UpdateAutomation:output_type -> nem.Automation
+	213, // 425: NuzurProduct.DeleteAutomation:output_type -> DeleteAutomationResponse
+	280, // 426: NuzurProduct.GetAutomation:output_type -> nem.Automation
+	216, // 427: NuzurProduct.ListAutomationsForProject:output_type -> ListAutomationsForProjectResponse
+	218, // 428: NuzurProduct.TestAutomation:output_type -> TestAutomationResponse
+	220, // 429: NuzurProduct.ListAutomationEvents:output_type -> ListAutomationEventsResponse
+	282, // 430: NuzurProduct.GetAutomationEvent:output_type -> nem.AutomationEvent
+	282, // 431: NuzurProduct.RetryAutomationEvent:output_type -> nem.AutomationEvent
+	226, // 432: NuzurProduct.MarkChangeRequestApplied:output_type -> MarkChangeRequestAppliedResponse
+	231, // 433: NuzurProduct.MarkChangeRequestApplyFailed:output_type -> MarkChangeRequestApplyFailedResponse
+	284, // [284:434] is the sub-list for method output_type
+	134, // [134:284] is the sub-list for method input_type
 	134, // [134:134] is the sub-list for extension type_name
 	134, // [134:134] is the sub-list for extension extendee
 	0,   // [0:134] is the sub-list for field type_name
@@ -15207,7 +15257,7 @@ func file_product_proto_init() {
 			GoPackagePath: reflect.TypeOf(x{}).PkgPath(),
 			RawDescriptor: unsafe.Slice(unsafe.StringData(file_product_proto_rawDesc), len(file_product_proto_rawDesc)),
 			NumEnums:      4,
-			NumMessages:   246,
+			NumMessages:   247,
 			NumExtensions: 0,
 			NumServices:   1,
 		},

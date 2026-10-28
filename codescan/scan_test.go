@@ -131,6 +131,21 @@ func TestScanGeneratedTreesCollapse(t *testing.T) {
 	if e := edgeOf(f, pb.CodeEdgeKind_CODE_EDGE_KIND_USES_GENERATED, mod+"/modules/season", "gen:sfapi"); e == nil {
 		t.Error("missing season -> gen:sfapi edge")
 	}
+	// A generated tree with its own main is a deployable, and its imports of
+	// hand-written code are kept: that is how a go-code-gen server wires its
+	// custom zone in, which would otherwise look unreachable.
+	if n := nodeByID(f, "gen:gen"); n.Attrs["main"] != "true" {
+		t.Errorf("gen:gen has a generated main and should be marked main, attrs = %v", n.Attrs)
+	}
+	if n := nodeByID(f, "gen:sfapi"); n.Attrs["main"] == "true" {
+		t.Error("gen:sfapi has no main and must not be marked")
+	}
+	if e := edgeOf(f, pb.CodeEdgeKind_CODE_EDGE_KIND_IMPORTS, "gen:gen", mod+"/modules/show"); e == nil {
+		t.Error("missing gen:gen -> modules/show import edge")
+	}
+	if nodeByID(f, mod+"/gen/cmd/server") != nil {
+		t.Error("the generated main must collapse into gen:gen, not become a container")
+	}
 }
 
 func TestScanEntityCalls(t *testing.T) {

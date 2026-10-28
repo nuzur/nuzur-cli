@@ -157,6 +157,7 @@ const (
 	NuzurProduct_DiffCodeSnapshots_FullMethodName                           = "/NuzurProduct/DiffCodeSnapshots"
 	NuzurProduct_GetCodeModel_FullMethodName                                = "/NuzurProduct/GetCodeModel"
 	NuzurProduct_DescribeComponents_FullMethodName                          = "/NuzurProduct/DescribeComponents"
+	NuzurProduct_ArchiveCodebase_FullMethodName                             = "/NuzurProduct/ArchiveCodebase"
 	NuzurProduct_CreateAutomation_FullMethodName                            = "/NuzurProduct/CreateAutomation"
 	NuzurProduct_RotateAutomationSecret_FullMethodName                      = "/NuzurProduct/RotateAutomationSecret"
 	NuzurProduct_UpdateAutomation_FullMethodName                            = "/NuzurProduct/UpdateAutomation"
@@ -351,6 +352,10 @@ type NuzurProductClient interface {
 	// Code view or by agents through ccmcp describeComponents.
 	GetCodeModel(ctx context.Context, in *GetCodeModelRequest, opts ...grpc.CallOption) (*gen.CodeModel, error)
 	DescribeComponents(ctx context.Context, in *DescribeComponentsRequest, opts ...grpc.CallOption) (*gen.CodeModel, error)
+	// Hides a codebase from the project: the Code view, MCP and uploads stop
+	// seeing it. Its snapshots are kept; CreateCodebase with the same
+	// identifier brings it back.
+	ArchiveCodebase(ctx context.Context, in *ArchiveCodebaseRequest, opts ...grpc.CallOption) (*gen.Codebase, error)
 	// automations
 	CreateAutomation(ctx context.Context, in *CreateAutomationRequest, opts ...grpc.CallOption) (*CreateAutomationResponse, error)
 	RotateAutomationSecret(ctx context.Context, in *RotateAutomationSecretRequest, opts ...grpc.CallOption) (*RotateAutomationSecretResponse, error)
@@ -1744,6 +1749,16 @@ func (c *nuzurProductClient) DescribeComponents(ctx context.Context, in *Describ
 	return out, nil
 }
 
+func (c *nuzurProductClient) ArchiveCodebase(ctx context.Context, in *ArchiveCodebaseRequest, opts ...grpc.CallOption) (*gen.Codebase, error) {
+	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
+	out := new(gen.Codebase)
+	err := c.cc.Invoke(ctx, NuzurProduct_ArchiveCodebase_FullMethodName, in, out, cOpts...)
+	if err != nil {
+		return nil, err
+	}
+	return out, nil
+}
+
 func (c *nuzurProductClient) CreateAutomation(ctx context.Context, in *CreateAutomationRequest, opts ...grpc.CallOption) (*CreateAutomationResponse, error) {
 	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
 	out := new(CreateAutomationResponse)
@@ -2044,6 +2059,10 @@ type NuzurProductServer interface {
 	// Code view or by agents through ccmcp describeComponents.
 	GetCodeModel(context.Context, *GetCodeModelRequest) (*gen.CodeModel, error)
 	DescribeComponents(context.Context, *DescribeComponentsRequest) (*gen.CodeModel, error)
+	// Hides a codebase from the project: the Code view, MCP and uploads stop
+	// seeing it. Its snapshots are kept; CreateCodebase with the same
+	// identifier brings it back.
+	ArchiveCodebase(context.Context, *ArchiveCodebaseRequest) (*gen.Codebase, error)
 	// automations
 	CreateAutomation(context.Context, *CreateAutomationRequest) (*CreateAutomationResponse, error)
 	RotateAutomationSecret(context.Context, *RotateAutomationSecretRequest) (*RotateAutomationSecretResponse, error)
@@ -2477,6 +2496,9 @@ func (UnimplementedNuzurProductServer) GetCodeModel(context.Context, *GetCodeMod
 }
 func (UnimplementedNuzurProductServer) DescribeComponents(context.Context, *DescribeComponentsRequest) (*gen.CodeModel, error) {
 	return nil, status.Error(codes.Unimplemented, "method DescribeComponents not implemented")
+}
+func (UnimplementedNuzurProductServer) ArchiveCodebase(context.Context, *ArchiveCodebaseRequest) (*gen.Codebase, error) {
+	return nil, status.Error(codes.Unimplemented, "method ArchiveCodebase not implemented")
 }
 func (UnimplementedNuzurProductServer) CreateAutomation(context.Context, *CreateAutomationRequest) (*CreateAutomationResponse, error) {
 	return nil, status.Error(codes.Unimplemented, "method CreateAutomation not implemented")
@@ -5001,6 +5023,24 @@ func _NuzurProduct_DescribeComponents_Handler(srv interface{}, ctx context.Conte
 	return interceptor(ctx, in, info, handler)
 }
 
+func _NuzurProduct_ArchiveCodebase_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
+	in := new(ArchiveCodebaseRequest)
+	if err := dec(in); err != nil {
+		return nil, err
+	}
+	if interceptor == nil {
+		return srv.(NuzurProductServer).ArchiveCodebase(ctx, in)
+	}
+	info := &grpc.UnaryServerInfo{
+		Server:     srv,
+		FullMethod: NuzurProduct_ArchiveCodebase_FullMethodName,
+	}
+	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
+		return srv.(NuzurProductServer).ArchiveCodebase(ctx, req.(*ArchiveCodebaseRequest))
+	}
+	return interceptor(ctx, in, info, handler)
+}
+
 func _NuzurProduct_CreateAutomation_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
 	in := new(CreateAutomationRequest)
 	if err := dec(in); err != nil {
@@ -5771,6 +5811,10 @@ var NuzurProduct_ServiceDesc = grpc.ServiceDesc{
 		{
 			MethodName: "DescribeComponents",
 			Handler:    _NuzurProduct_DescribeComponents_Handler,
+		},
+		{
+			MethodName: "ArchiveCodebase",
+			Handler:    _NuzurProduct_ArchiveCodebase_Handler,
 		},
 		{
 			MethodName: "CreateAutomation",

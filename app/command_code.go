@@ -35,6 +35,7 @@ func (i *Implementation) CodeCommand() cli.Command {
 			i.CodeLinkCommand(),
 			i.CodeScanCommand(),
 			i.CodeStatusCommand(),
+			i.CodeArchiveCommand(),
 		},
 	}
 }
@@ -411,6 +412,58 @@ func (i *Implementation) codeStatus(link codescan.Link, head string, out io.Writ
 		}
 	}
 	printFindingsBrief(out, latest.GetSummary())
+	return nil
+}
+
+// ─── code archive ────────────────────────────────────────────────────────────
+
+func (i *Implementation) CodeArchiveCommand() cli.Command {
+	return cli.Command{
+		Name:  "archive",
+		Usage: i.localize.Localize("code_archive_desc", "Hide the linked codebase from its nuzur project"),
+		Description: "The codebase disappears from the project's Code view and from MCP, and uploads stop.\n" +
+			"   Nothing is deleted: `nuzur-cli code link` in the repository brings it back.",
+		Flags: []cli.Flag{
+			cli.StringFlag{Name: "dir", Value: ".", Usage: "Go module root"},
+			cli.BoolFlag{Name: "yes", Usage: "Do not ask for confirmation (required when not running in a terminal)"},
+		},
+		Action: func(c *cli.Context) error {
+			link, err := codescan.ReadLink(c.String("dir"))
+			if errors.Is(err, os.ErrNotExist) {
+				return errors.New("not linked: there is no codebase to archive")
+			}
+			if err != nil {
+				return err
+			}
+			if err := i.login(); err != nil {
+				return err
+			}
+			return i.codeArchive(link, c.Bool("yes"), os.Stdin, os.Stdout)
+		},
+	}
+}
+
+func (i *Implementation) codeArchive(link codescan.Link, yes bool, in io.Reader, out io.Writer) error {
+	if !yes {
+		if !isInteractive() {
+			return fmt.Errorf("not running in a terminal: pass --yes to archive codebase %s", link.Identifier)
+		}
+		ok, err := askYesNo(in, out, fmt.Sprintf("Archive codebase %s (%s)?", link.Identifier, link.CodebaseUUID))
+		if err != nil {
+			return err
+		}
+		if !ok {
+			return errors.New("not archived")
+		}
+	}
+	authCtx, err := productclient.ClientContext()
+	if err != nil {
+		return err
+	}
+	if _, err := i.productClient.ProductClient.ArchiveCodebase(authCtx, &pb.ArchiveCodebaseRequest{CodebaseUuid: link.CodebaseUUID}); err != nil {
+		return err
+	}
+	fmt.Fprintf(out, "Archived codebase %s. %s still points at it; `nuzur-cli code link` restores it.\n", link.Identifier, codescan.LinkFile)
 	return nil
 }
 

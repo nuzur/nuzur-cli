@@ -27,7 +27,7 @@ const SchemaVersion = 1
 
 // ScannerVersion identifies the extraction logic; bump it when the same tree
 // would produce different facts.
-const ScannerVersion = "0.1.0"
+const ScannerVersion = "0.2.0"
 
 type Options struct {
 	// Dir is the module root to scan (the directory holding go.mod).
@@ -97,6 +97,7 @@ func Scan(ctx context.Context, opts Options) (*pb.CodeFacts, error) {
 	s.classify(pkgs)
 	s.extractPackages()
 	s.extractImports()
+	s.extractGeneratedImports()
 	s.extractFx()
 	for _, p := range s.handPkgs() {
 		s.walkPackage(p)
@@ -149,6 +150,7 @@ type scanner struct {
 	hand      map[string]*packages.Package
 	genOfPkg  map[string]string
 	genPkgs   map[string][]string // generated node id -> collapsed import paths
+	genLoaded []*packages.Package // the collapsed local packages themselves
 	provided  map[string]bool     // packages exporting an fx-provided constructor
 	fxRoots   map[string]bool     // packages calling fx.Provide (composition roots)
 	component map[string]string   // package import path -> component id
@@ -174,6 +176,7 @@ func (s *scanner) classify(pkgs []*packages.Package) {
 		if tree := s.treeOf(p); tree != nil {
 			s.genOfPkg[p.PkgPath] = tree.nodeID
 			s.genPkgs[tree.nodeID] = append(s.genPkgs[tree.nodeID], p.PkgPath)
+			s.genLoaded = append(s.genLoaded, p)
 			continue
 		}
 		s.hand[p.PkgPath] = p
@@ -229,7 +232,18 @@ func (s *scanner) generatedFacts() []*pb.CodeGenerated {
 			Files:              int32(len(t.manifest.Files)),
 			Packages:           pkgs,
 		})
-		s.b.node(t.nodeID, pb.CodeNodeKind_CODE_NODE_KIND_GENERATED, t.name).Path = s.b.rel(t.dir)
+		n := s.b.node(t.nodeID, pb.CodeNodeKind_CODE_NODE_KIND_GENERATED, t.name)
+		n.Path = s.b.rel(t.dir)
+		// A generated app's own main (go-code-gen's server) is a deployable:
+		// it is what wires a custom zone in, so reachability starts there too.
+		for _, p := range s.genLoaded {
+			if p.Name == "main" && s.genOfPkg[p.PkgPath] == t.nodeID {
+				if n.Attrs == nil {
+					n.Attrs = map[string]string{}
+				}
+				n.Attrs["main"] = "true"
+			}
+		}
 	}
 	for _, d := range s.deps {
 		if _, used := s.b.nodes[d.nodeID]; !used {
@@ -506,6 +520,25 @@ func (s *scanner) extractImports() {
 						s.b.node("ext:"+sys, pb.CodeNodeKind_CODE_NODE_KIND_EXTERNAL_SYSTEM, sys).Attrs = map[string]string{"via": "sdk"}
 						s.b.edge(pb.CodeEdgeKind_CODE_EDGE_KIND_USES_EXTERNAL, p.PkgPath, "ext:"+sys, pos, "")
 					}
+				}
+			}
+		}
+	}
+}
+
+// extractGeneratedImports keeps the one thing a collapsed generated tree says
+// about hand-written code: which of it the tree imports. go-code-gen's main and
+// hooks import the custom zone, and without these edges that zone looks
+// unreachable — dead code — when the generated server is what runs it.
+func (s *scanner) extractGeneratedImports() {
+	sort.Slice(s.genLoaded, func(i, j int) bool { return s.genLoaded[i].PkgPath < s.genLoaded[j].PkgPath })
+	for _, p := range s.genLoaded {
+		gen := s.genOfPkg[p.PkgPath]
+		for _, f := range p.Syntax {
+			for _, imp := range f.Imports {
+				path := strings.Trim(imp.Path.Value, `"`)
+				if s.hand[path] != nil {
+					s.b.edge(pb.CodeEdgeKind_CODE_EDGE_KIND_IMPORTS, gen, path, s.fset.Position(imp.Pos()), "")
 				}
 			}
 		}

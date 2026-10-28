@@ -73,6 +73,13 @@ Scanned github.com/maykel/dragium-web at aef8d2d in 1.8s
 Prints the linked codebase, its latest snapshot (commit, branch, date), whether HEAD has been
 scanned, and the top findings.
 
+### `code archive`
+
+Hides the linked codebase from its project: it disappears from the Code view and MCP, and
+uploads are refused. Nothing is deleted. Running `nuzur-cli code link` in the repository
+restores it. Outside a terminal it needs `--yes`. It needs an admin or developer role, and the
+web Code view offers the same action in the menu next to the codebase picker.
+
 ### Reading it back
 
 Agents read snapshots through the nuzur MCP server:
@@ -113,6 +120,9 @@ does not abort on them.
 - **nuzur-generated trees** are found through their `.nuzur-codegen-manifest.json` and collapsed
   into a single node: a generated client like `sfapi/`, a whole generated app, or a dependency
   module like `github.com/nuzur/nem`.
+- A generated tree that contains its own `package main` (a go-code-gen server) counts as a
+  **deployable**. Its imports of hand-written packages are kept as edges, so a custom zone that
+  the generated server wires in is reachable rather than reported as dead code (scanner 0.2.0).
 - **Other generated files**, anything with the standard `// Code generated … DO NOT EDIT.` header
   (protoc, sqlc, stringer), are left out of size and churn metrics.
 
