@@ -132,7 +132,7 @@ stripped, and the git remote is normalized to a credential-free https URL.
 Packages that fail to type-check are still emitted and listed under `load_errors`. The scan
 does not abort on them.
 
-## Templates and scripts (scanner 0.4.0)
+## Templates, scripts and stylesheets (scanner 0.4.0; stylesheets and the rules below 0.5.0)
 
 For a server-rendered app the scan also maps the frontend, from what the code names literally:
 
@@ -144,18 +144,26 @@ For a server-rendered app the scan also maps the frontend, from what the code na
 - **Template includes.** `{{template "x"}}` includes the one file named or `{{define}}`-ing `x`
   (an ambiguous name is skipped). `<script src>` and any quoted absolute `.js` path (`import()`,
   loader helpers) include that script. Query strings are ignored, so `?v={{.Version}}` is fine.
-  A path built from a template variable (`/assets/js/{{$f}}.js`) marks its directory: a Go string
-  literal naming a file there (`"drag_v3.3.2"`) makes that package load it.
-- **Script imports.** `import … from "./b.js"`, `import("./b.js?v=1")`, and a string naming a
-  sibling script without path or version (`loadBeat('fsv3_raq')`, names with `_` or `-` only).
+  `<link rel="stylesheet" href>` includes a stylesheet, and `@import` inside one includes another.
+  A path built from a template variable (`/assets/js/{{$f}}.js`, `/assets/css/{{$c}}.css`) marks its
+  directory: a name in a Go `[]string` literal naming a file there (`CSSFiles: []string{"tdr"}`)
+  makes that package load it. Only list elements count, so the same word elsewhere in Go does not.
+- **Script imports.** `import … from "./b.js"`, `import("./b.js?v=1")`, an absolute path
+  (`importWithRetry('/assets/js/b_v3.3.2.js?v=' + v)`), and a string naming a sibling script without
+  path or version (`loadBeat('fsv3_raq')`, names with `_` or `-` only).
 - **Routes scripts call.** JS string literals starting with `/` (concatenation and `${…}` become a
-  dynamic segment) that match a Go route pattern. A dynamic segment only matches a route
-  parameter. This catches requests and links alike.
+  dynamic segment) that match a Go route pattern, and paths in `href`/`action`/`src` attributes of
+  HTML a script builds as strings (`'<a href="/tdr/' + id + '">'`). A dynamic segment only matches
+  a route parameter. This catches requests and links alike.
 - **Left out.** Minified files (`*.min.*`, or a few very long lines), bundler output
-  (browserify/webpack), `node_modules`, remote scripts, and CSS.
+  (browserify/webpack), `node_modules`, and remote scripts and stylesheets.
 
-Each template and script is one node. Its **owner** is the component (or container) rendering or
-loading it, when exactly one does; otherwise it is shared. Ids drop version suffixes
+Each template, script and stylesheet is one node. Its **owner** is the component (or container)
+most tied to it: two points for each unit whose package renders or names it or whose owned file
+includes it, one for each unit whose routes a script calls; the highest score wins and only a tie
+leaves it shared. `attrs.used_by` lists every unit whose pages load it. `attrs.hash` is a content
+hash with version strings removed, so diffs list every real edit (even one that keeps the line
+count) and a release bump alone is not one. Ids drop version suffixes
 (`assets/js/fsv3_v3.3.2.js` → `js:assets/js/fsv3.js`, `baq_v3.3.2/` → `baq/`) so a version bump
 that renames every file is not every file replaced; churn is tracked the same way. Go metrics and
 findings are unaffected: frontend lines are reported beside a component, never inside its LOC.

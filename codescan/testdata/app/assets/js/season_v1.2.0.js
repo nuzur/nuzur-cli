@@ -7,4 +7,5 @@ xhr.open('POST', `/admin/reset`);  // POST /admin/reset
 fetch('/about/' + id);             // no such route
 fetch('/assets/img/logo.png');     // a file, not a route
 loadBeat('season-extra');          // a sibling script by name
+importWithRetry('/assets/js/late_v1.2.0.js?v=' + id); // an absolute path, versioned
 // fetch('/show') is commented out

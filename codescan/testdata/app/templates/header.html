@@ -1,1 +1,1 @@
-{{define "header"}}<header>{{template "footer.html" .}}</header>{{end}}
+{{define "header"}}<header>{{range $c := .CSS}}<link rel="stylesheet" href="/assets/css/{{$c}}.css?v=1">{{end}}{{template "footer.html" .}}</header>{{end}}

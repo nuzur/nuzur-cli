@@ -27,7 +27,7 @@ const SchemaVersion = 1
 
 // ScannerVersion identifies the extraction logic; bump it when the same tree
 // would produce different facts.
-const ScannerVersion = "0.4.0"
+const ScannerVersion = "0.5.0"
 
 type Options struct {
 	// Dir is the module root to scan (the directory holding go.mod).
@@ -612,6 +612,7 @@ func (s *scanner) walkPackage(p *packages.Package) {
 					s.addBackground(p, fn, pb.CodeBackgroundKind_CODE_BACKGROUND_KIND_GOROUTINE, x.Pos())
 				case *ast.CompositeLit:
 					s.lifecycleHook(p, fn, x)
+					s.nameList(p, x)
 				case *ast.BasicLit:
 					s.hostLiteral(p, x)
 					s.templateLiteral(p, x)
@@ -623,9 +624,12 @@ func (s *scanner) walkPackage(p *packages.Package) {
 		for _, decl := range f.Decls {
 			if gd, ok := decl.(*ast.GenDecl); ok {
 				ast.Inspect(gd, func(n ast.Node) bool {
-					if lit, ok := n.(*ast.BasicLit); ok {
-						s.hostLiteral(p, lit)
-						s.templateLiteral(p, lit)
+					switch x := n.(type) {
+					case *ast.BasicLit:
+						s.hostLiteral(p, x)
+						s.templateLiteral(p, x)
+					case *ast.CompositeLit:
+						s.nameList(p, x)
 					}
 					return true
 				})

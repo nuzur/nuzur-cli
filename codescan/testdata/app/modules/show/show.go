@@ -31,3 +31,6 @@ var showPage = page("show.html")
 
 // footerScripts are loaded by footer.html as /assets/js/{{$f}}.js.
 var footerScripts = []string{"footer_widget"}
+
+// pageCSS is loaded by header.html as /assets/css/{{$c}}.css.
+var pageCSS = []string{"theme"}

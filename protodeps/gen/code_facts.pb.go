@@ -38,23 +38,25 @@ const (
 	// suffixes (fsv3_v3.3.2.js -> js:assets/js/fsv3.js) so a version bump
 	// that renames every file does not read as every file being replaced;
 	// path keeps the real file.
-	CodeNodeKind_CODE_NODE_KIND_TEMPLATE CodeNodeKind = 8 // "tpl:<path>": an HTML template Go code renders
-	CodeNodeKind_CODE_NODE_KIND_SCRIPT   CodeNodeKind = 9 // "js:<path>": a JavaScript file served to browsers
+	CodeNodeKind_CODE_NODE_KIND_TEMPLATE   CodeNodeKind = 8  // "tpl:<path>": an HTML template Go code renders
+	CodeNodeKind_CODE_NODE_KIND_SCRIPT     CodeNodeKind = 9  // "js:<path>": a JavaScript file served to browsers
+	CodeNodeKind_CODE_NODE_KIND_STYLESHEET CodeNodeKind = 10 // "css:<path>": a stylesheet served to browsers
 )
 
 // Enum value maps for CodeNodeKind.
 var (
 	CodeNodeKind_name = map[int32]string{
-		0: "CODE_NODE_KIND_INVALID",
-		1: "CODE_NODE_KIND_CONTAINER",
-		2: "CODE_NODE_KIND_COMPONENT",
-		3: "CODE_NODE_KIND_PACKAGE",
-		4: "CODE_NODE_KIND_EXTERNAL_SYSTEM",
-		5: "CODE_NODE_KIND_KEYSPACE",
-		6: "CODE_NODE_KIND_ENTITY_REF",
-		7: "CODE_NODE_KIND_GENERATED",
-		8: "CODE_NODE_KIND_TEMPLATE",
-		9: "CODE_NODE_KIND_SCRIPT",
+		0:  "CODE_NODE_KIND_INVALID",
+		1:  "CODE_NODE_KIND_CONTAINER",
+		2:  "CODE_NODE_KIND_COMPONENT",
+		3:  "CODE_NODE_KIND_PACKAGE",
+		4:  "CODE_NODE_KIND_EXTERNAL_SYSTEM",
+		5:  "CODE_NODE_KIND_KEYSPACE",
+		6:  "CODE_NODE_KIND_ENTITY_REF",
+		7:  "CODE_NODE_KIND_GENERATED",
+		8:  "CODE_NODE_KIND_TEMPLATE",
+		9:  "CODE_NODE_KIND_SCRIPT",
+		10: "CODE_NODE_KIND_STYLESHEET",
 	}
 	CodeNodeKind_value = map[string]int32{
 		"CODE_NODE_KIND_INVALID":         0,
@@ -67,6 +69,7 @@ var (
 		"CODE_NODE_KIND_GENERATED":       7,
 		"CODE_NODE_KIND_TEMPLATE":        8,
 		"CODE_NODE_KIND_SCRIPT":          9,
+		"CODE_NODE_KIND_STYLESHEET":      10,
 	}
 )
 
@@ -109,7 +112,7 @@ const (
 	CodeEdgeKind_CODE_EDGE_KIND_WRITES_KEYSPACE CodeEdgeKind = 6
 	CodeEdgeKind_CODE_EDGE_KIND_USES_GENERATED  CodeEdgeKind = 7  // package -> generated node
 	CodeEdgeKind_CODE_EDGE_KIND_RENDERS         CodeEdgeKind = 8  // package -> template it parses/executes
-	CodeEdgeKind_CODE_EDGE_KIND_INCLUDES        CodeEdgeKind = 9  // template -> partial template or script; script -> imported script
+	CodeEdgeKind_CODE_EDGE_KIND_INCLUDES        CodeEdgeKind = 9  // template -> partial, script or stylesheet; script -> imported script; stylesheet -> @import
 	CodeEdgeKind_CODE_EDGE_KIND_CALLS_ROUTE     CodeEdgeKind = 10 // script -> package handling a route it requests; ops = the routes ("GET /x/{id}")
 )
 
@@ -475,7 +478,7 @@ type CodeNode struct {
 	state protoimpl.MessageState `protogen:"open.v1"`
 	// Stable across snapshots: import path for packages/components/containers,
 	// "ext:<name>", "ks:<store>:<prefix>", "entity:<identifier>", "gen:<dir>",
-	// "tpl:<path>", "js:<path>".
+	// "tpl:<path>", "js:<path>", "css:<path>".
 	Id            string            `protobuf:"bytes,1,opt,name=id,proto3" json:"id,omitempty"`
 	Kind          CodeNodeKind      `protobuf:"varint,2,opt,name=kind,proto3,enum=CodeNodeKind" json:"kind,omitempty"`
 	ParentId      string            `protobuf:"bytes,3,opt,name=parent_id,json=parentId,proto3" json:"parent_id,omitempty"`
@@ -1385,6 +1388,8 @@ type CodeSummary struct {
 	Templates     int32                  `protobuf:"varint,14,opt,name=templates,proto3" json:"templates,omitempty"`
 	Scripts       int32                  `protobuf:"varint,15,opt,name=scripts,proto3" json:"scripts,omitempty"`
 	ScriptLoc     int32                  `protobuf:"varint,16,opt,name=script_loc,json=scriptLoc,proto3" json:"script_loc,omitempty"`
+	Stylesheets   int32                  `protobuf:"varint,17,opt,name=stylesheets,proto3" json:"stylesheets,omitempty"`
+	StylesheetLoc int32                  `protobuf:"varint,18,opt,name=stylesheet_loc,json=stylesheetLoc,proto3" json:"stylesheet_loc,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
@@ -1527,6 +1532,20 @@ func (x *CodeSummary) GetScripts() int32 {
 func (x *CodeSummary) GetScriptLoc() int32 {
 	if x != nil {
 		return x.ScriptLoc
+	}
+	return 0
+}
+
+func (x *CodeSummary) GetStylesheets() int32 {
+	if x != nil {
+		return x.Stylesheets
+	}
+	return 0
+}
+
+func (x *CodeSummary) GetStylesheetLoc() int32 {
+	if x != nil {
+		return x.StylesheetLoc
 	}
 	return 0
 }
@@ -2112,7 +2131,7 @@ const file_code_facts_proto_rawDesc = "" +
 	"\x06detail\x18\x05 \x01(\tR\x06detail\x12\x19\n" +
 	"\bnode_ids\x18\x06 \x03(\tR\anodeIds\x12)\n" +
 	"\bevidence\x18\a \x03(\v2\r.CodeEvidenceR\bevidence\x12\x14\n" +
-	"\x05score\x18\b \x01(\x01R\x05score\"\xe8\x03\n" +
+	"\x05score\x18\b \x01(\x01R\x05score\"\xb1\x04\n" +
 	"\vCodeSummary\x12\x1e\n" +
 	"\n" +
 	"containers\x18\x01 \x01(\x05R\n" +
@@ -2140,7 +2159,9 @@ const file_code_facts_proto_rawDesc = "" +
 	"\ttemplates\x18\x0e \x01(\x05R\ttemplates\x12\x18\n" +
 	"\ascripts\x18\x0f \x01(\x05R\ascripts\x12\x1d\n" +
 	"\n" +
-	"script_loc\x18\x10 \x01(\x05R\tscriptLoc\"\xd6\x01\n" +
+	"script_loc\x18\x10 \x01(\x05R\tscriptLoc\x12 \n" +
+	"\vstylesheets\x18\x11 \x01(\x05R\vstylesheets\x12%\n" +
+	"\x0estylesheet_loc\x18\x12 \x01(\x05R\rstylesheetLoc\"\xd6\x01\n" +
 	"\x0eCodeNodeChange\x12\x16\n" +
 	"\x06change\x18\x01 \x01(\tR\x06change\x12\x0e\n" +
 	"\x02id\x18\x02 \x01(\tR\x02id\x12!\n" +
@@ -2181,7 +2202,7 @@ const file_code_facts_proto_rawDesc = "" +
 	"\tgenerated\x18\x06 \x03(\v2\x14.CodeGeneratedChangeR\tgenerated\x123\n" +
 	"\x0efindings_added\x18\a \x03(\v2\f.CodeFindingR\rfindingsAdded\x129\n" +
 	"\x11findings_resolved\x18\b \x03(\v2\f.CodeFindingR\x10findingsResolved\x12\x1c\n" +
-	"\theadlines\x18\t \x03(\tR\theadlines*\xb8\x02\n" +
+	"\theadlines\x18\t \x03(\tR\theadlines*\xd7\x02\n" +
 	"\fCodeNodeKind\x12\x1a\n" +
 	"\x16CODE_NODE_KIND_INVALID\x10\x00\x12\x1c\n" +
 	"\x18CODE_NODE_KIND_CONTAINER\x10\x01\x12\x1c\n" +
@@ -2192,7 +2213,9 @@ const file_code_facts_proto_rawDesc = "" +
 	"\x19CODE_NODE_KIND_ENTITY_REF\x10\x06\x12\x1c\n" +
 	"\x18CODE_NODE_KIND_GENERATED\x10\a\x12\x1b\n" +
 	"\x17CODE_NODE_KIND_TEMPLATE\x10\b\x12\x19\n" +
-	"\x15CODE_NODE_KIND_SCRIPT\x10\t*\xe8\x02\n" +
+	"\x15CODE_NODE_KIND_SCRIPT\x10\t\x12\x1d\n" +
+	"\x19CODE_NODE_KIND_STYLESHEET\x10\n" +
+	"*\xe8\x02\n" +
 	"\fCodeEdgeKind\x12\x1a\n" +
 	"\x16CODE_EDGE_KIND_INVALID\x10\x00\x12\x1a\n" +
 	"\x16CODE_EDGE_KIND_IMPORTS\x10\x01\x12\x1a\n" +

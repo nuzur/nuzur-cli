@@ -171,10 +171,12 @@ func (i *Implementation) codeLinkProject(flags codeLinkFlags) (*nemgen.Project, 
 func (i *Implementation) CodeScanCommand() cli.Command {
 	return cli.Command{
 		Name:  "scan",
-		Usage: i.localize.Localize("code_scan_desc", "Extract the architecture facts of the Go module in the current directory"),
+		Usage: i.localize.Localize("code_scan_desc", "Extract the architecture facts of the app in the current directory: its Go code and the templates, scripts and stylesheets it serves"),
 		Description: "Reads packages, imports, fx wiring, HTTP routes, nuzur entity calls, external systems,\n" +
-			"   key-value keyspaces and background work. No source code is collected: only identifiers,\n" +
-			"   repo-relative paths, route patterns, hosts and key prefixes.\n" +
+			"   key-value keyspaces and background work, plus the HTML templates the Go code renders, the\n" +
+			"   JavaScript and CSS they load and the routes that JavaScript calls. Run it from the Go module\n" +
+			"   root. No source code is collected: only identifiers, repo-relative paths, route patterns,\n" +
+			"   hosts, key prefixes, line counts and content hashes.\n" +
 			"   When the module is linked (" + codescan.LinkFile + "), the snapshot is uploaded to nuzur;\n" +
 			"   the first upload of a codebase is previewed and confirmed.",
 		Flags: []cli.Flag{
