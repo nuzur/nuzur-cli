@@ -22,3 +22,12 @@ func (i *Implementation) Handler(w http.ResponseWriter, r *http.Request) {
 	_ = i.drags.FetchDragByUUID("x")
 	_ = i.drags.Insert()
 }
+
+// page is loaded by a name joined at run time; the scanner finds the one
+// template whose path ends with it.
+func page(name string) string { return "./templates/" + name }
+
+var showPage = page("show.html")
+
+// footerScripts are loaded by footer.html as /assets/js/{{$f}}.js.
+var footerScripts = []string{"footer_widget"}

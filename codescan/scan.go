@@ -27,7 +27,7 @@ const SchemaVersion = 1
 
 // ScannerVersion identifies the extraction logic; bump it when the same tree
 // would produce different facts.
-const ScannerVersion = "0.3.0"
+const ScannerVersion = "0.4.0"
 
 type Options struct {
 	// Dir is the module root to scan (the directory holding go.mod).
@@ -82,6 +82,7 @@ func Scan(ctx context.Context, opts Options) (*pb.CodeFacts, error) {
 		known:    map[string]bool{},
 		hand:     map[string]*packages.Package{},
 		genOfPkg: map[string]string{},
+		fe:       frontend{renders: map[string]map[string]token.Position{}, names: map[string]map[string]token.Position{}, partial: map[string]map[string]token.Position{}},
 	}
 	for _, e := range opts.KnownEntities {
 		s.known[e] = true
@@ -120,9 +121,12 @@ func Scan(ctx context.Context, opts Options) (*pb.CodeFacts, error) {
 	for _, p := range s.handPkgs() {
 		s.walkPackage(p)
 	}
+	var churn churnData
 	if opts.ChurnDays > 0 {
-		s.applyChurn(git.churn(ctx, dir, opts.ChurnDays))
+		churn = git.churn(ctx, dir, opts.ChurnDays)
+		s.applyChurn(churn.dirs)
 	}
+	s.extractFrontend(churn.files)
 	s.attachDocs(repoRoot)
 
 	generated := s.generatedFacts() // adds the generated nodes, so it runs first
@@ -175,6 +179,7 @@ type scanner struct {
 	provided  map[string]bool     // packages exporting an fx-provided constructor
 	fxRoots   map[string]bool     // packages calling fx.Provide (composition roots)
 	component map[string]string   // package import path -> component id
+	fe        frontend
 }
 
 func (s *scanner) handPkgs() []*packages.Package {
@@ -609,6 +614,7 @@ func (s *scanner) walkPackage(p *packages.Package) {
 					s.lifecycleHook(p, fn, x)
 				case *ast.BasicLit:
 					s.hostLiteral(p, x)
+					s.templateLiteral(p, x)
 				}
 				return true
 			})
@@ -619,6 +625,7 @@ func (s *scanner) walkPackage(p *packages.Package) {
 				ast.Inspect(gd, func(n ast.Node) bool {
 					if lit, ok := n.(*ast.BasicLit); ok {
 						s.hostLiteral(p, lit)
+						s.templateLiteral(p, lit)
 					}
 					return true
 				})

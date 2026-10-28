@@ -117,19 +117,27 @@ type churnAcc struct {
 
 var braceRename = regexp.MustCompile(`\{[^}]* => ([^}]*)\}`)
 
-// churn sums lines changed in .go files per repo-relative directory over the
-// last days, with the commits and authors that touched each directory.
-func (g gitInfo) churn(ctx context.Context, dir string, days int) map[string]*churnAcc {
-	out := map[string]*churnAcc{}
+// churnData is git activity over the churn window: per repo-relative
+// directory for Go files, and per repo-relative file for frontend files
+// (templates and scripts are one node each), keyed by normalizeAssetPath.
+type churnData struct {
+	dirs  map[string]*churnAcc
+	files map[string]*churnAcc
+}
+
+// churn sums lines changed over the last days, with the commits and authors
+// behind them.
+func (g gitInfo) churn(ctx context.Context, dir string, days int) churnData {
+	data := churnData{dirs: map[string]*churnAcc{}, files: map[string]*churnAcc{}}
 	if g.root == "" {
-		return out
+		return data
 	}
 	cmd := exec.CommandContext(ctx, "git", "log", "--since="+strconv.Itoa(days)+".days", "--numstat",
 		"--format=%x00%H%x09%ae", "--", ".")
 	cmd.Dir = dir
 	raw, err := cmd.Output()
 	if err != nil {
-		return out
+		return data
 	}
 	var sha, author string
 	sc := bufio.NewScanner(bytes.NewReader(raw))
@@ -153,25 +161,34 @@ func (g gitInfo) churn(ctx context.Context, dir string, days int) map[string]*ch
 				file = file[strings.Index(file, " => ")+4:]
 			}
 		}
-		if !strings.HasSuffix(file, ".go") {
-			continue
-		}
 		added, _ := strconv.Atoi(parts[0])
 		deleted, _ := strconv.Atoi(parts[1])
-		d := path.Dir(file)
-		if d == "." {
-			d = ""
+		ext := strings.ToLower(path.Ext(file))
+		switch {
+		case ext == ".go":
+			d := path.Dir(file)
+			if d == "." {
+				d = ""
+			}
+			data.dirs[d] = data.dirs[d].add(added+deleted, sha, author)
+		case templateExts[ext] || scriptExts[ext]:
+			// Keyed without version suffixes, so edits made before a
+			// version-bump rename still count for the file.
+			key := normalizeAssetPath(file)
+			data.files[key] = data.files[key].add(added+deleted, sha, author)
 		}
-		acc, ok := out[d]
-		if !ok {
-			acc = &churnAcc{commits: map[string]bool{}, authors: map[string]bool{}}
-			out[d] = acc
-		}
-		acc.lines += added + deleted
-		acc.commits[sha] = true
-		acc.authors[author] = true
 	}
-	return out
+	return data
+}
+
+func (a *churnAcc) add(lines int, sha, author string) *churnAcc {
+	if a == nil {
+		a = &churnAcc{commits: map[string]bool{}, authors: map[string]bool{}}
+	}
+	a.lines += lines
+	a.commits[sha] = true
+	a.authors[author] = true
+	return a
 }
 
 // applyChurn sets churn metrics on package and container nodes, and the

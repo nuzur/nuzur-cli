@@ -132,6 +132,34 @@ stripped, and the git remote is normalized to a credential-free https URL.
 Packages that fail to type-check are still emitted and listed under `load_errors`. The scan
 does not abort on them.
 
+## Templates and scripts (scanner 0.4.0)
+
+For a server-rendered app the scan also maps the frontend, from what the code names literally:
+
+- **Rendered templates.** A Go string literal naming an existing template file (`.html`, `.tmpl`,
+  `.gohtml`, `.tpl`) makes its package render it: `ParseFiles("./templates/home.html")`,
+  `ParseGlob`, `ParseFS`, or a helper that takes the path. A name joined at run time
+  (`"./templates/admin/" + page` with `page = "llm.html"`) resolves to the one template whose path
+  ends that way. Every other template in the same top-level directory is kept too.
+- **Template includes.** `{{template "x"}}` includes the one file named or `{{define}}`-ing `x`
+  (an ambiguous name is skipped). `<script src>` and any quoted absolute `.js` path (`import()`,
+  loader helpers) include that script. Query strings are ignored, so `?v={{.Version}}` is fine.
+  A path built from a template variable (`/assets/js/{{$f}}.js`) marks its directory: a Go string
+  literal naming a file there (`"drag_v3.3.2"`) makes that package load it.
+- **Script imports.** `import … from "./b.js"`, `import("./b.js?v=1")`, and a string naming a
+  sibling script without path or version (`loadBeat('fsv3_raq')`, names with `_` or `-` only).
+- **Routes scripts call.** JS string literals starting with `/` (concatenation and `${…}` become a
+  dynamic segment) that match a Go route pattern. A dynamic segment only matches a route
+  parameter. This catches requests and links alike.
+- **Left out.** Minified files (`*.min.*`, or a few very long lines), bundler output
+  (browserify/webpack), `node_modules`, remote scripts, and CSS.
+
+Each template and script is one node. Its **owner** is the component (or container) rendering or
+loading it, when exactly one does; otherwise it is shared. Ids drop version suffixes
+(`assets/js/fsv3_v3.3.2.js` → `js:assets/js/fsv3.js`, `baq_v3.3.2/` → `baq/`) so a version bump
+that renames every file is not every file replaced; churn is tracked the same way. Go metrics and
+findings are unaffected: frontend lines are reported beside a component, never inside its LOC.
+
 ## Generated code
 
 - **nuzur-generated trees** are found through their `.nuzur-codegen-manifest.json` and collapsed
