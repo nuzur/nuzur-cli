@@ -52,6 +52,7 @@ the project.
 | `--allow-dirty` | false | scan a tree with uncommitted changes; the snapshot is marked `dirty` |
 | `--no-upload` | false | scan only, even when the module is linked |
 | `--yes` | false | do not ask before the first upload (CI, agents) |
+| `--no-branch-point` | false | on a non-default branch, do not also scan the commit it split off at |
 
 A clean tree is required by default, because the facts describe one commit.
 
@@ -67,6 +68,22 @@ Scanned github.com/maykel/dragium-web at aef8d2d in 1.8s
   entities 17 · externals 17 · keyspaces 29
   routes 233 · background tasks 54 · import edges 362 · injects 134
 ```
+
+#### Branches and worktrees
+
+A scan describes the commit checked out where it runs and records its branch. Scans of the
+codebase's **default branch** (from nuzur, else `origin/HEAD`, else whichever of `main`/`master`
+exists) are what the project shows by default; scans of other branches are kept for comparing.
+
+On any other branch the scan also records its **branch point**: the merge-base with the default
+branch (`origin/<default>` when present, else the local branch). After uploading, if that commit
+has never been scanned, it is checked out into a temporary `git worktree`, scanned, uploaded
+and removed; the checkout you ran in is never touched. That gives "what has this branch
+changed" a base: `diffCodeSnapshots` with only `head`, or "What … changed since it split" in
+the web Compare menu. A failure there is printed and does not fail the scan.
+
+A git worktree that has no `.nuzur/codebase.json` of its own (it was committed on a branch this
+one has not merged yet) uses the main checkout's: they are the same repository.
 
 ### `code status`
 

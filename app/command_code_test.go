@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"compress/gzip"
 	"context"
+	"errors"
 	"io"
 	"strings"
 	"testing"
@@ -13,6 +14,8 @@ import (
 	"github.com/nuzur/nuzur-cli/productclient"
 	pb "github.com/nuzur/nuzur-cli/protodeps/gen"
 	"google.golang.org/grpc"
+	"google.golang.org/grpc/codes"
+	"google.golang.org/grpc/status"
 	"google.golang.org/protobuf/encoding/protojson"
 )
 
@@ -23,6 +26,8 @@ type codeFakeClient struct {
 	existing []*pb.CodeSnapshotItem
 	uploads  []*pb.UploadCodeSnapshotRequest
 	archived []string
+	// scanned is the set of commits GetCodeSnapshot finds.
+	scanned map[string]bool
 }
 
 func (f *codeFakeClient) ListCodeSnapshots(ctx context.Context, in *pb.ListCodeSnapshotsRequest, opts ...grpc.CallOption) (*pb.ListCodeSnapshotsResponse, error) {
@@ -35,6 +40,13 @@ func (f *codeFakeClient) UploadCodeSnapshot(ctx context.Context, in *pb.UploadCo
 		Snapshot: &nemgen.CodeSnapshot{CommitSha: "aef8d2d6c1f3b6f7e0c9d8a7b6c5d4e3f2a1b0c9"},
 		Summary:  &pb.CodeSummary{Findings: []*pb.CodeFinding{{Severity: "warning", Title: "3 components depend on each other in a cycle"}}},
 	}, nil
+}
+
+func (f *codeFakeClient) GetCodeSnapshot(ctx context.Context, in *pb.GetCodeSnapshotRequest, opts ...grpc.CallOption) (*pb.GetCodeSnapshotResponse, error) {
+	if !f.scanned[in.GetCommitSha()] {
+		return nil, status.Error(codes.NotFound, "code snapshot not found")
+	}
+	return &pb.GetCodeSnapshotResponse{Snapshot: &nemgen.CodeSnapshot{CommitSha: in.GetCommitSha()}}, nil
 }
 
 func (f *codeFakeClient) ArchiveCodebase(ctx context.Context, in *pb.ArchiveCodebaseRequest, opts ...grpc.CallOption) (*nemgen.Codebase, error) {
@@ -144,5 +156,59 @@ func TestCodeArchive(t *testing.T) {
 	}
 	if len(fake.archived) != 1 || fake.archived[0] != "cb" || !strings.Contains(out.String(), "Archived codebase app") {
 		t.Fatalf("archived %v, output %q", fake.archived, out.String())
+	}
+}
+
+func TestCodeScanBranchPoint(t *testing.T) {
+	isolateHome(t)
+	const bp = "1111111111111111111111111111111111111111"
+	link := codescan.Link{CodebaseUUID: "cb", Identifier: "app"}
+	onBranch := func() *pb.CodeFacts {
+		f := codeTestFacts()
+		f.Git.Branch, f.Git.BranchPointSha, f.Git.DefaultBranch = "release/2026-11", bp, "master"
+		return f
+	}
+
+	// Not scanned yet: scan it (in a worktree, here faked) and upload it.
+	fake := &codeFakeClient{existing: []*pb.CodeSnapshotItem{{}}}
+	i := &Implementation{productClient: &productclient.Client{ProductClient: fake}}
+	var scannedAt []string
+	scan := func(sha string) (*pb.CodeFacts, error) {
+		scannedAt = append(scannedAt, sha)
+		f := codeTestFacts()
+		f.Git.CommitSha = sha
+		return f, nil
+	}
+	var out bytes.Buffer
+	if err := i.codeScanBranchPoint(link, onBranch(), scan, &out); err != nil {
+		t.Fatal(err)
+	}
+	if len(scannedAt) != 1 || scannedAt[0] != bp || len(fake.uploads) != 1 {
+		t.Fatalf("expected one scan and upload of %s, got scans %v, %d uploads", bp, scannedAt, len(fake.uploads))
+	}
+	if !strings.Contains(out.String(), "where release/2026-11 split from master") {
+		t.Fatalf("output should say what is being scanned: %q", out.String())
+	}
+
+	// Already scanned, or on the default branch: nothing to do.
+	for name, facts := range map[string]*pb.CodeFacts{"scanned": onBranch(), "default branch": codeTestFacts()} {
+		fake := &codeFakeClient{scanned: map[string]bool{bp: true}}
+		i := &Implementation{productClient: &productclient.Client{ProductClient: fake}}
+		scannedAt = nil
+		if err := i.codeScanBranchPoint(link, facts, scan, io.Discard); err != nil || len(scannedAt) != 0 || len(fake.uploads) != 0 {
+			t.Fatalf("%s: expected no scan, got %v, %d uploads, %v", name, scannedAt, len(fake.uploads), err)
+		}
+	}
+
+	// A failing branch-point scan is reported, not fatal: HEAD is uploaded.
+	fake = &codeFakeClient{existing: []*pb.CodeSnapshotItem{{}}}
+	i = &Implementation{productClient: &productclient.Client{ProductClient: fake}}
+	out.Reset()
+	fail := func(string) (*pb.CodeFacts, error) { return nil, errors.New("go.mod missing") }
+	if err := i.codeScanBranchPoint(link, onBranch(), fail, &out); err != nil {
+		t.Fatalf("should not fail the scan: %v", err)
+	}
+	if !strings.Contains(out.String(), "Could not scan the branch point") {
+		t.Fatalf("the failure should be reported: %q", out.String())
 	}
 }

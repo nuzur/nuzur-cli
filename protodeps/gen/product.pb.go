@@ -13089,12 +13089,22 @@ func (x *ListCodeSnapshotsResponse) GetNextPageToken() string {
 
 // GetCodeSnapshot addresses a snapshot by uuid, or by codebase + full commit
 // sha, or — with only codebase_uuid — the most recently committed one.
+// GetCodeSnapshot addresses a snapshot by snapshot_uuid, or by codebase_uuid
+// plus commit_sha, plus branch (the newest on that branch), or alone (the
+// newest on the default branch, else on any branch).
 type GetCodeSnapshotRequest struct {
-	state         protoimpl.MessageState `protogen:"open.v1"`
-	SnapshotUuid  string                 `protobuf:"bytes,1,opt,name=snapshot_uuid,json=snapshotUuid,proto3" json:"snapshot_uuid,omitempty"`
-	CodebaseUuid  string                 `protobuf:"bytes,2,opt,name=codebase_uuid,json=codebaseUuid,proto3" json:"codebase_uuid,omitempty"`
-	CommitSha     string                 `protobuf:"bytes,3,opt,name=commit_sha,json=commitSha,proto3" json:"commit_sha,omitempty"`
-	Lean          bool                   `protobuf:"varint,4,opt,name=lean,proto3" json:"lean,omitempty"` // omit facts; return the summary only
+	state        protoimpl.MessageState `protogen:"open.v1"`
+	SnapshotUuid string                 `protobuf:"bytes,1,opt,name=snapshot_uuid,json=snapshotUuid,proto3" json:"snapshot_uuid,omitempty"`
+	CodebaseUuid string                 `protobuf:"bytes,2,opt,name=codebase_uuid,json=codebaseUuid,proto3" json:"codebase_uuid,omitempty"`
+	CommitSha    string                 `protobuf:"bytes,3,opt,name=commit_sha,json=commitSha,proto3" json:"commit_sha,omitempty"`
+	Lean         bool                   `protobuf:"varint,4,opt,name=lean,proto3" json:"lean,omitempty"` // omit facts; return the summary only
+	Branch       string                 `protobuf:"bytes,5,opt,name=branch,proto3" json:"branch,omitempty"`
+	// Return the snapshot of the commit where the addressed snapshot's branch
+	// split from the default branch, instead of the addressed one: the base
+	// for "what has this branch changed". FAILED_PRECONDITION when the
+	// snapshot records no branch point, NOT_FOUND when that commit was never
+	// scanned.
+	BranchPoint   bool `protobuf:"varint,6,opt,name=branch_point,json=branchPoint,proto3" json:"branch_point,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
@@ -13153,6 +13163,20 @@ func (x *GetCodeSnapshotRequest) GetCommitSha() string {
 func (x *GetCodeSnapshotRequest) GetLean() bool {
 	if x != nil {
 		return x.Lean
+	}
+	return false
+}
+
+func (x *GetCodeSnapshotRequest) GetBranch() string {
+	if x != nil {
+		return x.Branch
+	}
+	return ""
+}
+
+func (x *GetCodeSnapshotRequest) GetBranchPoint() bool {
+	if x != nil {
+		return x.BranchPoint
 	}
 	return false
 }
@@ -14300,13 +14324,15 @@ const file_product_proto_rawDesc = "" +
 	"page_token\x18\x04 \x01(\tR\tpageToken\"t\n" +
 	"\x19ListCodeSnapshotsResponse\x12/\n" +
 	"\tsnapshots\x18\x01 \x03(\v2\x11.CodeSnapshotItemR\tsnapshots\x12&\n" +
-	"\x0fnext_page_token\x18\x02 \x01(\tR\rnextPageToken\"\x95\x01\n" +
+	"\x0fnext_page_token\x18\x02 \x01(\tR\rnextPageToken\"\xd0\x01\n" +
 	"\x16GetCodeSnapshotRequest\x12#\n" +
 	"\rsnapshot_uuid\x18\x01 \x01(\tR\fsnapshotUuid\x12#\n" +
 	"\rcodebase_uuid\x18\x02 \x01(\tR\fcodebaseUuid\x12\x1d\n" +
 	"\n" +
 	"commit_sha\x18\x03 \x01(\tR\tcommitSha\x12\x12\n" +
-	"\x04lean\x18\x04 \x01(\bR\x04lean\"\x92\x01\n" +
+	"\x04lean\x18\x04 \x01(\bR\x04lean\x12\x16\n" +
+	"\x06branch\x18\x05 \x01(\tR\x06branch\x12!\n" +
+	"\fbranch_point\x18\x06 \x01(\bR\vbranchPoint\"\x92\x01\n" +
 	"\x17GetCodeSnapshotResponse\x12-\n" +
 	"\bsnapshot\x18\x01 \x01(\v2\x11.nem.CodeSnapshotR\bsnapshot\x12 \n" +
 	"\x05facts\x18\x02 \x01(\v2\n" +

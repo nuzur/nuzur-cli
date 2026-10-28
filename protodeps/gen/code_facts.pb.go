@@ -348,15 +348,20 @@ func (x *CodeFacts) GetDeployHints() []*CodeDeployHint {
 }
 
 type CodeGitInfo struct {
-	state         protoimpl.MessageState `protogen:"open.v1"`
-	CommitSha     string                 `protobuf:"bytes,1,opt,name=commit_sha,json=commitSha,proto3" json:"commit_sha,omitempty"`
-	Branch        string                 `protobuf:"bytes,2,opt,name=branch,proto3" json:"branch,omitempty"`
-	CommittedAt   string                 `protobuf:"bytes,3,opt,name=committed_at,json=committedAt,proto3" json:"committed_at,omitempty"` // RFC 3339
-	Dirty         bool                   `protobuf:"varint,4,opt,name=dirty,proto3" json:"dirty,omitempty"`
-	RemoteUrl     string                 `protobuf:"bytes,5,opt,name=remote_url,json=remoteUrl,proto3" json:"remote_url,omitempty"`  // normalized https, credentials stripped
-	ChurnDays     int32                  `protobuf:"varint,6,opt,name=churn_days,json=churnDays,proto3" json:"churn_days,omitempty"` // window used for CodeMetrics.churn / authors
-	unknownFields protoimpl.UnknownFields
-	sizeCache     protoimpl.SizeCache
+	state       protoimpl.MessageState `protogen:"open.v1"`
+	CommitSha   string                 `protobuf:"bytes,1,opt,name=commit_sha,json=commitSha,proto3" json:"commit_sha,omitempty"`
+	Branch      string                 `protobuf:"bytes,2,opt,name=branch,proto3" json:"branch,omitempty"`
+	CommittedAt string                 `protobuf:"bytes,3,opt,name=committed_at,json=committedAt,proto3" json:"committed_at,omitempty"` // RFC 3339
+	Dirty       bool                   `protobuf:"varint,4,opt,name=dirty,proto3" json:"dirty,omitempty"`
+	RemoteUrl   string                 `protobuf:"bytes,5,opt,name=remote_url,json=remoteUrl,proto3" json:"remote_url,omitempty"`  // normalized https, credentials stripped
+	ChurnDays   int32                  `protobuf:"varint,6,opt,name=churn_days,json=churnDays,proto3" json:"churn_days,omitempty"` // window used for CodeMetrics.churn / authors
+	// Where this commit's branch split from the codebase's default branch
+	// (git merge-base with it). Empty on the default branch itself, or when
+	// the default branch is not known locally.
+	BranchPointSha string `protobuf:"bytes,7,opt,name=branch_point_sha,json=branchPointSha,proto3" json:"branch_point_sha,omitempty"`
+	DefaultBranch  string `protobuf:"bytes,8,opt,name=default_branch,json=defaultBranch,proto3" json:"default_branch,omitempty"` // the branch branch_point_sha was taken against
+	unknownFields  protoimpl.UnknownFields
+	sizeCache      protoimpl.SizeCache
 }
 
 func (x *CodeGitInfo) Reset() {
@@ -429,6 +434,20 @@ func (x *CodeGitInfo) GetChurnDays() int32 {
 		return x.ChurnDays
 	}
 	return 0
+}
+
+func (x *CodeGitInfo) GetBranchPointSha() string {
+	if x != nil {
+		return x.BranchPointSha
+	}
+	return ""
+}
+
+func (x *CodeGitInfo) GetDefaultBranch() string {
+	if x != nil {
+		return x.DefaultBranch
+	}
+	return ""
 }
 
 type CodeNode struct {
@@ -1954,7 +1973,7 @@ const file_code_facts_proto_rawDesc = "" +
 	"unresolved\x12/\n" +
 	"\vload_errors\x18\f \x03(\v2\x0e.CodeLoadErrorR\n" +
 	"loadErrors\x122\n" +
-	"\fdeploy_hints\x18\r \x03(\v2\x0f.CodeDeployHintR\vdeployHints\"\xbb\x01\n" +
+	"\fdeploy_hints\x18\r \x03(\v2\x0f.CodeDeployHintR\vdeployHints\"\x8c\x02\n" +
 	"\vCodeGitInfo\x12\x1d\n" +
 	"\n" +
 	"commit_sha\x18\x01 \x01(\tR\tcommitSha\x12\x16\n" +
@@ -1964,7 +1983,9 @@ const file_code_facts_proto_rawDesc = "" +
 	"\n" +
 	"remote_url\x18\x05 \x01(\tR\tremoteUrl\x12\x1d\n" +
 	"\n" +
-	"churn_days\x18\x06 \x01(\x05R\tchurnDays\"\xb6\x02\n" +
+	"churn_days\x18\x06 \x01(\x05R\tchurnDays\x12(\n" +
+	"\x10branch_point_sha\x18\a \x01(\tR\x0ebranchPointSha\x12%\n" +
+	"\x0edefault_branch\x18\b \x01(\tR\rdefaultBranch\"\xb6\x02\n" +
 	"\bCodeNode\x12\x0e\n" +
 	"\x02id\x18\x01 \x01(\tR\x02id\x12!\n" +
 	"\x04kind\x18\x02 \x01(\x0e2\r.CodeNodeKindR\x04kind\x12\x1b\n" +

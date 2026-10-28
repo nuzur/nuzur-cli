@@ -25,8 +25,17 @@ type Link struct {
 
 // ReadLink loads the link of the module in dir. A module that was never
 // linked returns os.ErrNotExist (test with errors.Is).
+//
+// In a linked git worktree that does not have the file yet (it was committed
+// on a branch this one has not merged), the main checkout's link for the same
+// module applies: both are the same repository, so they are one codebase.
 func ReadLink(dir string) (Link, error) {
 	raw, err := os.ReadFile(filepath.Join(dir, LinkFile))
+	if errors.Is(err, os.ErrNotExist) {
+		if main := mainCheckoutModuleDir(context.Background(), dir); main != "" {
+			raw, err = os.ReadFile(filepath.Join(main, LinkFile))
+		}
+	}
 	if err != nil {
 		return Link{}, err
 	}
@@ -38,6 +47,28 @@ func ReadLink(dir string) (Link, error) {
 		return Link{}, fmt.Errorf("%s has no codebase_uuid; run `nuzur-cli code link` again", LinkFile)
 	}
 	return l, nil
+}
+
+// mainCheckoutModuleDir is the directory in the repository's main checkout
+// that corresponds to dir when dir is inside a linked worktree (git worktree
+// add); empty in the main checkout itself, a bare repository, or outside git.
+func mainCheckoutModuleDir(ctx context.Context, dir string) string {
+	root := gitOut(ctx, dir, "rev-parse", "--show-toplevel")
+	common := gitOut(ctx, dir, "rev-parse", "--path-format=absolute", "--git-common-dir")
+	if root == "" || common == "" || filepath.Base(common) != ".git" {
+		return ""
+	}
+	main := filepath.Dir(common)
+	if sameDir(main, root) {
+		return ""
+	}
+	return filepath.Join(main, gitOut(ctx, dir, "rev-parse", "--show-prefix"))
+}
+
+func sameDir(a, b string) bool {
+	ra, errA := filepath.EvalSymlinks(a)
+	rb, errB := filepath.EvalSymlinks(b)
+	return errA == nil && errB == nil && ra == rb
 }
 
 // WriteLink writes the link of the module in dir.
@@ -76,7 +107,7 @@ func DescribeRepo(ctx context.Context, dir string) (Repo, error) {
 	r.RemoteURL = NormalizeRemote(gitOut(ctx, dir, "remote", "get-url", "origin"))
 	r.Head = gitOut(ctx, dir, "rev-parse", "HEAD")
 	r.Branch = gitOut(ctx, dir, "rev-parse", "--abbrev-ref", "HEAD")
-	r.DefaultBranch = strings.TrimPrefix(gitOut(ctx, dir, "symbolic-ref", "--short", "refs/remotes/origin/HEAD"), "origin/")
+	r.DefaultBranch = localDefaultBranch(ctx, dir)
 	if r.DefaultBranch == "" && r.Branch != "HEAD" {
 		r.DefaultBranch = r.Branch
 	}

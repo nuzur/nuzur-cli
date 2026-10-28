@@ -184,12 +184,34 @@ func (i *Implementation) CodeScanCommand() cli.Command {
 			cli.BoolFlag{Name: "allow-dirty", Usage: "Scan even when the working tree has uncommitted changes; the snapshot is marked dirty"},
 			cli.BoolFlag{Name: "no-upload", Usage: "Scan only; do not upload even when the module is linked"},
 			cli.BoolFlag{Name: "yes", Usage: "Do not ask before the first upload (for CI and agents)"},
+			cli.BoolFlag{Name: "no-branch-point", Usage: "On a branch other than the default one, do not also scan the commit it split off at"},
 		},
 		Action: func(c *cli.Context) error {
 			ctx, cancel := context.WithTimeout(context.Background(), 10*time.Minute)
 			defer cancel()
+
+			// The link decides where the snapshot goes and, through the
+			// codebase, which branch is the default one.
+			upload := !c.Bool("no-upload")
+			var link codescan.Link
+			if upload {
+				var err error
+				link, err = codescan.ReadLink(c.String("dir"))
+				if errors.Is(err, os.ErrNotExist) {
+					upload = false
+				} else if err != nil {
+					return err
+				} else if err := i.login(); err != nil {
+					return err
+				}
+			}
+			opts := codescan.Options{Dir: c.String("dir"), ChurnDays: c.Int("churn-days")}
+			if upload {
+				opts.DefaultBranch = i.codebaseDefaultBranch(link)
+			}
+
 			started := time.Now()
-			facts, err := codescan.Scan(ctx, codescan.Options{Dir: c.String("dir"), ChurnDays: c.Int("churn-days")})
+			facts, err := codescan.Scan(ctx, opts)
 			if err != nil {
 				return err
 			}
@@ -207,23 +229,77 @@ func (i *Implementation) CodeScanCommand() cli.Command {
 				}
 			}
 			printCodeSummary(facts, time.Since(started))
-			if c.Bool("no-upload") {
+			if !upload {
+				if !c.Bool("no-upload") {
+					fmt.Println("Not linked to nuzur, so nothing was uploaded. Run `nuzur-cli code link` to see this in the Code view.")
+				}
 				return nil
 			}
-			link, err := codescan.ReadLink(c.String("dir"))
-			if errors.Is(err, os.ErrNotExist) {
-				fmt.Println("Not linked to nuzur, so nothing was uploaded. Run `nuzur-cli code link` to see this in the Code view.")
+			if err := i.codeUpload(link, facts, c.Bool("yes"), os.Stdin, os.Stdout); err != nil {
+				return err
+			}
+			if c.Bool("no-branch-point") {
 				return nil
 			}
-			if err != nil {
-				return err
-			}
-			if err := i.login(); err != nil {
-				return err
-			}
-			return i.codeUpload(link, facts, c.Bool("yes"), os.Stdin, os.Stdout)
+			return i.codeScanBranchPoint(link, facts, func(sha string) (*pb.CodeFacts, error) {
+				bpOpts := opts
+				bpOpts.Branch = facts.GetGit().GetDefaultBranch()
+				return codescan.ScanCommit(ctx, bpOpts, sha)
+			}, os.Stdout)
 		},
 	}
+}
+
+// codebaseDefaultBranch is the linked codebase's default branch as nuzur
+// records it, so every checkout agrees on it; empty (the scanner then asks
+// git) when it cannot be read.
+func (i *Implementation) codebaseDefaultBranch(link codescan.Link) string {
+	authCtx, err := productclient.ClientContext()
+	if err != nil || link.ProjectUUID == "" {
+		return ""
+	}
+	res, err := i.productClient.ProductClient.ListCodebasesForProject(authCtx, &pb.ListCodebasesForProjectRequest{ProjectUuid: link.ProjectUUID})
+	if err != nil {
+		return ""
+	}
+	for _, c := range res.GetCodebases() {
+		if c.GetCodebase().GetUuid() == link.CodebaseUUID {
+			return c.GetCodebase().GetDefaultBranch()
+		}
+	}
+	return ""
+}
+
+// codeScanBranchPoint makes sure the commit a branch split off at is scanned
+// too, so "what has this branch changed" has its base. It is scanned in a
+// temporary worktree (scan), never in the user's checkout. A failure here is
+// reported but does not fail the scan that was already uploaded.
+func (i *Implementation) codeScanBranchPoint(link codescan.Link, facts *pb.CodeFacts, scan func(sha string) (*pb.CodeFacts, error), out io.Writer) error {
+	git := facts.GetGit()
+	sha := git.GetBranchPointSha()
+	if sha == "" || sha == git.GetCommitSha() {
+		return nil
+	}
+	authCtx, err := productclient.ClientContext()
+	if err != nil {
+		return err
+	}
+	_, err = i.productClient.ProductClient.GetCodeSnapshot(authCtx, &pb.GetCodeSnapshotRequest{CodebaseUuid: link.CodebaseUUID, CommitSha: sha, Lean: true})
+	if err == nil {
+		return nil
+	}
+	if status.Code(err) != codes.NotFound {
+		return err
+	}
+	fmt.Fprintf(out, "Scanning %s, where %s split from %s, so its changes can be compared…\n", shortSHA(sha), git.GetBranch(), git.GetDefaultBranch())
+	base, err := scan(sha)
+	if err == nil {
+		err = i.codeUpload(link, base, true, nil, out)
+	}
+	if err != nil {
+		fmt.Fprintf(out, "Could not scan the branch point %s: %v\n", shortSHA(sha), err)
+	}
+	return nil
 }
 
 // codeUpload sends the facts to the linked codebase. The first upload of a

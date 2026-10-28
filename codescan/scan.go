@@ -27,7 +27,7 @@ const SchemaVersion = 1
 
 // ScannerVersion identifies the extraction logic; bump it when the same tree
 // would produce different facts.
-const ScannerVersion = "0.2.0"
+const ScannerVersion = "0.3.0"
 
 type Options struct {
 	// Dir is the module root to scan (the directory holding go.mod).
@@ -37,6 +37,13 @@ type Options struct {
 	// KnownEntities, when set, are the project's entity identifiers. Entity
 	// calls that resolve to anything else are reported as unresolved.
 	KnownEntities []string
+	// DefaultBranch is the codebase's default branch, against which a scan on
+	// any other branch records its branch point. Empty: origin's default
+	// branch as this clone knows it.
+	DefaultBranch string
+	// Branch, when set, is recorded instead of the checked-out branch: a
+	// detached checkout of a commit known to be on that branch.
+	Branch string
 }
 
 // Scan extracts the facts of the module at opts.Dir.
@@ -50,6 +57,17 @@ func Scan(ctx context.Context, opts Options) (*pb.CodeFacts, error) {
 	}
 
 	git := readGitInfo(ctx, dir)
+	if opts.Branch != "" {
+		git.branch = opts.Branch
+	}
+	defaultBranch := opts.DefaultBranch
+	if defaultBranch == "" && git.root != "" {
+		defaultBranch = localDefaultBranch(ctx, dir)
+	}
+	var branchPointSHA string
+	if git.root != "" {
+		branchPointSHA = branchPoint(ctx, dir, git.branch, defaultBranch)
+	}
 	repoRoot := git.root
 	if repoRoot == "" {
 		repoRoot = dir
@@ -121,6 +139,9 @@ func Scan(ctx context.Context, opts Options) (*pb.CodeFacts, error) {
 			Dirty:       git.dirty,
 			RemoteUrl:   git.remote,
 			ChurnDays:   int32(opts.ChurnDays),
+			// Recorded only with the branch point it was taken against.
+			BranchPointSha: branchPointSHA,
+			DefaultBranch:  valueIf(branchPointSHA != "", defaultBranch),
 		},
 		Nodes:       nodes,
 		Edges:       edges,
@@ -656,4 +677,11 @@ func stringConst(info *types.Info, e ast.Expr) (string, bool) {
 		return "", false
 	}
 	return constant.StringVal(tv.Value), true
+}
+
+func valueIf(cond bool, v string) string {
+	if cond {
+		return v
+	}
+	return ""
 }

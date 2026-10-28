@@ -45,6 +45,45 @@ func readGitInfo(ctx context.Context, dir string) gitInfo {
 	return g
 }
 
+// branchPoint is the commit where HEAD's branch split from defaultBranch: the
+// merge-base with origin's copy of it when there is one (it is the shared,
+// up-to-date one), else the local branch. Empty when HEAD is on the default
+// branch or the default branch is not known here.
+func branchPoint(ctx context.Context, dir, branch, defaultBranch string) string {
+	if defaultBranch == "" || branch == defaultBranch {
+		return ""
+	}
+	for _, ref := range []string{"refs/remotes/origin/" + defaultBranch, "refs/heads/" + defaultBranch} {
+		if gitOut(ctx, dir, "rev-parse", "--verify", "--quiet", ref+"^{commit}") == "" {
+			continue
+		}
+		return gitOut(ctx, dir, "merge-base", "HEAD", ref)
+	}
+	return ""
+}
+
+// localDefaultBranch is origin's default branch as this clone knows it. A
+// clone made by pushing an existing repository has no origin/HEAD; then it is
+// whichever one of main and master exists, and empty when both or neither do.
+func localDefaultBranch(ctx context.Context, dir string) string {
+	if b := strings.TrimPrefix(gitOut(ctx, dir, "symbolic-ref", "--short", "refs/remotes/origin/HEAD"), "origin/"); b != "" {
+		return b
+	}
+	var found []string
+	for _, b := range []string{"main", "master"} {
+		for _, ref := range []string{"refs/remotes/origin/" + b, "refs/heads/" + b} {
+			if gitOut(ctx, dir, "rev-parse", "--verify", "--quiet", ref+"^{commit}") != "" {
+				found = append(found, b)
+				break
+			}
+		}
+	}
+	if len(found) == 1 {
+		return found[0]
+	}
+	return ""
+}
+
 var scpRemote = regexp.MustCompile(`^(?:[^@/]+@)?([^:/]+):(.+)$`)
 
 // NormalizeRemote turns any git remote into a credential-free https URL:
