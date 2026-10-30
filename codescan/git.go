@@ -171,7 +171,7 @@ func (g gitInfo) churn(ctx context.Context, dir string, days int) churnData {
 				d = ""
 			}
 			data.dirs[d] = data.dirs[d].add(added+deleted, sha, author)
-		case templateExts[ext] || scriptExts[ext]:
+		case templateExts[ext] || scriptExts[ext] || styleExts[ext]:
 			// Keyed without version suffixes, so edits made before a
 			// version-bump rename still count for the file.
 			key := normalizeAssetPath(file)

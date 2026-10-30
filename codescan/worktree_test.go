@@ -155,3 +155,29 @@ func TestLocalDefaultBranchWithoutOriginHead(t *testing.T) {
 		t.Fatalf("linking from a worktree must not take its branch as the default, got %q, %v", r.DefaultBranch, err)
 	}
 }
+
+// Every kind of frontend file gets churn, keyed without version suffixes.
+func TestChurnCoversFrontendFiles(t *testing.T) {
+	_, wtDir, _ := gitRepo(t)
+	for _, f := range []string{"assets/site_v1.2.3.css", "assets/app_v1.2.3.js", "templates/page.html"} {
+		p := filepath.Join(wtDir, filepath.FromSlash(f))
+		if err := os.MkdirAll(filepath.Dir(p), 0o755); err != nil {
+			t.Fatal(err)
+		}
+		if err := os.WriteFile(p, []byte("a\nb\n"), 0o644); err != nil {
+			t.Fatal(err)
+		}
+	}
+	for _, args := range [][]string{{"add", "."}, {"commit", "--quiet", "-m", "frontend"}} {
+		if out, err := exec.Command("git", append([]string{"-C", wtDir}, args...)...).CombinedOutput(); err != nil {
+			t.Fatalf("git %v: %v: %s", args, err, out)
+		}
+	}
+	ctx := context.Background()
+	data := readGitInfo(ctx, wtDir).churn(ctx, wtDir, 30)
+	for _, key := range []string{"app/assets/site.css", "app/assets/app.js", "app/templates/page.html"} {
+		if acc := data.files[key]; acc == nil || acc.lines != 2 {
+			t.Errorf("churn for %s = %+v", key, acc)
+		}
+	}
+}

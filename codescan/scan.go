@@ -27,7 +27,7 @@ const SchemaVersion = 1
 
 // ScannerVersion identifies the extraction logic; bump it when the same tree
 // would produce different facts.
-const ScannerVersion = "0.5.0"
+const ScannerVersion = "0.5.1"
 
 type Options struct {
 	// Dir is the module root to scan (the directory holding go.mod).
